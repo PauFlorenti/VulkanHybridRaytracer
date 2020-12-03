@@ -40,7 +40,7 @@ struct Mesh
 
 	bool load_from_obj(const char* filename);
 
-	void get_quad();
+	static Mesh* get_quad();
 	void get_triangle();
 	void get_cube();
 };

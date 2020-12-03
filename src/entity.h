@@ -25,8 +25,8 @@ public:
 class Object : public Entity
 {
 public:
-	Mesh* mesh;
-	Material* material;
+	Mesh*		mesh;
+	Material*	material;
 	int id{ 0 };
 
 	Object(glm::vec3 position = glm::vec3(0), Mesh* mesh = NULL, Material* material = NULL);
