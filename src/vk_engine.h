@@ -13,6 +13,20 @@
 #include <imgui/imgui_impl_vulkan.h>
 
 #include "entity.h"
+#include "renderer.h"
+
+#include <iostream>
+
+#define VK_CHECK(x)												\
+	do															\
+	{															\
+		VkResult err = x;										\
+		if (err)												\
+		{														\
+			std::cout << "Vulkan EROR: " << err << std::endl;	\
+			abort();											\
+		}														\
+	} while (0);												\
 
 struct DeletionQueue
 {
@@ -28,16 +42,6 @@ struct DeletionQueue
 		}
 		deletors.clear();
 	}
-};
-
-struct pushConstants {
-	glm::vec4 data;
-	glm::mat4 render_matrix;
-};
-
-struct Texture {
-	AllocatedImage  image;
-	VkImageView		imageView;
 };
 
 struct GPUCameraData
@@ -59,35 +63,28 @@ struct GPUObjectData {
 	glm::mat4 modelMatrix;
 };
 
-struct UploadContext {
-	VkFence _uploadFence;
-	VkCommandPool _commandPool;
-};
-
 struct uboLight {
 	glm::vec4 position;	// w used for maxDistance
 	glm::vec4 color;	// w used for intensity;
 };
 
-struct FrameData
-{
-	VkSemaphore _renderSemaphore, _presentSemaphore;
-	VkFence _renderFence;
-
-	VkCommandPool _commandPool;
-	VkCommandBuffer _mainCommandBuffer;
-
-	VkDescriptorSet deferredDescriptorSet;
-	VkDescriptorSet deferredLightDescriptorSet;
-	AllocatedBuffer _lightBuffer;
+struct UploadContext {
+	VkFence			_uploadFence;
+	VkCommandPool	_commandPool;
 };
 
 //TODO solve problem when creating the commands. We may want 2 FRAME_OVERLAP but it has to take
 //into account the number of swapchain images
-constexpr unsigned int FRAME_OVERLAP = 2;
+//constexpr unsigned int FRAME_OVERLAP = 2;
 
 class VulkanEngine {
 public:
+
+	static VulkanEngine* engine;
+
+	VulkanEngine();
+
+	Renderer* renderer;
 
 	bool _isInitialized{ false };
 	int _frameNumber{ 0 };
@@ -118,43 +115,11 @@ public:
 	AllocatedImage				_depthImage;
 	VkFormat					_depthFormat;
 
-	// Command stuff
-	VkQueue						_graphicsQueue;
-	uint32_t					_graphicsQueueFamily;
-
-	// RenderPass stuff (final in deferred)
-	VkRenderPass				_renderPass;
-	std::vector<VkFramebuffer>	_framebuffers;
-
-	VkDescriptorPool			_descriptorPool;
-
-	VkDescriptorSetLayout		_deferredSetLayout;
-	VkDescriptorSetLayout		_deferredLightSetLayout;
-
-	// Offscreen stuff
-	VkFramebuffer				_offscreenFramebuffer;
-	VkRenderPass				_offscreenRenderPass;
-	VkDescriptorSetLayout		_offscreenDescriptorSetLayout;
-	VkDescriptorSet				_offscreenDescriptorSet;
-	VkDescriptorSetLayout		_objectDescriptorSetLayout;
-	VkDescriptorSet				_objectDescriptorSet;
-	VkDescriptorSetLayout		_textureDescriptorSetLayout;
-	VkDescriptorSet				_textureDescriptorSet;
-	VkCommandBuffer				_offscreenComandBuffer;
-	VkSampler					_offscreenSampler;
-	VkSemaphore					_offscreenSemaphore;
-	VkPipelineLayout			_offscreenPipelineLayout;
-	VkPipeline					_offscreenPipeline;
-
-	// Deferred
-	VkPipelineLayout			_finalPipelineLayout;
-	VkPipeline					_finalPipeline;
 	// Textures used as attachments from the first pass
-	std::vector<Texture>		_deferredTextures;
+	VkQueue			_graphicsQueue;
+	uint32_t		_graphicsQueueFamily;
+	UploadContext	_uploadContext;
 
-	pushConstants _constants;
-
-	VkCommandPool _commandPool;
 	// Set 0 is a Global set - updated once per frame
 	AllocatedBuffer				_cameraBuffer;	// Buffer to hold all information from camera to the shader
 	GPUSceneData				_sceneParameters;
@@ -166,14 +131,10 @@ public:
 
 	// Allocator
 	VmaAllocator _allocator;
-	FrameData _frames[FRAME_OVERLAP];
-
-	// Scene stuff
-	UploadContext _uploadContext;
 
 	std::vector<Object*> _renderables;
 	std::vector<Light*> _lights;
-	Entity* gizmoEntity;
+	//Entity* gizmoEntity;
 
 	std::unordered_map<std::string, Material> _materials;
 	std::unordered_map<std::string, Mesh>	  _meshes;
@@ -186,8 +147,6 @@ public:
 	void init();
 
 	void cleanup();
-
-	void draw_deferred();
 
 	void run();
 
@@ -210,25 +169,21 @@ public:
 
 	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 
+	size_t pad_uniform_buffer_size(size_t originalSize);
+
+	void create_attachment(VkFormat format, VkImageUsageFlagBits usage, Texture* texture);
+
+	// Loads a shader module from a SPIR-V file
+	bool load_shader_module(
+		const char* filePath, 
+		VkShaderModule* outShaderModule);
 private:
 
 	void init_vulkan();
 
 	void init_swapchain();
 
-	void init_commands();
-
-	void init_default_renderpass();
-
-	void init_offscreen_renderpass();
-	
-	void init_framebuffers();
-
-	void init_offscreen_framebuffers();
-
-	void init_sync_structures();
-
-	void init_deferred_pipelines();
+	void init_upload_commands();
 
 	void load_meshes();
 
@@ -236,36 +191,13 @@ private:
 
 	void init_scene();
 
-	void init_descriptors();
-
-	void setup_descriptors();
-
-	void init_deferred_descriptors();
-
 	void init_imgui();
 
-	void build_previous_command_buffers();
-
-	void build_deferred_command_buffer();
-
 	void upload_mesh(Mesh& mesh);
-
-	void create_attachment(VkFormat format, VkImageUsageFlagBits usage, Texture* texture);
 
 	void create_vertex_buffer(Mesh& mesh);
 
 	void create_index_buffer(Mesh& mesh);
-
-	// Loads a shader module from a SPIR-V file
-	bool load_shader_module(
-		const char* filePath, 
-		VkShaderModule* outShaderModule);
-
-	FrameData& get_current_frame();
-
-	size_t pad_uniform_buffer_size(size_t originalSize);
-
-	void renderGUI();
 
 	// Input functions
 	glm::vec2 mouse_position = { _windowExtent.width * 0.5, _windowExtent.height * 0.5 };
@@ -273,11 +205,10 @@ private:
 
 	void input_update();
 	void center_mouse();
-
-	void renderGizmo();
 };
 
-class PipelineBuilder{
+class PipelineBuilder
+{
 public:
 	std::vector<VkPipelineShaderStageCreateInfo>	_shaderStages;
 	VkPipelineVertexInputStateCreateInfo			_vertexInputInfo;
