@@ -1,21 +1,18 @@
 #pragma once
 
 #include <vk_types.h>
-#include <vector>
-#include <unordered_map>
+
 #include <vma/vk_mem_alloc.h>
-#include <vk_mesh.h>
 
 #include <imgui/imgui.h>
 #include <imgui/ImGuizmo.h>
-
 #include <imgui/imgui_impl_sdl.h>
 #include <imgui/imgui_impl_vulkan.h>
 
+#include "vk_mesh.h"
+#include "camera.h"
 #include "entity.h"
 #include "renderer.h"
-
-#include <iostream>
 
 #define VK_CHECK(x)												\
 	do															\
@@ -44,11 +41,24 @@ struct DeletionQueue
 	}
 };
 
+enum renderMode{
+	FORWARD_RENDER,
+	DEFERRED,
+	RAYTRACING,
+	HYBRID
+};
+
 struct GPUCameraData
 {
 	glm::mat4 view;
 	glm::mat4 projection;
 	glm::mat4 viewprojection;
+};
+
+struct RTCameraData
+{
+	glm::mat4 invView;
+	glm::mat4 invProj;
 };
 
 struct GPUSceneData {
@@ -73,6 +83,13 @@ struct UploadContext {
 	VkCommandPool	_commandPool;
 };
 
+struct ScratchBuffer {
+	//AllocatedBuffer buffer;
+	uint64_t deviceAddress = 0;
+	VkBuffer buffer = VK_NULL_HANDLE;
+	VkDeviceMemory memory = VK_NULL_HANDLE;
+};
+
 //TODO solve problem when creating the commands. We may want 2 FRAME_OVERLAP but it has to take
 //into account the number of swapchain images
 //constexpr unsigned int FRAME_OVERLAP = 2;
@@ -85,56 +102,58 @@ public:
 	VulkanEngine();
 
 	Renderer* renderer;
+	renderMode	_mode;
 
-	bool _isInitialized{ false };
-	int _frameNumber{ 0 };
-	bool _bQuit{ false };
-	uint32_t _indexSwapchainImage{ 0 };
+	bool		_isInitialized{ false };
+	int			_frameNumber{ 0 };
+	bool		_bQuit{ false };
+	uint32_t	_indexSwapchainImage{ 0 };
 
-	VkExtent2D _windowExtent{ 1700, 900 };
-
+	VkExtent2D	_windowExtent{ 1700, 900 };
 	struct SDL_Window* _window{ nullptr };
 
 	DeletionQueue _mainDeletionQueue;
 
+	void* deviceCreatepNextChain = nullptr;
+
 	// Device stuff
-	VkInstance					_instance;
-	VkDebugUtilsMessengerEXT	_debug_messenger;
-	VkPhysicalDevice			_gpu;
-	VkDevice					_device;
-	VkSurfaceKHR				_surface;
-	VkPhysicalDeviceProperties  _gpuProperties;
+	VkInstance							_instance;
+	VkDebugUtilsMessengerEXT			_debug_messenger;
+	VkPhysicalDevice					_gpu;
+	VkDevice							_device;
+	VkSurfaceKHR						_surface;
+	VkPhysicalDeviceProperties			_gpuProperties;
+	VkPhysicalDeviceMemoryProperties	_memoryProperties;
 
 	// Swapchain stuff
-	VkSwapchainKHR				_swapchain;
-	VkFormat					_swapchainImageFormat;
-	std::vector<VkImage>		_swapchainImages;
-	std::vector<VkImageView>	_swapchainImageViews;
+	VkSwapchainKHR						_swapchain;
+	VkFormat							_swapchainImageFormat;
+	std::vector<VkImage>				_swapchainImages;
+	std::vector<VkImageView>			_swapchainImageViews;
 
-	VkImageView					_depthImageView;
-	AllocatedImage				_depthImage;
-	VkFormat					_depthFormat;
+	VkImageView							_depthImageView;
+	AllocatedImage						_depthImage;
+	VkFormat							_depthFormat;
 
 	// Textures used as attachments from the first pass
-	VkQueue			_graphicsQueue;
-	uint32_t		_graphicsQueueFamily;
-	UploadContext	_uploadContext;
+	VkQueue								_graphicsQueue;
+	uint32_t							_graphicsQueueFamily;
+	UploadContext						_uploadContext;
 
 	// Set 0 is a Global set - updated once per frame
-	AllocatedBuffer				_cameraBuffer;	// Buffer to hold all information from camera to the shader
-	GPUSceneData				_sceneParameters;
-	AllocatedBuffer				_sceneBuffer;	// Buffer to hold all information involving the scene
+	AllocatedBuffer						_cameraBuffer;	// Buffer to hold all information from camera to the shader
+	GPUSceneData						_sceneParameters;
+	AllocatedBuffer						_sceneBuffer;	// Buffer to hold all information involving the scene
 
 	// Set 1 is a per pass set - updated per pass
 	// Buffer to hold all matrices information from the scene
-	AllocatedBuffer				_objectBuffer;
+	AllocatedBuffer						_objectBuffer;
 
 	// Allocator
-	VmaAllocator _allocator;
+	VmaAllocator						_allocator;
 
-	std::vector<Object*> _renderables;
-	std::vector<Light*> _lights;
-	//Entity* gizmoEntity;
+	std::vector<Object*>				_renderables;
+	std::vector<Light*>					_lights;
 
 	std::unordered_map<std::string, Material> _materials;
 	std::unordered_map<std::string, Mesh>	  _meshes;
@@ -143,6 +162,26 @@ public:
 	Camera* _camera;
 	bool mouse_locked;
 
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT		enabledIndexingFeatures{};
+
+	// vkRay
+	VkPhysicalDeviceRayTracingPipelinePropertiesKHR		_rtProperties;
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR	_asFeatures;
+
+	VkPhysicalDeviceBufferDeviceAddressFeatures			enabledBufferDeviceAddressFeatures{};
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR		enabledRayTracingPipelineFeatures{};
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR	enabledAccelerationStructureFeatures{};
+
+	PFN_vkGetBufferDeviceAddressKHR						vkGetBufferDeviceAddressKHR;
+
+	VkCommandPool			_commandPool;
+
+	AllocatedBuffer rtCameraBuffer;
+	AllocatedBuffer transformBuffer;
+
+	AllocatedBuffer vertexBuffer;
+	AllocatedBuffer indexBuffer;
+	   
 	// Main functions
 	void init();
 
@@ -177,11 +216,28 @@ public:
 	bool load_shader_module(
 		const char* filePath, 
 		VkShaderModule* outShaderModule);
+
+	VkPipelineShaderStageCreateInfo load_shader_stage(const char* filePath, VkShaderModule* outShaderModule, VkShaderStageFlagBits stage);
+
+	uint32_t getBufferDeviceAddress(VkBuffer buffer);
+
+	void create_vertex_buffer(Mesh& mesh);
+
+	void create_index_buffer(Mesh& mesh);
+
+	ScratchBuffer createScratchBuffer(VkDeviceSize size);
+
+	uint32_t get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags flags, VkBool32* memTypeFound = nullptr);
+
 private:
 
 	void init_vulkan();
 
 	void init_swapchain();
+
+	void recreate_swapchain();
+
+	void init_ray_tracing();
 
 	void init_upload_commands();
 
@@ -195,9 +251,11 @@ private:
 
 	void upload_mesh(Mesh& mesh);
 
-	void create_vertex_buffer(Mesh& mesh);
+	VkCommandBuffer create_command_buffer(VkCommandBufferLevel level, bool begin);
 
-	void create_index_buffer(Mesh& mesh);
+	// VKRay
+	
+	void get_enabled_features();
 
 	// Input functions
 	glm::vec2 mouse_position = { _windowExtent.width * 0.5, _windowExtent.height * 0.5 };

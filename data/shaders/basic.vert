@@ -34,6 +34,6 @@ void main()
 
 	outPosition = vec3(modelMatrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
-	outNormal 	= inNormal;
+	outNormal 	= vec3(vec4(inNormal, 1.0) * modelMatrix).xyz;
     outUV 		= inUV;
 }

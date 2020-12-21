@@ -1,5 +1,7 @@
 
 #include "vk_mesh.h"
+#include "vk_initializers.h"
+#include "vk_engine.h"
 #include <iostream>
 #include <unordered_map>
 
@@ -123,21 +125,15 @@ bool Mesh::load_from_obj(const char* filename)
 		}
 	}
 
+	// upload mesh
+	upload();
+
 	return true;
 }
 
 Mesh* Mesh::get_quad()
 {
 	Mesh* mesh = new Mesh();
-	
-	//_vertices.clear();
-
-	//_vertices.push_back({ {  1.0f,  1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} });
-	//_vertices.push_back({ { -1.0f,  1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f} });
-	//_vertices.push_back({ { -1.0f, -1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f} });
-	//_vertices.push_back({ {  1.0f, -1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f} });
-
-	//_indices = {0, 1, 2, 2, 3, 0};
 
 	mesh->_vertices.push_back({ {  1.0f,  1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} });
 	mesh->_vertices.push_back({ { -1.0f,  1.0f, 0.0f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f} });
@@ -158,6 +154,9 @@ void Mesh::get_triangle()
 	_vertices.push_back({ {  0.f, -1.f, 0.f }, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f} });
 
 	_indices = { 0, 1, 2 };
+
+	// upload mesh
+	upload();
 }
 
 void Mesh::get_cube()
@@ -202,71 +201,112 @@ void Mesh::get_cube()
 		16, 17, 18, 18, 19, 16,
 		20, 21, 22, 22, 23, 20 
 	};
+
+	// upload mesh
+	create_vertex_buffer();
+	create_index_buffer();
 }
 
-Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) : _direction(glm::vec3(0, 0, -1)), _speed(SPEED), _sensitivity(SENSITIVITY)
+void Mesh::create_vertex_buffer()
 {
-	_position	= position;
-	_up			= up;
-	_yaw		= yaw;
-	_pitch		= pitch;
-	updateCameraVectors();
+	const size_t bufferSize = _vertices.size() * sizeof(Vertex);
+
+	VkBufferCreateInfo stagingBufferInfo = vkinit::buffer_create_info(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+	VmaAllocationCreateInfo vmaAllocInfo = {};
+	vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+
+	AllocatedBuffer stagingBuffer;
+
+	VK_CHECK(vmaCreateBuffer(VulkanEngine::engine->_allocator, 
+		&stagingBufferInfo, &vmaAllocInfo, 
+		&stagingBuffer._buffer, 
+		&stagingBuffer._allocation, 
+		nullptr));
+
+	// Copy Vertex data
+	void* data;
+	vmaMapMemory(VulkanEngine::engine->_allocator, stagingBuffer._allocation, &data);
+	memcpy(data, _vertices.data(), _vertices.size() * sizeof(Vertex));
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, stagingBuffer._allocation);
+
+	VkBufferCreateInfo vertexBufferInfo = vkinit::buffer_create_info(bufferSize,
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+
+	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+	VK_CHECK(vmaCreateBuffer(VulkanEngine::engine->_allocator, &vertexBufferInfo, &vmaAllocInfo,
+		&_vertexBuffer._buffer,
+		&_vertexBuffer._allocation,
+		nullptr));
+
+	// Copy vertex data
+	VulkanEngine::engine->immediate_submit([=](VkCommandBuffer cmd) {
+		VkBufferCopy copy;
+		copy.dstOffset = 0;
+		copy.srcOffset = 0;
+		copy.size = bufferSize;
+		vkCmdCopyBuffer(cmd, stagingBuffer._buffer, _vertexBuffer._buffer, 1, &copy);
+		});
+
+	//VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+	//	vmaDestroyBuffer(VulkanEngine::engine->_allocator, this->_vertexBuffer._buffer, this->_vertexBuffer._allocation);
+	//	});
+
+	vmaDestroyBuffer(VulkanEngine::engine->_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
+
 }
 
-void Camera::processKeyboard(Camera_Movement direction, const float dt)
+void Mesh::create_index_buffer()
 {
-	float movementSpeed = _speed * dt;
-	if (direction == FORWARD)
-		_position += _direction * movementSpeed;
-	if (direction == BACKWARD)
-		_position -= _direction * movementSpeed;
-	if (direction == RIGHT)
-		_position += _right * movementSpeed;
-	if (direction == LEFT)
-		_position -= _right * movementSpeed;
-	if (direction == UP)
-		_position += _up * movementSpeed;
-	if (direction == DOWN)
-		_position -= _up * movementSpeed;
+	const size_t bufferSize = _indices.size() * sizeof(uint32_t);
+	VkBufferCreateInfo stagingBufferInfo = vkinit::buffer_create_info(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+	VmaAllocationCreateInfo vmaAllocInfo = {};
+	vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+
+	AllocatedBuffer stagingBuffer;
+
+	VK_CHECK(vmaCreateBuffer(VulkanEngine::engine->_allocator, &stagingBufferInfo, &vmaAllocInfo,
+		&stagingBuffer._buffer,
+		&stagingBuffer._allocation,
+		nullptr));
+
+	void* data;
+	vmaMapMemory(VulkanEngine::engine->_allocator, stagingBuffer._allocation, &data);
+	memcpy(data, _indices.data(), _indices.size() * sizeof(uint32_t));
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, stagingBuffer._allocation);
+
+	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+	VkBufferCreateInfo indexBufferInfo = vkinit::buffer_create_info(bufferSize,
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+
+	VK_CHECK(vmaCreateBuffer(VulkanEngine::engine->_allocator, &indexBufferInfo, &vmaAllocInfo,
+		&_indexBuffer._buffer,
+		&_indexBuffer._allocation,
+		nullptr));
+
+	// Copy index data
+	VulkanEngine::engine->immediate_submit([=](VkCommandBuffer cmd) {
+		VkBufferCopy copy;
+		copy.dstOffset = 0;
+		copy.srcOffset = 0;
+		copy.size = bufferSize;
+		vkCmdCopyBuffer(cmd, stagingBuffer._buffer, _indexBuffer._buffer, 1, &copy);
+		});
+
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+		//vmaDestroyBuffer(VulkanEngine::engine->_allocator, _vertexBuffer._buffer, _vertexBuffer._allocation);
+		vmaDestroyBuffer(VulkanEngine::engine->_allocator, this->_indexBuffer._buffer, this->_indexBuffer._allocation);
+		});
+	
+	vmaDestroyBuffer(VulkanEngine::engine->_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
 }
 
-void Camera::rotate(float xoffset, float yoffset, bool constrainPitch)
+void Mesh::upload()
 {
-	xoffset *= _sensitivity;
-	yoffset *= _sensitivity;
-
-	_yaw -= xoffset;
-	_pitch += yoffset;
-
-	if (constrainPitch) {
-		if (_pitch > 89.0f)
-			_pitch = 89.0f;
-		if (_pitch < -89.0f)
-			_pitch = -89.9f;
-	}
-
-	updateCameraVectors();
+	VulkanEngine::engine->create_vertex_buffer(*this);
+	VulkanEngine::engine->create_index_buffer(*this);
 }
 
-glm::mat4 Camera::getView()
-{
-	return glm::lookAt(_position, _position + _direction, glm::vec3(0, 1, 0));
-}
-
-glm::mat4 Camera::getProjection()
-{
-	// TODO
-	return glm::mat4(1);
-}
-
-void Camera::updateCameraVectors()
-{
-	glm::vec3 front;
-	front.x = cos(glm::radians(_yaw)) * cos(glm::radians(_pitch));
-	front.y = sin(glm::radians(_pitch));
-	front.z = sin(glm::radians(_yaw)) * cos(glm::radians(_pitch));
-
-	_direction = glm::normalize(front);
-	_right = glm::normalize(glm::cross(_direction, glm::vec3(0, 1, 0)));
-	_up = glm::normalize(glm::cross(_right, _direction));
-}

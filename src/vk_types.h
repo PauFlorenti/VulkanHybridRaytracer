@@ -1,15 +1,20 @@
 #pragma once
 
-#define VK_ENABLE_BETA_EXTENSIONS
-#include <vulkan/vulkan.hpp>
+//#define VK_ENABLE_BETA_EXTENSIONS
+#include <vulkan/vulkan.h>
 
 #include <functional>
 #include <deque>
+#include <array>
+#include <vector>
+#include <unordered_map>
+#include <iostream>
+#include <fstream>
 
 #include <vma/vk_mem_alloc.h>
 
 struct AllocatedBuffer {
-	VkBuffer		_buffer;
+	VkBuffer		_buffer = VK_NULL_HANDLE;
 	VmaAllocation	_allocation;
 };
 
