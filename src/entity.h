@@ -19,19 +19,23 @@ public:
 	bool m_selected;
 
 	virtual void update() = 0;
+	virtual void setColor(glm::vec3 color) = 0;
 };
 
 // TODO: Object class
 class Object : public Entity
 {
 public:
-	Mesh*		mesh;
-	Material*	material;
-	int id{ 0 };
+	Mesh*			mesh;
+	Material*		material;
+	AllocatedBuffer matrixBuffer;
+	AllocatedBuffer vBuffer;
+	int				id{ 0 };
 
 	Object(glm::vec3 position = glm::vec3(0), Mesh* mesh = NULL, Material* material = NULL);
 
 	void update() {};
+	void setColor(glm::vec3 color);
 };
 
 enum lightType{
@@ -52,4 +56,5 @@ public:
 	Light(lightType type = POINT, glm::vec3 color = glm::vec3(1), glm::vec3 position = glm::vec3(0), float intensity = 1000.0f, float maxDistance = 500.0f);
 
 	void update();
+	void setColor(glm::vec3 color);
 };

@@ -15,6 +15,12 @@ struct VertexInputDescription{
 	VkPipelineVertexInputStateCreateFlags flags = 0;
 };
 
+struct rtVertexAttribute
+{
+	glm::vec4 normal;
+	glm::vec4 color;
+};
+
 struct Vertex
 {
 	glm::vec3 position;

@@ -228,7 +228,8 @@ VkWriteDescriptorSet vkinit::write_descriptor_buffer(
 	VkDescriptorType type,
 	VkDescriptorSet dstSet,
 	VkDescriptorBufferInfo* bufferInfo,
-	uint32_t binding)
+	uint32_t binding,
+	uint32_t count /*=1*/)
 {
 	VkWriteDescriptorSet write = {};
 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -236,7 +237,7 @@ VkWriteDescriptorSet vkinit::write_descriptor_buffer(
 
 	write.dstBinding		= binding;
 	write.dstSet			= dstSet;
-	write.descriptorCount	= 1;
+	write.descriptorCount	= count;
 	write.descriptorType	= type;
 	write.pBufferInfo		= bufferInfo;
 

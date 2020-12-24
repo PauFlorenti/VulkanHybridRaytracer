@@ -174,13 +174,10 @@ public:
 
 	PFN_vkGetBufferDeviceAddressKHR						vkGetBufferDeviceAddressKHR;
 
-	VkCommandPool			_commandPool;
+	VkCommandPool	_commandPool;
 
 	AllocatedBuffer rtCameraBuffer;
 	AllocatedBuffer transformBuffer;
-
-	AllocatedBuffer vertexBuffer;
-	AllocatedBuffer indexBuffer;
 	   
 	// Main functions
 	void init();
@@ -236,6 +233,8 @@ private:
 	void init_swapchain();
 
 	void recreate_swapchain();
+
+	void clean_swapchain();
 
 	void init_ray_tracing();
 

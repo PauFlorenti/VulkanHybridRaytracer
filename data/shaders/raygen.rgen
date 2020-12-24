@@ -13,10 +13,12 @@ layout(location = 0) rayPayloadEXT vec3 hitValue;
 
 void main() 
 {
-	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
-	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
+	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
+	const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
 	vec2 d = inUV * 2.0 - 1.0;
 
+	// Using the pixel coordinates we can apply the inverse transformation of the view and procjection matrices of the camera to obtain
+	// the origin and target of the ray
 	vec4 origin		= cam.viewInverse * vec4(0,0,0,1);
 	vec4 target		= cam.projInverse * vec4(d.x, d.y, 1, 1) ;
 	vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0) ;
@@ -24,9 +26,11 @@ void main()
 	float tmin = 0.001;
 	float tmax = 10000.0;
 
-    hitValue = vec3(0.0);
+    hitValue = vec3(0.0);	// Set an initial value to the hit
 
+	// Call the function to start tracing rays.
     traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz, tmin, direction.xyz, tmax, 0);
 
+	// Finally we can write the result to the output image
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitValue, 0.0));
 }

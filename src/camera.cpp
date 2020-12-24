@@ -3,10 +3,10 @@
 
 Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) : _direction(glm::vec3(0, 0, -1)), _speed(SPEED), _sensitivity(SENSITIVITY)
 {
-	_position = position;
-	_up = up;
-	_yaw = yaw;
-	_pitch = pitch;
+	_position	= position;
+	_up			= up;
+	_yaw		= yaw;
+	_pitch		= pitch;
 	updateCameraVectors();
 }
 

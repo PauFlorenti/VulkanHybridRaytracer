@@ -62,7 +62,8 @@ namespace vkinit {
 		VkDescriptorType type, 
 		VkDescriptorSet dstSet, 
 		VkDescriptorBufferInfo* bufferInfo, 
-		uint32_t binding);
+		uint32_t binding,
+		uint32_t count = 1);
 
 	VkCommandBufferBeginInfo command_buffer_begin_info(VkCommandBufferUsageFlags usageFlags);
 

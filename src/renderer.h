@@ -2,7 +2,7 @@
 #include <vk_types.h>
 #include <glm/glm/glm.hpp>
 
-class Entity;
+#include "entity.h"
 
 struct FrameData
 {
@@ -31,9 +31,24 @@ struct Texture {
 struct AccelerationStructure {
 	VkAccelerationStructureKHR	handle;
 	uint64_t					deviceAddress = 0;
-	VkBuffer buffer;
-	VkDeviceMemory memory;
-	//AllocatedBuffer				buffer;
+	VkBuffer					buffer;
+	VkDeviceMemory				memory;
+	//AllocatedBuffer			buffer;
+};
+
+struct BlasInput {
+	VkAccelerationStructureGeometryKHR			asGeometry;
+	VkAccelerationStructureBuildRangeInfoKHR	asBuildRangeInfo;
+	uint32_t									nTriangles;
+};
+
+struct TlasInstance {
+	uint32_t					blasId{ 0 };		// Index of the BLAS
+	uint32_t					instanceId{ 0 };	// Instance index
+	uint32_t					hitGroupId{ 0 };	// Hit group index in the SBT
+	uint32_t					mask{ 0xFF };		// Visibility mask
+	VkGeometryInstanceFlagsKHR	flags{ VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR };
+	glm::mat4					transform{ glm::mat4(1) };	// Identity model matrix
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
@@ -95,11 +110,11 @@ public:
 	VkPipeline					_rtPipeline;
 	VkPipelineLayout			_rtPipelineLayout;
 
-	AllocatedBuffer				_rtVertexBuffer;
-	AllocatedBuffer				_rtIndexBuffer;
+	std::vector<AccelerationStructure>	_bottomLevelAS;
+	AccelerationStructure				_topLevelAS;
 
-	AccelerationStructure		_bottomLevelAS;
-	AccelerationStructure		_topLevelAS;
+	std::vector<BlasInput>		_blas;
+	AllocatedBuffer				lightBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
@@ -169,6 +184,14 @@ private:
 	void create_acceleration_structure(AccelerationStructure& accelerationStructure, 
 		VkAccelerationStructureTypeKHR type, 
 		VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
+
+	BlasInput object_to_geometry(const Object& model);
+
+	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+	void buildTlas(const std::vector<TlasInstance>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+	VkAccelerationStructureInstanceKHR object_to_instance(const TlasInstance& instance);
 
 	void create_rt_descriptors();
 

@@ -98,9 +98,6 @@ void VulkanEngine::run()
 			if (e.type == SDL_QUIT) _bQuit = true;
 			else if (e.type == SDL_KEYDOWN)
 			{
-				if (e.key.keysym.sym == SDLK_SPACE) {
-
-				}
 				if (e.key.keysym.sym == SDLK_w) {
 					_camera->processKeyboard(FORWARD, dt);
 				}
@@ -118,6 +115,15 @@ void VulkanEngine::run()
 				}
 				if (e.key.keysym.sym == SDLK_SPACE) {
 					_camera->processKeyboard(UP, dt);
+				}
+				if (e.key.keysym.sym == SDLK_1) {
+					_mode = FORWARD_RENDER;
+				}
+				if (e.key.keysym.sym == SDLK_2) {
+					_mode = DEFERRED;
+				}
+				if (e.key.keysym.sym == SDLK_3) {
+					_mode = RAYTRACING;
 				}
 				if (e.key.keysym.sym == SDLK_ESCAPE) _bQuit = true;
 			}
@@ -225,6 +231,18 @@ void VulkanEngine::update(const float dt)
 		vmaMapMemory(_allocator, rtCameraBuffer._allocation, &data);
 		memcpy(data, &camera, sizeof(RTCameraData));
 		vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
+
+		void* lightData;
+		vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &lightData);
+		uboLight* lightUBO = (uboLight*)lightData;
+		for (int i = 0; i < _lights.size(); i++)
+		{
+			_lights[i]->update();
+			Light* l = _lights[i];
+			lightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+		}
+		vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 	}
 
 }
@@ -295,7 +313,6 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 	VK_CHECK(vkEndCommandBuffer(cmd));
 	VkSubmitInfo submit = vkinit::submit_info(&cmd);
 	
-	//VkResult result = vkQueueSubmit(_graphicsQueue, 1, &submit, _uploadContext._uploadFence);
 	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit, _uploadContext._uploadFence));
 
 	vkWaitForFences(_device, 1, &_uploadContext._uploadFence, VK_TRUE, 1000000000);
@@ -502,64 +519,66 @@ void VulkanEngine::init_upload_commands()
 
 void VulkanEngine::init_scene()
 {
-	_camera = new Camera(glm::vec3(0, 0, -2.5));
+	_camera = new Camera(glm::vec3(0, 40, 2.5));
 
 	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 20, 0));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 50, 0));
 	Light* light2 = new Light();
-	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 20, 0));
-	light2->intensity = 100.0f;
+	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 50, 0));
+	light2->intensity = 1000.0f;
 	light2->color = glm::vec3(1, 0, 0);
 	Light* light3 = new Light();
-	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 20, 0));
-	light3->intensity = 100.0f;
+	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 50, 0));
+	light3->intensity = 1000.0f;
 	light3->color = glm::vec3(0, 0, 1);
 
 	_lights.push_back(light);
 	_lights.push_back(light2);
-	_lights.push_back(light3);
+	//_lights.push_back(light3);
 	
 	Object* monkey = new Object();
-	monkey->mesh		= get_mesh("monkey");
-	monkey->material	= get_material("offscreen");
-	glm::mat4 translation = glm::translate(glm::mat4(1.f), glm::vec3(0, 0, -3));
-	glm::mat4 scale = glm::scale(glm::mat4(1.f), glm::vec3(0.8));
+	monkey->mesh			= get_mesh("monkey");
+	monkey->material		= get_material("offscreen");
+	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(0, 50, -3));
+	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
 	monkey->m_matrix = translation * scale;
 	
-	//Object* empire = new Object();
-	//empire->mesh		= get_mesh("empire");
-	//empire->material	= get_material("offscreen");
-	//empire->id			= get_textureId("empire");
+	Object* empire = new Object();
+	empire->mesh			= get_mesh("empire");
+	empire->material		= get_material("offscreen");
+	empire->id				= get_textureId("empire");
 
 	Object* quad = new Object();
 	quad->mesh		= get_mesh("quad");
 	quad->material	= get_material("offscreen");
-	quad->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, -5, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
+	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, -5, -5)) *
+		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 40, 0)) *
 		glm::scale(glm::mat4(1), glm::vec3(10));
 
 	Object* tri = new Object();
 	tri->mesh		= get_mesh("triangle");
 	tri->material	= get_material("offscreen");
-	//tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 40, -5));
-	//tri->id			= get_textureId("white");
+	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 40, -5));
+	tri->setColor(glm::vec3(0, 0, 1));
 
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
-	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
+	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 40, -5));
+	cube->setColor(glm::vec3(1, 0, 0));
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
 	sphere->material	= get_material("offscreen");
-	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(10, 0, -5));
+	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(10, 40, -5));
+	sphere->setColor(glm::vec3(0, 1, 0));
 
-	//_renderables.push_back(empire);
+	_renderables.push_back(empire);
+	_renderables.push_back(sphere);
 	_renderables.push_back(monkey);
 	_renderables.push_back(tri);
-	_renderables.push_back(quad);
 	_renderables.push_back(cube);
-	//_renderables.push_back(sphere);
+	_renderables.push_back(quad);
 }
 
 void VulkanEngine::init_imgui()
@@ -596,13 +615,13 @@ void VulkanEngine::init_imgui()
 	ImGui_ImplSDL2_InitForVulkan(_window);
 
 	ImGui_ImplVulkan_InitInfo initInfo = {};
-	initInfo.Instance = _instance;
+	initInfo.Instance		= _instance;
 	initInfo.PhysicalDevice = _gpu;
-	initInfo.Device = _device;
-	initInfo.Queue = _graphicsQueue;
+	initInfo.Device			= _device;
+	initInfo.Queue			= _graphicsQueue;
 	initInfo.DescriptorPool = imguiPool;
-	initInfo.MinImageCount = 3;
-	initInfo.ImageCount = 3;
+	initInfo.MinImageCount	= 3;
+	initInfo.ImageCount		= 3;
 
 	ImGui_ImplVulkan_Init(&initInfo, renderer->_renderPass);
 
@@ -633,14 +652,14 @@ void VulkanEngine::load_meshes()
 	_triangleMesh.get_triangle();
 
 	_monkeyMesh.load_from_obj("data/meshes/monkey_smooth.obj");
-	//_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
+	_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
 	_cube.load_from_obj("data/meshes/default_cube.obj");
 	_sphere.load_from_obj("data/meshes/sphere.obj");
 
 	_meshes["triangle"] = _triangleMesh;
 	_meshes["quad"]		= *_quad;
 	_meshes["monkey"]	= _monkeyMesh;
-	//_meshes["empire"]	= _lostEmpire;
+	_meshes["empire"]	= _lostEmpire;
 	_meshes["cube"]		= _cube;
 	_meshes["sphere"]	= _sphere;
 }
@@ -651,24 +670,24 @@ void VulkanEngine::load_images()
 	vkutil::load_image_from_file(*this, "data/textures/whiteTexture.png", white.image);
 	Texture black;
 	vkutil::load_image_from_file(*this, "data/textures/blackTexture.png", black.image);
-	//Texture lostEmpire;
-	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
+	Texture lostEmpire;
+	vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
 
 	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
 	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
-	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
+	vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
 
 	_textures["white"]  = white;
 	_textures["black"]	= black;
-	//_textures["empire"] = lostEmpire;
+	_textures["empire"] = lostEmpire;
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, white.imageView, nullptr);
 		vkDestroyImageView(_device, black.imageView, nullptr);
-		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
+		vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
 	});
 }
 
@@ -696,7 +715,7 @@ void VulkanEngine::create_vertex_buffer(Mesh& mesh)
 	vmaUnmapMemory(_allocator, stagingBuffer._allocation);
 
 	VkBufferCreateInfo vertexBufferInfo = vkinit::buffer_create_info(bufferSize,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
@@ -745,7 +764,7 @@ void VulkanEngine::create_index_buffer(Mesh& mesh)
 	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
 	VkBufferCreateInfo indexBufferInfo = vkinit::buffer_create_info(bufferSize,
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	VK_CHECK(vmaCreateBuffer(_allocator, &indexBufferInfo, &vmaAllocInfo,
 		&mesh._indexBuffer._buffer,
@@ -829,9 +848,9 @@ ScratchBuffer VulkanEngine::createScratchBuffer(VkDeviceSize size)
 	ScratchBuffer scratchBuffer{};
 	
 	VkBufferCreateInfo bufferCreateInfo{};
-	bufferCreateInfo.sType	= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size	= size;
-	bufferCreateInfo.usage	= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	bufferCreateInfo.sType				= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCreateInfo.size				= size;
+	bufferCreateInfo.usage				= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 	VK_CHECK(vkCreateBuffer(_device, &bufferCreateInfo, nullptr, &scratchBuffer.buffer));
 
 	VkMemoryRequirements memoryRequirements{};
