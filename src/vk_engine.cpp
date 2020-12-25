@@ -25,7 +25,7 @@ void VulkanEngine::init()
 
 	SDL_Init(SDL_INIT_VIDEO);
 
-	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN);
+	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 
 	_window = SDL_CreateWindow(
 		"Vulkan Pinut",
@@ -134,6 +134,15 @@ void VulkanEngine::run()
 			if (e.type == SDL_MOUSEMOTION) {
 				if (mouse_locked)
 					_camera->rotate(mouse_delta.x, mouse_delta.y);
+			}
+			if (e.type == SDL_WINDOWEVENT) {
+				switch (e.window.event)
+				{
+				case SDL_WINDOWEVENT_RESIZED:
+					recreate_swapchain();
+				default:
+					break;
+				}
 			}
 		}
 
@@ -479,7 +488,51 @@ void VulkanEngine::init_swapchain()
 
 void VulkanEngine::recreate_swapchain()
 {
+	int width = 0, height = 0;
+	SDL_GetWindowSize(_window, &width, &height);
+	SDL_Event e;
+	uint32_t flag = SDL_GetWindowFlags(_window);
+	while (flag == SDL_WINDOW_MINIMIZED) {
+		SDL_WaitEvent(&e);
+	}
 
+	vkDeviceWaitIdle(_device);
+
+	clean_swapchain();
+
+	init_swapchain();
+	init_upload_commands();
+	init_ray_tracing();
+	_windowExtent = { (uint32_t)width, (uint32_t)height };
+	renderer = new Renderer();
+
+}
+
+void VulkanEngine::clean_swapchain()
+{
+	for(size_t i = 0; i < _swapchainImages.size(); i++) {
+		vkDestroyFramebuffer(_device, renderer->_framebuffers[i], nullptr);
+		vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
+	}
+	for (size_t i = 0; i < FRAME_OVERLAP; i++) {
+		vkFreeCommandBuffers(_device, renderer->_frames[i]._commandPool, 1, &renderer->_frames[i]._mainCommandBuffer);
+	}
+
+	vkDestroyPipeline(_device, renderer->_finalPipeline, nullptr);
+	vkDestroyPipeline(_device, renderer->_forwardPipeline, nullptr);
+	vkDestroyPipeline(_device, renderer->_offscreenPipeline, nullptr);
+	vkDestroyPipeline(_device, renderer->_rtPipeline, nullptr);
+
+	vkDestroyPipelineLayout(_device, renderer->_finalPipelineLayout, nullptr);
+	vkDestroyPipelineLayout(_device, renderer->_forwardPipelineLayout, nullptr);
+	vkDestroyPipelineLayout(_device, renderer->_offscreenPipelineLayout, nullptr);
+	vkDestroyPipelineLayout(_device, renderer->_rtPipelineLayout, nullptr);
+
+	vkDestroyRenderPass(_device, renderer->_renderPass, nullptr);
+	vkDestroyRenderPass(_device, renderer->_forwardRenderPass, nullptr);
+	vkDestroyRenderPass(_device, renderer->_offscreenRenderPass, nullptr);
+
+	vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 }
 
 void VulkanEngine::init_ray_tracing()
@@ -551,8 +604,8 @@ void VulkanEngine::init_scene()
 	Object* quad = new Object();
 	quad->mesh		= get_mesh("quad");
 	quad->material	= get_material("offscreen");
-	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, -5, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 40, 0)) *
+	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, 30, -5)) *
+		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
 		glm::scale(glm::mat4(1), glm::vec3(10));
 
 	Object* tri = new Object();
@@ -573,7 +626,7 @@ void VulkanEngine::init_scene()
 	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(10, 40, -5));
 	sphere->setColor(glm::vec3(0, 1, 0));
 
-	_renderables.push_back(empire);
+	//_renderables.push_back(empire);
 	_renderables.push_back(sphere);
 	_renderables.push_back(monkey);
 	_renderables.push_back(tri);
@@ -652,14 +705,14 @@ void VulkanEngine::load_meshes()
 	_triangleMesh.get_triangle();
 
 	_monkeyMesh.load_from_obj("data/meshes/monkey_smooth.obj");
-	_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
+	//_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
 	_cube.load_from_obj("data/meshes/default_cube.obj");
 	_sphere.load_from_obj("data/meshes/sphere.obj");
 
 	_meshes["triangle"] = _triangleMesh;
 	_meshes["quad"]		= *_quad;
 	_meshes["monkey"]	= _monkeyMesh;
-	_meshes["empire"]	= _lostEmpire;
+	//_meshes["empire"]	= _lostEmpire;
 	_meshes["cube"]		= _cube;
 	_meshes["sphere"]	= _sphere;
 }
@@ -670,24 +723,24 @@ void VulkanEngine::load_images()
 	vkutil::load_image_from_file(*this, "data/textures/whiteTexture.png", white.image);
 	Texture black;
 	vkutil::load_image_from_file(*this, "data/textures/blackTexture.png", black.image);
-	Texture lostEmpire;
-	vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
+	//Texture lostEmpire;
+	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
 
 	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
 	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
-	vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
+	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
 
 	_textures["white"]  = white;
 	_textures["black"]	= black;
-	_textures["empire"] = lostEmpire;
+	//_textures["empire"] = lostEmpire;
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, white.imageView, nullptr);
 		vkDestroyImageView(_device, black.imageView, nullptr);
-		vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
+		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
 	});
 }
 

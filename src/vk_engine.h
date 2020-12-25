@@ -101,7 +101,7 @@ public:
 
 	VulkanEngine();
 
-	Renderer* renderer;
+	Renderer*	renderer;
 	renderMode	_mode;
 
 	bool		_isInitialized{ false };
@@ -111,6 +111,7 @@ public:
 
 	VkExtent2D	_windowExtent{ 1700, 900 };
 	struct SDL_Window* _window{ nullptr };
+	bool		_resized{ false };
 
 	DeletionQueue _mainDeletionQueue;
 
@@ -226,13 +227,14 @@ public:
 
 	uint32_t get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags flags, VkBool32* memTypeFound = nullptr);
 
+	void recreate_swapchain();
+
 private:
 
 	void init_vulkan();
 
 	void init_swapchain();
 
-	void recreate_swapchain();
 
 	void clean_swapchain();
 

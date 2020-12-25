@@ -368,7 +368,15 @@ void Renderer::render()
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-	vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+	VkResult result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || VulkanEngine::engine->_resized) {
+		VulkanEngine::engine->recreate_swapchain();
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		throw std::runtime_error("Failed to acquire swap chain image");
+	}
 
 	// First pass
 	VkSubmitInfo submit = {};
@@ -401,7 +409,12 @@ void Renderer::render()
 	presentInfo.pWaitSemaphores		= &get_current_frame()._renderSemaphore;
 	presentInfo.pImageIndices		= &VulkanEngine::engine->_indexSwapchainImage;
 
-	VK_CHECK(vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &presentInfo));
+	result = vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &presentInfo);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		VulkanEngine::engine->recreate_swapchain();
+	}
+	else if (result != VK_SUCCESS)
+		throw std::runtime_error("failed to present swap chain images!");
 }
 
 void Renderer::raytrace()
@@ -415,7 +428,15 @@ void Renderer::raytrace()
 
 	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
-	vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+	VkResult result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || VulkanEngine::engine->_resized) {
+		VulkanEngine::engine->recreate_swapchain();
+		return;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		throw std::runtime_error("Failed to acquire swap chain image");
+	}
 
 	build_raytracing_command_buffers();
 
@@ -441,8 +462,12 @@ void Renderer::raytrace()
 	present.pWaitSemaphores		= &get_current_frame()._renderSemaphore;
 	present.pImageIndices		= &VulkanEngine::engine->_indexSwapchainImage;
 
-	VK_CHECK(vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present));
-
+	result = vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		VulkanEngine::engine->recreate_swapchain();
+	}
+	else if (result != VK_SUCCESS)
+		throw std::runtime_error("failed to present swap chain images!");
 }
 
 void Renderer::render_gui()
