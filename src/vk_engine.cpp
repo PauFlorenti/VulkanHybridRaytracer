@@ -2,12 +2,11 @@
 #include "vk_engine.h"
 
 #include <VkBootstrap.h>
-#include <SDL.h>
-#include <SDL_vulkan.h>
 
 #include "vk_types.h"
 #include "vk_initializers.h"
 #include "vk_textures.h"
+#include "window.h"
 
 #define VMA_IMPLEMENTATION
 #include "vma/vk_mem_alloc.h"
@@ -17,24 +16,14 @@ VulkanEngine* VulkanEngine::engine = nullptr;
 VulkanEngine::VulkanEngine()
 {
 	engine = this;
+	_window = new Window();
 }
 
 void VulkanEngine::init()
 {
 	_mode =	RAYTRACING;
 
-	SDL_Init(SDL_INIT_VIDEO);
-
-	SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-
-	_window = SDL_CreateWindow(
-		"Vulkan Pinut",
-		SDL_WINDOWPOS_UNDEFINED,
-		SDL_WINDOWPOS_UNDEFINED,
-		_windowExtent.width,
-		_windowExtent.height,
-		window_flags
-	);
+	_window->init("Vulkan Pinut", 1700, 900);
 
 	// load core vulkan structures
 	init_vulkan();
@@ -79,7 +68,7 @@ void VulkanEngine::cleanup()
 		vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
 		vkDestroyInstance(_instance, nullptr);
 
-		SDL_DestroyWindow(_window);
+		_window->clean();
 	}
 }
 
@@ -96,57 +85,9 @@ void VulkanEngine::run()
 		while (SDL_PollEvent(&e) != 0)
 		{
 			if (e.type == SDL_QUIT) _bQuit = true;
-			else if (e.type == SDL_KEYDOWN)
-			{
-				if (e.key.keysym.sym == SDLK_w) {
-					_camera->processKeyboard(FORWARD, dt);
-				}
-				if (e.key.keysym.sym == SDLK_a) {
-					_camera->processKeyboard(LEFT, dt);
-				}
-				if (e.key.keysym.sym == SDLK_s) {
-					_camera->processKeyboard(BACKWARD, dt);
-				}
-				if (e.key.keysym.sym == SDLK_d) {
-					_camera->processKeyboard(RIGHT, dt);
-				}
-				if (e.key.keysym.sym == SDLK_LSHIFT) {
-					_camera->processKeyboard(DOWN, dt);
-				}
-				if (e.key.keysym.sym == SDLK_SPACE) {
-					_camera->processKeyboard(UP, dt);
-				}
-				if (e.key.keysym.sym == SDLK_1) {
-					_mode = FORWARD_RENDER;
-				}
-				if (e.key.keysym.sym == SDLK_2) {
-					_mode = DEFERRED;
-				}
-				if (e.key.keysym.sym == SDLK_3) {
-					_mode = RAYTRACING;
-				}
-				if (e.key.keysym.sym == SDLK_ESCAPE) _bQuit = true;
-			}
-			if (e.type == SDL_MOUSEBUTTONDOWN) {
-				if(e.button.button == SDL_BUTTON_MIDDLE)
-					mouse_locked = !mouse_locked;
-			}
-			if (e.type == SDL_MOUSEMOTION) {
-				if (mouse_locked)
-					_camera->rotate(mouse_delta.x, mouse_delta.y);
-			}
-			if (e.type == SDL_WINDOWEVENT) {
-				switch (e.window.event)
-				{
-				case SDL_WINDOWEVENT_RESIZED:
-					recreate_swapchain();
-				default:
-					break;
-				}
-			}
+			_window->handleEvent(e, dt);
 		}
 
-		input_update();
 		update(dt);
 
 		renderer->render_gui();
@@ -174,8 +115,10 @@ void VulkanEngine::run()
 void VulkanEngine::update(const float dt)
 {
 
+	_window->input_update();
+
 	glm::mat4 view			= _camera->getView();
-	glm::mat4 projection	= glm::perspective(glm::radians(60.0f), 1700.f / 900.f, 0.1f, 512.0f);
+	glm::mat4 projection	= glm::perspective(glm::radians(60.0f), (float)_window->getWidth() / (float)_window->getHeight(), 0.1f, 1000.0f);
 	projection[1][1] *= -1;
 
 	// Fill the GPU camera data struct
@@ -252,6 +195,17 @@ void VulkanEngine::update(const float dt)
 			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
 		}
 		vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+
+		std::vector<MTLMaterial> materials;
+		for (auto it : _MtlMaterials)
+		{
+			materials.push_back(it.second);
+		}
+
+		void* matData;
+		vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
+		memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
+		vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
 	}
 
 }
@@ -299,6 +253,17 @@ int VulkanEngine::get_textureId(const std::string& name)
 {
 	int i = 0;
 	for (auto it : _textures) {
+		if (it.first == name)
+			break;
+		i++;
+	}
+	return i;
+}
+
+int VulkanEngine::get_materialId(const std::string& name)
+{
+	int i = 0;
+	for (auto it : _MtlMaterials) {
 		if (it.first == name)
 			break;
 		i++;
@@ -368,7 +333,7 @@ void VulkanEngine::init_vulkan()
 	_instance = vkb_inst.instance;
 	_debug_messenger = vkb_inst.debug_messenger;
 
-	SDL_Vulkan_CreateSurface(_window, _instance, &_surface);
+	SDL_Vulkan_CreateSurface(_window->_handle, _instance, &_surface);
 
 	std::vector<const char*> required_device_extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -443,7 +408,7 @@ void VulkanEngine::init_swapchain()
 		.use_default_format_selection()
 		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
 		.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-		.set_desired_extent(_windowExtent.width, _windowExtent.height)
+		.set_desired_extent(_window->getWidth(), _window->getHeight())
 		.build()
 		.value();
 
@@ -459,8 +424,8 @@ void VulkanEngine::init_swapchain()
 		});
 
 	VkExtent3D depthImageExtent = {
-		_windowExtent.width,
-		_windowExtent.height,
+		_window->getWidth(),
+		_window->getHeight(),
 		1
 	};
 
@@ -489,12 +454,10 @@ void VulkanEngine::init_swapchain()
 void VulkanEngine::recreate_swapchain()
 {
 	int width = 0, height = 0;
-	SDL_GetWindowSize(_window, &width, &height);
 	SDL_Event e;
-	uint32_t flag = SDL_GetWindowFlags(_window);
-	while (flag == SDL_WINDOW_MINIMIZED) {
-		SDL_WaitEvent(&e);
-	}
+	//while (_window->isMinimized()) {
+	//	SDL_PollEvent(&e);
+	//}
 
 	vkDeviceWaitIdle(_device);
 
@@ -502,9 +465,11 @@ void VulkanEngine::recreate_swapchain()
 
 	init_swapchain();
 	init_upload_commands();
-	init_ray_tracing();
-	_windowExtent = { (uint32_t)width, (uint32_t)height };
-	renderer = new Renderer();
+	SDL_GetWindowSize(_window->_handle, &width, &height);
+	_window->setWidth(width);
+	_window->setHeight(height);
+	renderer->recreate_renderer();
+	//renderer = new Renderer();
 
 }
 
@@ -517,6 +482,8 @@ void VulkanEngine::clean_swapchain()
 	for (size_t i = 0; i < FRAME_OVERLAP; i++) {
 		vkFreeCommandBuffers(_device, renderer->_frames[i]._commandPool, 1, &renderer->_frames[i]._mainCommandBuffer);
 	}
+
+	//vkFreeCommandBuffers(_device, renderer->_commandPool, 1, &renderer->_offscreenComandBuffer);
 
 	vkDestroyPipeline(_device, renderer->_finalPipeline, nullptr);
 	vkDestroyPipeline(_device, renderer->_forwardPipeline, nullptr);
@@ -572,29 +539,57 @@ void VulkanEngine::init_upload_commands()
 
 void VulkanEngine::init_scene()
 {
-	_camera = new Camera(glm::vec3(0, 40, 2.5));
+	_camera = new Camera(glm::vec3(0, 5, 2.5));
 
 	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 50, 0));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 30, 0));
+	light->intensity = 100.0f;
 	Light* light2 = new Light();
-	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 50, 0));
-	light2->intensity = 1000.0f;
+	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
+	light2->intensity = 250.0f;
 	light2->color = glm::vec3(1, 0, 0);
 	Light* light3 = new Light();
-	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 50, 0));
-	light3->intensity = 1000.0f;
+	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 30, 0));
+	light3->intensity = 250.0f;
 	light3->color = glm::vec3(0, 0, 1);
+
+	MTLMaterial simple;
+	simple.illum = 0;
+	simple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
+	simple.glossiness = 1.0f;
+
+	MTLMaterial gold;
+	gold.illum			= 3;
+	gold.diffuse		= { 0.982f, 0.857f, 0.4f, 1.0f };
+	gold.glossiness		= 5.0f;
+
+	MTLMaterial red_gold;
+	gold.illum			= 3;
+	gold.diffuse		= { 0.982f, 0.3f, 0.4f, 1.0f };
+	gold.glossiness		= 2.0f;
+
+	MTLMaterial glass;
+	glass.illum			= 4;
+	glass.diffuse		= {0, 0, 0, 1};
+	glass.glossiness	= 1.0f;
+	glass.ior			= 1.52f;
+	
+	_MtlMaterials["gold"]		= gold;
+	_MtlMaterials["redgold"]	= red_gold;
+	_MtlMaterials["glass"]		= glass;
+	_MtlMaterials["simple"]		= simple;
 
 	_lights.push_back(light);
 	_lights.push_back(light2);
-	//_lights.push_back(light3);
+	_lights.push_back(light3);
 	
 	Object* monkey = new Object();
 	monkey->mesh			= get_mesh("monkey");
 	monkey->material		= get_material("offscreen");
-	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(0, 50, -3));
+	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -3));
 	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
-	monkey->m_matrix = translation * scale;
+	monkey->m_matrix		= translation * scale;
+	monkey->materialIdx		= get_materialId("glass");
 	
 	Object* empire = new Object();
 	empire->mesh			= get_mesh("empire");
@@ -604,27 +599,29 @@ void VulkanEngine::init_scene()
 	Object* quad = new Object();
 	quad->mesh		= get_mesh("quad");
 	quad->material	= get_material("offscreen");
-	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, 30, -5)) *
+	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
 		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(10));
+		glm::scale(glm::mat4(1), glm::vec3(100));
+	quad->materialIdx = get_materialId("simple");
 
 	Object* tri = new Object();
 	tri->mesh		= get_mesh("triangle");
 	tri->material	= get_material("offscreen");
-	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 40, -5));
+	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5));
 	tri->setColor(glm::vec3(0, 0, 1));
 
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
-	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 40, -5));
+	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -5));
 	cube->setColor(glm::vec3(1, 0, 0));
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
 	sphere->material	= get_material("offscreen");
-	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(10, 40, -5));
+	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
 	sphere->setColor(glm::vec3(0, 1, 0));
+	sphere->materialIdx = get_materialId("gold");
 
 	//_renderables.push_back(empire);
 	_renderables.push_back(sphere);
@@ -665,7 +662,7 @@ void VulkanEngine::init_imgui()
 	// Initialize imgui library
 	ImGui::CreateContext();
 	
-	ImGui_ImplSDL2_InitForVulkan(_window);
+	ImGui_ImplSDL2_InitForVulkan(_window->_handle);
 
 	ImGui_ImplVulkan_InitInfo initInfo = {};
 	initInfo.Instance		= _instance;
@@ -858,7 +855,8 @@ void VulkanEngine::create_attachment(VkFormat format, VkImageUsageFlagBits usage
 
 	assert(aspectMask > 0);
 
-	VkExtent3D extent = { _windowExtent.width, _windowExtent.height, 1 };
+	VkExtent3D extent = { _window->getWidth(), _window->getHeight(), 1 };
+	//VkExtent3D extent = { _windowExtent.width, _windowExtent.height, 1 };
 	VkImageCreateInfo imageInfo = vkinit::image_create_info(format, usage | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
 
 	VmaAllocationCreateInfo memAlloc = {};
@@ -1058,35 +1056,6 @@ size_t VulkanEngine::pad_uniform_buffer_size(size_t originalSize)
 		alignedSize = (alignedSize + minUboAlignment - 1) & ~(minUboAlignment - 1);
 	}
 	return alignedSize;
-}
-
-// Input functions
-// TODO: Maybe create a header file with all input functions and parameters?
-
-void VulkanEngine::input_update()
-{
-	int x, y;
-	SDL_GetMouseState(&x, &y);
-	mouse_delta = glm::vec2(mouse_position.x - x, mouse_position.y - y);
-	mouse_position = glm::vec2(x, y);
-
-	SDL_ShowCursor(!mouse_locked);
-
-	ImGui::SetMouseCursor(mouse_locked ? ImGuiMouseCursor_None : ImGuiMouseCursor_Arrow);
-
-	if (mouse_locked)
-		center_mouse();
-}
-
-void VulkanEngine::center_mouse()
-{
-	int window_width, window_height;
-	SDL_GetWindowSize(_window, &window_width, &window_height);
-	int center_x = (int)glm::floor(window_width * 0.5);
-	int center_y = (int)glm::floor(window_height * 0.5);
-
-	SDL_WarpMouseInWindow(_window, center_x, center_y);
-	mouse_position = glm::vec2((float)center_x, (float)center_y);
 }
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)

@@ -115,6 +115,7 @@ public:
 
 	std::vector<BlasInput>		_blas;
 	AllocatedBuffer				lightBuffer;
+	AllocatedBuffer				_matBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
@@ -131,6 +132,14 @@ public:
 	PFN_vkCreateRayTracingPipelinesKHR					vkCreateRayTracingPipelinesKHR;
 	PFN_vkCmdTraceRaysKHR								vkCmdTraceRaysKHR;
 	PFN_vkDestroyAccelerationStructureKHR				vkDestroyAccelerationStructureKHR;
+
+	// POST VARIABLES ------------------------
+	VkPipeline				_postPipeline;
+	VkPipelineLayout		_postPipelineLayout;
+	VkDescriptorSet			_postDescSet;
+	VkDescriptorSetLayout	_postDescSetLayout;
+	VkRenderPass			_postRenderPass;
+
 
 	void rasterize();
 
@@ -151,6 +160,8 @@ public:
 	FrameData& get_current_frame();
 
 	void create_storage_image();
+
+	void recreate_renderer();
 private:
 
 	void init_framebuffers();
@@ -200,5 +211,12 @@ private:
 	void init_raytracing_pipeline();
 
 	void build_raytracing_command_buffers();
+
+	// POST
+	void create_post_renderPass();
+
+	void create_post_framebuffers();
+
+	void create_post_pipeline();
 
 };

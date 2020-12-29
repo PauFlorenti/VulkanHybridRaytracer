@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vk_types.h>
-
 #include <vma/vk_mem_alloc.h>
 
 #include <imgui/imgui.h>
@@ -9,10 +7,13 @@
 #include <imgui/imgui_impl_sdl.h>
 #include <imgui/imgui_impl_vulkan.h>
 
+#include "vk_types.h"
 #include "vk_mesh.h"
 #include "camera.h"
 #include "entity.h"
 #include "renderer.h"
+
+class Window;
 
 #define VK_CHECK(x)												\
 	do															\
@@ -109,9 +110,7 @@ public:
 	bool		_bQuit{ false };
 	uint32_t	_indexSwapchainImage{ 0 };
 
-	VkExtent2D	_windowExtent{ 1700, 900 };
-	struct SDL_Window* _window{ nullptr };
-	bool		_resized{ false };
+	Window *_window;
 
 	DeletionQueue _mainDeletionQueue;
 
@@ -156,9 +155,10 @@ public:
 	std::vector<Object*>				_renderables;
 	std::vector<Light*>					_lights;
 
-	std::unordered_map<std::string, Material> _materials;
-	std::unordered_map<std::string, Mesh>	  _meshes;
-	std::unordered_map<std::string, Texture>  _textures;
+	std::unordered_map<std::string, Material>		_materials;
+	std::unordered_map<std::string, Mesh>			_meshes;
+	std::unordered_map<std::string, Texture>		_textures;
+	std::unordered_map<std::string, MTLMaterial>	_MtlMaterials;
 
 	Camera* _camera;
 	bool mouse_locked;
@@ -202,6 +202,8 @@ public:
 
 	int get_textureId(const std::string& name);
 
+	int get_materialId(const std::string& name);
+
 	void immediate_submit(std::function<void(VkCommandBuffer)>&& function);
 
 	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
@@ -235,7 +237,6 @@ private:
 
 	void init_swapchain();
 
-
 	void clean_swapchain();
 
 	void init_ray_tracing();
@@ -254,16 +255,9 @@ private:
 
 	VkCommandBuffer create_command_buffer(VkCommandBufferLevel level, bool begin);
 
-	// VKRay
-	
+	// VKRay features passed to the logical device as a pNext pointer
 	void get_enabled_features();
 
-	// Input functions
-	glm::vec2 mouse_position = { _windowExtent.width * 0.5, _windowExtent.height * 0.5 };
-	glm::vec2 mouse_delta;
-
-	void input_update();
-	void center_mouse();
 };
 
 class PipelineBuilder
