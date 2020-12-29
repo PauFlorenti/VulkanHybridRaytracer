@@ -62,7 +62,8 @@ namespace vkinit {
 		VkDescriptorType type, 
 		VkDescriptorSet dstSet, 
 		VkDescriptorBufferInfo* bufferInfo, 
-		uint32_t binding);
+		uint32_t binding,
+		uint32_t count = 1);
 
 	VkCommandBufferBeginInfo command_buffer_begin_info(VkCommandBufferUsageFlags usageFlags);
 
@@ -74,10 +75,19 @@ namespace vkinit {
 
 	VkBufferCreateInfo buffer_create_info(size_t bufferSize, VkBufferUsageFlags usage);
 
-	VkDescriptorPoolCreateInfo descriptor_pool_create_info(uint32_t count, VkDescriptorPoolSize* pPoolSizes, uint32_t maxSets);
+	VkDescriptorPoolCreateInfo descriptor_pool_create_info(const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags = 0);
+
+	VkDescriptorSetAllocateInfo descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* pSetLayouts, uint32_t descriptorSetCount);
 
 	VkDescriptorImageInfo descriptor_image_create_info(VkSampler sampler, VkImageView imageview, VkImageLayout layout);
 
 	VkPipelineColorBlendStateCreateInfo color_blend_state_create_info(uint32_t attachmentCount, VkPipelineColorBlendAttachmentState* pAttachments);
+
+	// VKRay
+	VkAccelerationStructureGeometryKHR acceleration_structure_geometry_khr();
+
+	VkAccelerationStructureBuildGeometryInfoKHR acceleration_structure_build_geometry_info();
+
+	VkAccelerationStructureBuildSizesInfoKHR acceleration_structure_build_sizes_info();
 
 }

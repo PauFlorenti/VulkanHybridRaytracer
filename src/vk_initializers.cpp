@@ -212,13 +212,13 @@ VkDescriptorSetLayoutBinding vkinit::descriptorset_layout_binding(
 	VkDescriptorType type,
 	VkShaderStageFlags stageFlags,
 	uint32_t binding,
-	uint32_t count) 
+	uint32_t count /*= 1*/) 
 {
 	VkDescriptorSetLayoutBinding setBinding = {};
 	setBinding.stageFlags			= stageFlags;
 	setBinding.binding				= binding;
 	setBinding.descriptorType		= type;
-	setBinding.descriptorCount		= count;
+	setBinding.descriptorCount		= count;	// 1 by default
 	setBinding.pImmutableSamplers   = nullptr;
 
 	return setBinding;
@@ -228,7 +228,8 @@ VkWriteDescriptorSet vkinit::write_descriptor_buffer(
 	VkDescriptorType type,
 	VkDescriptorSet dstSet,
 	VkDescriptorBufferInfo* bufferInfo,
-	uint32_t binding)
+	uint32_t binding,
+	uint32_t count /*=1*/)
 {
 	VkWriteDescriptorSet write = {};
 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -236,7 +237,7 @@ VkWriteDescriptorSet vkinit::write_descriptor_buffer(
 
 	write.dstBinding		= binding;
 	write.dstSet			= dstSet;
-	write.descriptorCount	= 1;
+	write.descriptorCount	= count;
 	write.descriptorType	= type;
 	write.pBufferInfo		= bufferInfo;
 
@@ -306,20 +307,33 @@ VkBufferCreateInfo vkinit::buffer_create_info(size_t bufferSize, VkBufferUsageFl
 	VkBufferCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	info.pNext = nullptr;
-	info.size = bufferSize;
+	info.size  = bufferSize;
 	info.usage = usage;
 
 	return info;
 }
 
-VkDescriptorPoolCreateInfo vkinit::descriptor_pool_create_info(uint32_t count, VkDescriptorPoolSize* pPoolSizes, uint32_t maxSets)
+VkDescriptorPoolCreateInfo vkinit::descriptor_pool_create_info(const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags)
 {
 	VkDescriptorPoolCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	info.pNext = nullptr;
-	info.poolSizeCount = count;
-	info.pPoolSizes = pPoolSizes;
-	info.maxSets = maxSets;
+	info.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	info.pNext			= nullptr;
+	info.flags = flags;
+	info.poolSizeCount	= static_cast<uint32_t>(poolSizes.size());
+	info.pPoolSizes		= poolSizes.data();
+	info.maxSets		= maxSets;
+
+	return info;
+}
+
+VkDescriptorSetAllocateInfo vkinit::descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* descriptorSetLayout, uint32_t descriptorSetCount)
+{
+	VkDescriptorSetAllocateInfo info{};
+	info.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	info.pNext				= nullptr;
+	info.descriptorPool		= descriptorPool;
+	info.pSetLayouts		= descriptorSetLayout;
+	info.descriptorSetCount = descriptorSetCount;
 
 	return info;
 }
@@ -341,6 +355,31 @@ VkPipelineColorBlendStateCreateInfo vkinit::color_blend_state_create_info(uint32
 	info.pNext = nullptr;
 	info.attachmentCount = attachmentCount;
 	info.pAttachments = pAttachments;
+
+	return info;
+}
+
+// VKRay
+VkAccelerationStructureGeometryKHR vkinit::acceleration_structure_geometry_khr()
+{
+	VkAccelerationStructureGeometryKHR asgeometry{};
+	asgeometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+
+	return asgeometry;
+}
+
+VkAccelerationStructureBuildGeometryInfoKHR vkinit::acceleration_structure_build_geometry_info()
+{
+	VkAccelerationStructureBuildGeometryInfoKHR info = {};
+	info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+
+	return info;
+}
+
+VkAccelerationStructureBuildSizesInfoKHR vkinit::acceleration_structure_build_sizes_info()
+{
+	VkAccelerationStructureBuildSizesInfoKHR info{};
+	info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 
 	return info;
 }
