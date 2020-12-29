@@ -103,6 +103,7 @@ void VulkanEngine::run()
 			renderer->raytrace();
 			break;
 		case HYBRID:
+			renderer->rasterize_hybrid();
 			break;
 		default:
 			break;

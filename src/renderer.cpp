@@ -469,18 +469,71 @@ void Renderer::raytrace()
 
 	build_post_command_buffers();
 
-	VkSubmitInfo postSubmit{};
-	postSubmit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	postSubmit.pNext				= nullptr;
-	postSubmit.pWaitDstStageMask	= waitStages;
-	postSubmit.waitSemaphoreCount	= 1;
-	postSubmit.pWaitSemaphores		= &_rtSemaphore;
-	postSubmit.signalSemaphoreCount = 1;
-	postSubmit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
-	postSubmit.commandBufferCount	= 1;
-	postSubmit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
+	submit.pWaitSemaphores		= &_rtSemaphore;
+	submit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
+	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &postSubmit, get_current_frame()._renderFence));
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
+
+	VkPresentInfoKHR present{};
+	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	present.pNext				= nullptr;
+	present.swapchainCount		= 1;
+	present.pSwapchains			= swapchain;
+	present.waitSemaphoreCount	= 1;
+	present.pWaitSemaphores		= &get_current_frame()._renderSemaphore;
+	present.pImageIndices		= &VulkanEngine::engine->_indexSwapchainImage;
+
+	result = vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present);
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		VulkanEngine::engine->recreate_swapchain();
+	}
+	else if (result != VK_SUCCESS)
+		throw std::runtime_error("failed to present swap chain images!");
+}
+
+void Renderer::rasterize_hybrid()
+{
+	ImGui::Render();
+
+	VK_CHECK(vkWaitForFences(*device, 1, &get_current_frame()._renderFence, VK_TRUE, 1000000000));
+	VK_CHECK(vkResetFences(*device, 1, &get_current_frame()._renderFence));
+
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+	VkResult result;
+
+	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
+	result = vkResetCommandBuffer(_rtCommandBuffer, 0);
+
+	result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+
+	// First pass
+	VkSubmitInfo submit = {};
+	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.pNext				= nullptr;
+	submit.pWaitDstStageMask	= waitStages;
+	submit.waitSemaphoreCount	= 1;
+	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore;
+	submit.signalSemaphoreCount = 1;
+	submit.pSignalSemaphores	= &_offscreenSemaphore;
+	submit.commandBufferCount	= 1;
+	submit.pCommandBuffers		= &_offscreenComandBuffer;
+
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	build_raytracing_command_buffers();
+	// Second pass raytrace
+	submit.pWaitSemaphores		= &_offscreenSemaphore;
+	submit.pSignalSemaphores	= &_rtSemaphore;
+	submit.pCommandBuffers		= &_rtCommandBuffer;
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	build_post_command_buffers();
+	submit.pWaitSemaphores		= &_rtSemaphore;
+	submit.pSignalSemaphores	= &get_current_frame()._presentSemaphore;
+	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
 
 	VkPresentInfoKHR present{};
 	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1978,75 +2031,24 @@ void Renderer::build_raytracing_command_buffers()
 
 	uint32_t width = VulkanEngine::engine->_window->getWidth(), height = VulkanEngine::engine->_window->getHeight();
 
-	// Copy ray tracing output to swapchain image
-	//VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd)
-	//	{
-			VkImage& image = VulkanEngine::engine->_swapchainImages[VulkanEngine::engine->_indexSwapchainImage];
+	VkImage& image = VulkanEngine::engine->_swapchainImages[VulkanEngine::engine->_indexSwapchainImage];
 
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
-			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0, 1, &_rtDescriptorSet, 0, nullptr);
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
+	if(VulkanEngine::engine->_mode == RAYTRACING)
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0, 1, &_rtDescriptorSet, 0, nullptr);
+	else
+		vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0, 1, &_rtDescriptorSet, 0, nullptr);
 
-			vkCmdTraceRaysKHR(
-				cmd,
-				&raygenShaderSbtEntry,
-				&missShaderSbtEntry,
-				&hitShaderSbtEntry,
-				&callableShaderSbtEntry,
-				width,
-				height,
-				1
-			);
-			/*
-			// Prepare current swap chain image as transfer destination
-			VkImageMemoryBarrier imageMemoryBarrierSwapChain{};
-			imageMemoryBarrierSwapChain.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			imageMemoryBarrierSwapChain.pNext				= nullptr;
-			imageMemoryBarrierSwapChain.image				= image;
-			imageMemoryBarrierSwapChain.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
-			imageMemoryBarrierSwapChain.newLayout			= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrierSwapChain.subresourceRange	= subresourceRange;
-			imageMemoryBarrierSwapChain.srcAccessMask		= 0;
-			imageMemoryBarrierSwapChain.dstAccessMask		= VK_ACCESS_TRANSFER_WRITE_BIT;
-
-			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierSwapChain);
-
-			// Prepare ray tracing output image as transfer source
-			VkImageMemoryBarrier imageMemoryBarrierOutput{};
-			imageMemoryBarrierOutput.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			imageMemoryBarrierOutput.pNext				= nullptr;
-			imageMemoryBarrierOutput.image				= _rtImage.image._image;
-			imageMemoryBarrierOutput.oldLayout			= VK_IMAGE_LAYOUT_GENERAL;
-			imageMemoryBarrierOutput.newLayout			= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			imageMemoryBarrierOutput.subresourceRange	= subresourceRange;
-			imageMemoryBarrierOutput.srcAccessMask		= VK_ACCESS_TRANSFER_READ_BIT;
-
-			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierOutput);
-
-			VkImageCopy copyRegion{};
-			copyRegion.srcSubresource					= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-			copyRegion.srcOffset						= { 0, 0, 0 };
-			copyRegion.dstSubresource					= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-			copyRegion.dstOffset						= { 0, 0, 0 };
-			copyRegion.extent							= { width, height, 1 };
-			vkCmdCopyImage(cmd, _rtImage.image._image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-			// Return swapchain image back to present
-			imageMemoryBarrierSwapChain.oldLayout		= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrierSwapChain.newLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-			imageMemoryBarrierSwapChain.srcAccessMask	= VK_ACCESS_TRANSFER_WRITE_BIT;
-			imageMemoryBarrierSwapChain.dstAccessMask	= 0;
-
-			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierSwapChain);
-
-			// Return output image back to general
-			imageMemoryBarrierOutput.oldLayout			= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			imageMemoryBarrierOutput.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
-			imageMemoryBarrierOutput.srcAccessMask		= VK_ACCESS_TRANSFER_READ_BIT;
-			imageMemoryBarrierOutput.dstAccessMask		= 0;
-
-			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierOutput);
-			*/
-		//});
+	vkCmdTraceRaysKHR(
+		cmd,
+		&raygenShaderSbtEntry,
+		&missShaderSbtEntry,
+		&hitShaderSbtEntry,
+		&callableShaderSbtEntry,
+		width,
+		height,
+		1
+	);
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
 }

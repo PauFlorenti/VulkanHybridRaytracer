@@ -83,6 +83,9 @@ void Window::handleEvent(SDL_Event& e, const float dt)
 		if (e.key.keysym.sym == SDLK_3) {
 			VulkanEngine::engine->_mode = RAYTRACING;
 		}
+		if (e.key.keysym.sym == SDLK_4) {
+			VulkanEngine::engine->_mode = HYBRID;
+		}
 		if (e.key.keysym.sym == SDLK_ESCAPE) VulkanEngine::engine->_bQuit = true;
 	}
 	if (e.type == SDL_MOUSEBUTTONDOWN) {

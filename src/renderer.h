@@ -79,6 +79,7 @@ public:
 	VkPipelineLayout			_forwardPipelineLayout;
 	VkPipeline					_forwardPipeline;
 
+	// DEFERRED STUFF
 	// Onscreen stuff
 	VkRenderPass				_renderPass;
 	std::vector<VkFramebuffer>	_framebuffers;
@@ -144,12 +145,18 @@ public:
 	VkRenderPass				_postRenderPass;
 	std::vector<VkFramebuffer>	_postFramebuffers;
 
+	// HYBRID VARIABLES -----------------------
+	VkPipelineLayout		_hybridPipelineLayout;
+	VkDescriptorSet			_hybridPipelineDesc;
+	VkDescriptorSetLayout	_hybridPipelineDescLayout;
 
 	void rasterize();
 
 	void render();
 
 	void raytrace();
+
+	void rasterize_hybrid();
 
 	void render_gui();
 
