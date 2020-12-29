@@ -264,7 +264,7 @@ class PipelineBuilder
 {
 public:
 	std::vector<VkPipelineShaderStageCreateInfo>	_shaderStages;
-	VkPipelineVertexInputStateCreateInfo			_vertexInputInfo;
+	VkPipelineVertexInputStateCreateInfo			_vertexInputInfo{};
 	VkPipelineInputAssemblyStateCreateInfo			_inputAssembly;
 	VkViewport										_viewport;
 	VkRect2D										_scissor;

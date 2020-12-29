@@ -66,6 +66,6 @@ void main()
 	finalColor /= NSAMPLES;
 
 	// Finally we can write the result to the output image
-	finalColor = pow( finalColor, vec3( 1.0 / 2.2 ));
+	//finalColor = pow( finalColor, vec3( 1.0 / 2.2 ));
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
 }

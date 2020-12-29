@@ -37,9 +37,6 @@ class Object : public Entity
 public:
 	Mesh*			mesh;
 	Material*		material;
-	AllocatedBuffer matrixBuffer;
-	AllocatedBuffer vBuffer;
-	AllocatedBuffer sceneIdxBuffer;
 	int				materialIdx{ 0 };
 	int				id{ 0 };
 

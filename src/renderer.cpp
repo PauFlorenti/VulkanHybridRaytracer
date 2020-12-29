@@ -37,15 +37,20 @@ Renderer::Renderer()
 	vkCmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(*device, "vkCmdTraceRaysKHR"));
 	vkDestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(*device, "vkDestroyAccelerationStructureKHR"));
 
+	// post
+	create_storage_image();
+
+	create_post_renderPass();
+	create_post_framebuffers();
+	create_post_descriptor();
+	create_post_pipeline();
+
 	create_bottom_acceleration_structure();
 	create_top_acceleration_structure();
-	create_storage_image();
 	create_rt_descriptors();
 	init_raytracing_pipeline();
 	create_shader_binding_table();
 	build_raytracing_command_buffers();
-
-	// post
 }
 
 void Renderer::init_commands()
@@ -72,6 +77,8 @@ void Renderer::init_commands()
 
 	VkCommandBufferAllocateInfo cmdDeferredAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdDeferredAllocInfo, &_offscreenComandBuffer));
+	VkCommandBufferAllocateInfo cmdPostAllocInfo = vkinit::command_buffer_allocate_info(_frames[0]._commandPool);
+	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_rtCommandBuffer));
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyCommandPool(*device, _commandPool, nullptr);
@@ -429,9 +436,12 @@ void Renderer::raytrace()
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
+	VkResult result;
 
-	VkResult result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
+	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
+	//result = vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+
+	result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ) {
 		VulkanEngine::engine->recreate_swapchain();
@@ -441,20 +451,36 @@ void Renderer::raytrace()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
+	result = vkResetCommandBuffer(_rtCommandBuffer, 0);
 	build_raytracing_command_buffers();
 
 	VkSubmitInfo submit{};
-	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit.pNext				= nullptr;
-	submit.pWaitDstStageMask	= waitStages;
-	submit.waitSemaphoreCount	= 1;
-	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore;
-	submit.signalSemaphoreCount = 1;
-	submit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
-	submit.commandBufferCount	= 1;
-	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
+	submit.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.pNext					= nullptr;
+	submit.pWaitDstStageMask		= waitStages;
+	submit.waitSemaphoreCount		= 1;
+	submit.pWaitSemaphores			= &get_current_frame()._presentSemaphore;
+	submit.signalSemaphoreCount		= 1;
+	submit.pSignalSemaphores		= &_rtSemaphore;
+	submit.commandBufferCount		= 1;
+	submit.pCommandBuffers			= &_rtCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	build_post_command_buffers();
+
+	VkSubmitInfo postSubmit{};
+	postSubmit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	postSubmit.pNext				= nullptr;
+	postSubmit.pWaitDstStageMask	= waitStages;
+	postSubmit.waitSemaphoreCount	= 1;
+	postSubmit.pWaitSemaphores		= &_rtSemaphore;
+	postSubmit.signalSemaphoreCount = 1;
+	postSubmit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
+	postSubmit.commandBufferCount	= 1;
+	postSubmit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
+
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &postSubmit, get_current_frame()._renderFence));
 
 	VkPresentInfoKHR present{};
 	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -639,6 +665,7 @@ void Renderer::init_sync_structures()
 	VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::semaphore_create_info();
 
 	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_offscreenSemaphore));
+	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_rtSemaphore));
 
 	for (int i = 0; i < FRAME_OVERLAP; i++)
 	{
@@ -661,6 +688,7 @@ void Renderer::init_sync_structures()
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroySemaphore(*device, _offscreenSemaphore, nullptr);
+		vkDestroySemaphore(*device, _rtSemaphore, nullptr);
 		});
 }
 
@@ -1097,7 +1125,6 @@ void Renderer::build_forward_command_buffer()
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
 	renderPassBeginInfo.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassBeginInfo.renderPass					= _forwardRenderPass;
-	//renderPassBeginInfo.renderArea.extent			= VulkanEngine::engine->_windowExtent;
 	renderPassBeginInfo.renderArea.extent.width		= VulkanEngine::engine->_window->getWidth();
 	renderPassBeginInfo.renderArea.extent.height	= VulkanEngine::engine->_window->getHeight();
 	renderPassBeginInfo.clearValueCount				= static_cast<uint32_t>(clearValues.size());
@@ -1248,13 +1275,12 @@ void Renderer::build_deferred_command_buffer()
 
 void Renderer::create_storage_image()
 {
-	VkExtent3D extent = { VulkanEngine::engine->_window->getWidth(), VulkanEngine::engine->_window->getHeight(), 1 };
-	//VkExtent3D extent = { VulkanEngine::engine->_windowExtent.width, VulkanEngine::engine->_windowExtent.height, 1 };
-	VkImageCreateInfo imageInfo = vkinit::image_create_info(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT, extent);
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	VkExtent3D extent			= { VulkanEngine::engine->_window->getWidth(), VulkanEngine::engine->_window->getHeight(), 1 };
+	VkImageCreateInfo imageInfo = vkinit::image_create_info(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
+	imageInfo.initialLayout		= VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VmaAllocationCreateInfo allocInfo{};
-	allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	allocInfo.usage			= VMA_MEMORY_USAGE_GPU_ONLY;
 	allocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo, 
@@ -1635,6 +1661,7 @@ void Renderer::create_rt_descriptors()
 	//  binding 5 = matrices buffer
 	//  binding 6 = light buffer
 	//  binding 7 = material buffer
+	//  binding 8 = material indices
 
 	const uint32_t nInstances = VulkanEngine::engine->_renderables.size();		
 	const int nLights = VulkanEngine::engine->_lights.size();
@@ -1701,7 +1728,7 @@ void Renderer::create_rt_descriptors()
 	std::vector<VkDescriptorBufferInfo> sceneIdxDescInfo;
 	for (Object* obj : VulkanEngine::engine->_renderables)
 	{
-		obj->vBuffer = VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		AllocatedBuffer vBuffer = VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 		std::vector<rtVertexAttribute> vAttr;
 		vAttr.reserve(obj->mesh->_vertices.size());
@@ -1710,12 +1737,12 @@ void Renderer::create_rt_descriptors()
 		}
 
 		void* vdata;
-		vmaMapMemory(VulkanEngine::engine->_allocator, obj->vBuffer._allocation, &vdata);
+		vmaMapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation, &vdata);
 		memcpy(vdata, vAttr.data(), sizeof(rtVertexAttribute) * obj->mesh->_vertices.size());
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, obj->vBuffer._allocation);
+		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer	= obj->vBuffer._buffer;
+		vertexBufferDescriptor.buffer	= vBuffer._buffer;
 		vertexBufferDescriptor.offset	= 0;
 		vertexBufferDescriptor.range	= sizeof(rtVertexAttribute) * obj->mesh->_vertices.size();
 		vertexDescInfo.push_back(vertexBufferDescriptor);
@@ -1723,32 +1750,38 @@ void Renderer::create_rt_descriptors()
 		VkDescriptorBufferInfo indexBufferDescriptor{};
 		indexBufferDescriptor.buffer	= obj->mesh->_indexBuffer._buffer;
 		indexBufferDescriptor.offset	= 0;
-		indexBufferDescriptor.range		= VK_WHOLE_SIZE;
+		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->mesh->_indices.size();
 		indexDescInfo.push_back(indexBufferDescriptor);
 
-		obj->matrixBuffer = VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		AllocatedBuffer matrixBuffer = VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* data;
-		vmaMapMemory(VulkanEngine::engine->_allocator, obj->matrixBuffer._allocation, &data);
+		vmaMapMemory(VulkanEngine::engine->_allocator, matrixBuffer._allocation, &data);
 		memcpy(data, &obj->m_matrix, sizeof(glm::mat4));
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, obj->matrixBuffer._allocation);
+		vmaUnmapMemory(VulkanEngine::engine->_allocator, matrixBuffer._allocation);
 
 		VkDescriptorBufferInfo matrixBufferDescriptor{};
-		matrixBufferDescriptor.buffer	= obj->matrixBuffer._buffer;
+		matrixBufferDescriptor.buffer	= matrixBuffer._buffer;
 		matrixBufferDescriptor.offset	= 0;
-		matrixBufferDescriptor.range	= VK_WHOLE_SIZE;
+		matrixBufferDescriptor.range	= sizeof(glm::mat4);
 		matrixDescInfo.push_back(matrixBufferDescriptor);
 
-		obj->sceneIdxBuffer = VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+		AllocatedBuffer sceneIdxBuffer = VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		void* idata;
-		vmaMapMemory(VulkanEngine::engine->_allocator, obj->sceneIdxBuffer._allocation, &idata);
+		vmaMapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation, &idata);
 		memcpy(idata, &obj->materialIdx, sizeof(int));
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, obj->sceneIdxBuffer._allocation);
+		vmaUnmapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation);
 
 		VkDescriptorBufferInfo matIdxBufferInfo;
-		matIdxBufferInfo.buffer			= obj->sceneIdxBuffer._buffer;
+		matIdxBufferInfo.buffer			= sceneIdxBuffer._buffer;
 		matIdxBufferInfo.offset			= 0;
 		matIdxBufferInfo.range			= sizeof(int);
 		sceneIdxDescInfo.push_back(matIdxBufferInfo);
+
+		VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+			vmaDestroyBuffer(VulkanEngine::engine->_allocator, vBuffer._buffer, vBuffer._allocation);
+			vmaDestroyBuffer(VulkanEngine::engine->_allocator, matrixBuffer._buffer, matrixBuffer._allocation);
+			vmaDestroyBuffer(VulkanEngine::engine->_allocator, sceneIdxBuffer._buffer, sceneIdxBuffer._allocation);
+			});
 	}
 
 	VkDescriptorBufferInfo lightBufferInfo;
@@ -1787,11 +1820,6 @@ void Renderer::create_rt_descriptors()
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(*device, _rtDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorPool(*device, _rtDescriptorPool, nullptr);
-		for (Object* obj : VulkanEngine::engine->_renderables) {
-			vmaDestroyBuffer(VulkanEngine::engine->_allocator, obj->matrixBuffer._buffer, obj->matrixBuffer._allocation);
-			vmaDestroyBuffer(VulkanEngine::engine->_allocator, obj->vBuffer._buffer, obj->vBuffer._allocation);
-			vmaDestroyBuffer(VulkanEngine::engine->_allocator, obj->sceneIdxBuffer._buffer, obj->sceneIdxBuffer._allocation);
-		}
 		vmaDestroyBuffer(VulkanEngine::engine->_allocator, lightBuffer._buffer, lightBuffer._allocation);
 		vmaDestroyBuffer(VulkanEngine::engine->_allocator, _matBuffer._buffer, _matBuffer._allocation);
 		});
@@ -1927,7 +1955,7 @@ void Renderer::build_raytracing_command_buffers()
 
 	VkImageSubresourceRange subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 	
-	VkCommandBuffer& cmd = get_current_frame()._mainCommandBuffer;
+	VkCommandBuffer& cmd = _rtCommandBuffer;
 
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBufInfo));
 
@@ -1968,7 +1996,7 @@ void Renderer::build_raytracing_command_buffers()
 				height,
 				1
 			);
-
+			/*
 			// Prepare current swap chain image as transfer destination
 			VkImageMemoryBarrier imageMemoryBarrierSwapChain{};
 			imageMemoryBarrierSwapChain.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1995,11 +2023,11 @@ void Renderer::build_raytracing_command_buffers()
 			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierOutput);
 
 			VkImageCopy copyRegion{};
-			copyRegion.srcSubresource	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-			copyRegion.srcOffset		= { 0, 0, 0 };
-			copyRegion.dstSubresource	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-			copyRegion.dstOffset		= { 0, 0, 0 };
-			copyRegion.extent			= { width, height, 1 };
+			copyRegion.srcSubresource					= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+			copyRegion.srcOffset						= { 0, 0, 0 };
+			copyRegion.dstSubresource					= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+			copyRegion.dstOffset						= { 0, 0, 0 };
+			copyRegion.extent							= { width, height, 1 };
 			vkCmdCopyImage(cmd, _rtImage.image._image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
 			// Return swapchain image back to present
@@ -2017,7 +2045,7 @@ void Renderer::build_raytracing_command_buffers()
 			imageMemoryBarrierOutput.dstAccessMask		= 0;
 
 			vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrierOutput);
-
+			*/
 		//});
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
@@ -2032,20 +2060,84 @@ void Renderer::create_post_renderPass()
 		vkDestroyRenderPass(*device, _postRenderPass, nullptr);
 
 	std::array<VkAttachmentDescription, 2> attachments;
-	attachments[0].format = VulkanEngine::engine->_swapchainImageFormat;
-	attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	attachments[0].format			= VulkanEngine::engine->_swapchainImageFormat;
+	attachments[0].samples			= VK_SAMPLE_COUNT_1_BIT;
+	attachments[0].flags			= 0;
+	attachments[0].loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[0].storeOp			= VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[0].stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attachments[0].stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[0].initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
+	attachments[0].finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-	attachments[1].format = VulkanEngine::engine->_depthFormat;
-	attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	attachments[1].format			= VulkanEngine::engine->_depthFormat;
+	attachments[1].samples			= VK_SAMPLE_COUNT_1_BIT;
+	attachments[1].flags			= 0;
+	attachments[1].loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[1].storeOp			= VK_ATTACHMENT_STORE_OP_STORE;
+	attachments[1].stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attachments[1].stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attachments[1].initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
+	attachments[1].finalLayout		= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+	const VkAttachmentReference colorReference{ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+	const VkAttachmentReference depthReference{ 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
 
+	VkSubpassDependency dependency{};
+	dependency.srcSubpass				= VK_SUBPASS_EXTERNAL;
+	dependency.dstSubpass				= 0;
+	dependency.srcStageMask				= VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	dependency.dstStageMask				= VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependency.srcAccessMask			= VK_ACCESS_MEMORY_READ_BIT;
+	dependency.dstAccessMask			= VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	dependency.dependencyFlags			= VK_DEPENDENCY_BY_REGION_BIT;
+
+	VkSubpassDescription subpassDesc{};
+	subpassDesc.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc.colorAttachmentCount	= 1;
+	subpassDesc.pColorAttachments		= &colorReference;
+	subpassDesc.pDepthStencilAttachment = &depthReference;
+
+	VkRenderPassCreateInfo renderPassInfo{};
+	renderPassInfo.sType				= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount		= static_cast<uint32_t>(attachments.size());
+	renderPassInfo.pAttachments			= attachments.data();
+	renderPassInfo.subpassCount			= 1;
+	renderPassInfo.pSubpasses			= &subpassDesc;
+	renderPassInfo.dependencyCount		= 1;
+	renderPassInfo.pDependencies		= &dependency;
+
+	VK_CHECK(vkCreateRenderPass(*device, &renderPassInfo, nullptr, &_postRenderPass));
+
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+		vkDestroyRenderPass(*device, _postRenderPass, nullptr);
+		});
 }
 
 void Renderer::create_post_framebuffers()
 {
+	VkExtent2D extent = { (uint32_t)VulkanEngine::engine->_window->getWidth(), (uint32_t)VulkanEngine::engine->_window->getHeight() };
+	VkFramebufferCreateInfo framebufferInfo = vkinit::framebuffer_create_info(_renderPass, extent);
+
+	// Grab how many images we have in the swapchain
+	const uint32_t swapchain_imagecount = static_cast<uint32_t>(VulkanEngine::engine->_swapchainImages.size());
+	_postFramebuffers = std::vector<VkFramebuffer>(swapchain_imagecount);
+
+	for (unsigned int i = 0; i < swapchain_imagecount; i++)
+	{
+		VkImageView attachments[2];
+		attachments[0] = VulkanEngine::engine->_swapchainImageViews[i];
+		attachments[1] = VulkanEngine::engine->_depthImageView;
+
+		framebufferInfo.attachmentCount = 2;
+		framebufferInfo.pAttachments	= attachments;
+		VK_CHECK(vkCreateFramebuffer(*device, &framebufferInfo, nullptr, &_postFramebuffers[i]));
+
+		VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+			vkDestroyFramebuffer(*device, _postFramebuffers[i], nullptr);
+			//vkDestroyImageView(*device, VulkanEngine::engine->_swapchainImageViews[i], nullptr);
+			});
+	}
 
 }
 
@@ -2056,7 +2148,7 @@ void Renderer::create_post_pipeline()
 	if (!VulkanEngine::engine->load_shader_module("data/shaders/postVertex.vert.spv", &postVertexShader)) {
 		std::cout << "Post vertex failed to load" << std::endl;
 	}
-	if(!VulkanEngine::engine->load_shader_module("data/shaders/postFragment.vert.spv", &postFragmentShader)){
+	if(!VulkanEngine::engine->load_shader_module("data/shaders/postFragment.frag.spv", &postFragmentShader)){
 		std::cout << "Post fragment failed to load" << std::endl;
 	}
 
@@ -2070,6 +2162,15 @@ void Renderer::create_post_pipeline()
 	pipelineLayoutCI.pSetLayouts	= &_postDescSetLayout;
 
 	VK_CHECK( vkCreatePipelineLayout(*device, &pipelineLayoutCI, nullptr, &_postPipelineLayout));
+
+	builder._pipelineLayout = _postPipelineLayout;
+
+	VertexInputDescription vertexDescription = Vertex::get_vertex_description();
+	builder._vertexInputInfo = vkinit::vertex_input_state_create_info();
+	builder._vertexInputInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
+	builder._vertexInputInfo.pVertexAttributeDescriptions = vertexDescription.attributes.data();
+	builder._vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
+	builder._vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
 
 	VkExtent2D extent = { VulkanEngine::engine->_window->getWidth(), VulkanEngine::engine->_window->getHeight() };
 
@@ -2096,7 +2197,91 @@ void Renderer::create_post_pipeline()
 	vkDestroyShaderModule(*device, postFragmentShader, nullptr);
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
-		vkDestroyPipelineLayout(*device, _forwardPipelineLayout, nullptr);
-		vkDestroyPipeline(*device, _forwardPipeline, nullptr);
+		vkDestroyPipelineLayout(*device, _postPipelineLayout, nullptr);
+		vkDestroyPipeline(*device, _postPipeline, nullptr);
 		});
+}
+
+void Renderer::create_post_descriptor()
+{
+	std::vector<VkDescriptorPoolSize> poolSizes = {
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+		{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 10}
+	};
+
+	std::vector<VkDescriptorSetLayoutBinding> bindings = {
+		vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+	};
+
+	VkDescriptorSetLayoutCreateInfo setInfo = {};
+	setInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	setInfo.pNext			= nullptr;
+	setInfo.bindingCount	= static_cast<uint32_t>(bindings.size());
+	setInfo.pBindings		= bindings.data();
+
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &setInfo, nullptr, &_postDescSetLayout));
+
+	for (int i = 0; i < FRAME_OVERLAP; i++)
+	{
+		VkDescriptorSetAllocateInfo allocInfo = {};
+		allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.pNext					= nullptr;
+		allocInfo.descriptorPool		= _descriptorPool;
+		allocInfo.descriptorSetCount	= 1;
+		allocInfo.pSetLayouts			= &_postDescSetLayout;
+
+		vkAllocateDescriptorSets(*device, &allocInfo, &_frames[i].postDescriptorSet);
+
+		VkDescriptorImageInfo postDescriptor = vkinit::descriptor_image_create_info(
+			_offscreenSampler, _rtImage.imageView, VK_IMAGE_LAYOUT_GENERAL);	// final image from rtx
+
+		std::vector<VkWriteDescriptorSet> writes = {
+			vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].postDescriptorSet, &postDescriptor, 0),
+		};
+
+		vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+	}
+
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+		vkDestroyDescriptorSetLayout(*device, _postDescSetLayout, nullptr);
+		});
+}
+
+void Renderer::build_post_command_buffers()
+{
+	VkCommandBufferBeginInfo cmdBufInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	std::array<VkClearValue, 2> clearValues;
+	clearValues[0].color = { 0.0f, 1.0f, 0.0f, 1.0f };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+
+	VkRenderPassBeginInfo renderPassBeginInfo = {};
+	renderPassBeginInfo.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassBeginInfo.renderPass					= _postRenderPass;
+	renderPassBeginInfo.renderArea.extent.width		= VulkanEngine::engine->_window->getWidth();
+	renderPassBeginInfo.renderArea.extent.height	= VulkanEngine::engine->_window->getHeight();
+	renderPassBeginInfo.clearValueCount				= static_cast<uint32_t>(clearValues.size());
+	renderPassBeginInfo.pClearValues				= clearValues.data();
+	renderPassBeginInfo.framebuffer					= _postFramebuffers[VulkanEngine::engine->_indexSwapchainImage];
+
+	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
+
+	vkBeginCommandBuffer(get_current_frame()._mainCommandBuffer, &cmdBufInfo);
+
+	vkCmdBeginRenderPass(get_current_frame()._mainCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBindPipeline(get_current_frame()._mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipeline);
+
+	VkDeviceSize offset = { 0 };
+
+	Mesh* quad = VulkanEngine::engine->get_mesh("quad");
+
+	vkCmdBindDescriptorSets(get_current_frame()._mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipelineLayout, 0, 1, &get_current_frame().postDescriptorSet, 0, nullptr);
+	vkCmdBindVertexBuffers(get_current_frame()._mainCommandBuffer, 0, 1, &quad->_vertexBuffer._buffer, &offset);
+	vkCmdBindIndexBuffer(get_current_frame()._mainCommandBuffer, quad->_indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(get_current_frame()._mainCommandBuffer, static_cast<uint32_t>(quad->_indices.size()), 1, 0, 0, 1);
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), get_current_frame()._mainCommandBuffer);
+
+	vkCmdEndRenderPass(get_current_frame()._mainCommandBuffer);
+	VK_CHECK(vkEndCommandBuffer(get_current_frame()._mainCommandBuffer));
 }

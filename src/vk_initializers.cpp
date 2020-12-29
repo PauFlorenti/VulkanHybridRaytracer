@@ -351,10 +351,10 @@ VkDescriptorImageInfo vkinit::descriptor_image_create_info(VkSampler sampler, Vk
 VkPipelineColorBlendStateCreateInfo vkinit::color_blend_state_create_info(uint32_t attachmentCount, VkPipelineColorBlendAttachmentState* pAttachments)
 {
 	VkPipelineColorBlendStateCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	info.pNext = nullptr;
-	info.attachmentCount = attachmentCount;
-	info.pAttachments = pAttachments;
+	info.sType				= VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	info.pNext				= nullptr;
+	info.attachmentCount	= attachmentCount;
+	info.pAttachments		= pAttachments;
 
 	return info;
 }

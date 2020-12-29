@@ -14,6 +14,7 @@ struct FrameData
 	VkCommandBuffer _mainCommandBuffer;
 
 	VkDescriptorSet deferredDescriptorSet;
+	VkDescriptorSet postDescriptorSet;
 	VkDescriptorSet deferredLightDescriptorSet;
 	AllocatedBuffer _lightBuffer;
 };
@@ -109,6 +110,8 @@ public:
 	Texture						_rtImage;
 	VkPipeline					_rtPipeline;
 	VkPipelineLayout			_rtPipelineLayout;
+	VkCommandBuffer				_rtCommandBuffer;
+	VkSemaphore					_rtSemaphore;
 
 	std::vector<AccelerationStructure>	_bottomLevelAS;
 	AccelerationStructure				_topLevelAS;
@@ -134,11 +137,12 @@ public:
 	PFN_vkDestroyAccelerationStructureKHR				vkDestroyAccelerationStructureKHR;
 
 	// POST VARIABLES ------------------------
-	VkPipeline				_postPipeline;
-	VkPipelineLayout		_postPipelineLayout;
-	VkDescriptorSet			_postDescSet;
-	VkDescriptorSetLayout	_postDescSetLayout;
-	VkRenderPass			_postRenderPass;
+	VkPipeline					_postPipeline;
+	VkPipelineLayout			_postPipelineLayout;
+	VkDescriptorSet				_postDescSet;
+	VkDescriptorSetLayout		_postDescSetLayout;
+	VkRenderPass				_postRenderPass;
+	std::vector<VkFramebuffer>	_postFramebuffers;
 
 
 	void rasterize();
@@ -219,4 +223,7 @@ private:
 
 	void create_post_pipeline();
 
+	void create_post_descriptor();
+
+	void build_post_command_buffers();
 };
