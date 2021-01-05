@@ -13,12 +13,11 @@ struct Material {
 };
 
 struct MTLMaterial {
-	glm::vec4	diffuse{ 1,1,1,1 };
-	glm::vec4	specular{ 1,1,1,1 }; // w is the Glossines factor
-	float		ior{ 1 };	// index of refraction
-	float		glossiness{ 1 };
-	alignas(8) int			illum{ 0 };
-	//int id;
+	glm::vec4		diffuse{ 1,1,1,1 };
+	glm::vec4		specular{ 1,1,1,1 }; // w is the Glossines factor
+	float			ior{ 1 };	// index of refraction
+	float			glossiness{ 1 };
+	alignas(8) int	illum{ 0 };
 };
 
 class Entity {

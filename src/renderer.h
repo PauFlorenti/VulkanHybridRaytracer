@@ -34,7 +34,6 @@ struct AccelerationStructure {
 	uint64_t					deviceAddress = 0;
 	VkBuffer					buffer;
 	VkDeviceMemory				memory;
-	//AllocatedBuffer			buffer;
 };
 
 struct BlasInput {
@@ -146,9 +145,16 @@ public:
 	std::vector<VkFramebuffer>	_postFramebuffers;
 
 	// HYBRID VARIABLES -----------------------
-	VkPipelineLayout		_hybridPipelineLayout;
-	VkDescriptorSet			_hybridPipelineDesc;
-	VkDescriptorSetLayout	_hybridPipelineDescLayout;
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> hybridShaderGroups{};
+	VkPipeline					_hybridPipeline;
+	VkPipelineLayout			_hybridPipelineLayout;
+	VkDescriptorSet				_hybridDescSet;
+	VkDescriptorSetLayout		_hybridDescSetLayout;
+	VkCommandBuffer				_hybridCommandBuffer;
+
+	AllocatedBuffer				raygenSBT;
+	AllocatedBuffer				missSBT;
+	AllocatedBuffer				hitSBT;
 
 	void rasterize();
 
@@ -182,8 +188,6 @@ private:
 	void init_sync_structures();
 
 	void init_descriptors();
-
-	void setup_descriptors();
 
 	void init_deferred_descriptors();
 
@@ -233,4 +237,9 @@ private:
 	void create_post_descriptor();
 
 	void build_post_command_buffers();
+
+	// HYBRID
+	void create_hybrid_descriptors();
+
+	void build_hybrid_command_buffers();
 };

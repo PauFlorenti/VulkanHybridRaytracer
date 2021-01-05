@@ -24,7 +24,8 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, Al
 	VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
 
 	// Allocate temporary buffer for holding texture data to upload
-	AllocatedBuffer stagingBuffer = engine.create_buffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	AllocatedBuffer stagingBuffer;
+	engine.create_buffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY, stagingBuffer);
 
 	void* data;
 	vmaMapMemory(engine._allocator, stagingBuffer._allocation, &data);
@@ -95,7 +96,7 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, Al
 		vmaDestroyImage(engine._allocator, newImage._image, newImage._allocation);
 	});
 
-	vmaDestroyBuffer(engine._allocator, stagingBuffer._buffer, stagingBuffer._allocation);
+	//vmaDestroyBuffer(engine._allocator, stagingBuffer._buffer, stagingBuffer._allocation);
 
 	std::cout << "Texture loaded successfully " << filename << std::endl;
 

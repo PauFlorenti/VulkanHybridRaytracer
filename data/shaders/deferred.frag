@@ -9,13 +9,14 @@ layout (location = 0) in vec2 inUV;
 layout (set = 0, binding = 0) uniform sampler2D positionTexture;
 layout (set = 0, binding = 1) uniform sampler2D normalTexture;
 layout (set = 0, binding = 2) uniform sampler2D albedoTexture;
+//layout (set = 0, binding = 3) uniform sampler2D materialTexture;
 
 struct Light{
 	vec4 pos;	// w used for max distance
 	vec4 color;	// w used for intensity
 };
 
-layout (std140, set = 0, binding = 3) uniform LightBuffer
+layout (std140, set = 0, binding = 4) uniform LightBuffer
 {
 	Light lights[3];
 }lightBuffer;
@@ -27,6 +28,7 @@ void main()
 	vec3 position 	= texture(positionTexture, inUV).xyz;
 	vec3 normal 	= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
+	//vec4 material 	= texture(materialTexture, inUV);
 
 	vec3 color = vec3(0), light_color = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;

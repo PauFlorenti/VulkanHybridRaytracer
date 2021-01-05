@@ -21,7 +21,7 @@ VulkanEngine::VulkanEngine()
 
 void VulkanEngine::init()
 {
-	_mode =	RAYTRACING;
+	_mode =	HYBRID;
 
 	_window->init("Vulkan Pinut", 1700, 900);
 
@@ -60,6 +60,8 @@ void VulkanEngine::cleanup()
 
 		for (auto& frames : renderer->_frames)
 			vkWaitForFences(_device, 1, &frames._renderFence, VK_TRUE, 1000000000);
+
+		vkDeviceWaitIdle(_device);
 
 		_mainDeletionQueue.flush();
 
@@ -115,7 +117,6 @@ void VulkanEngine::run()
 
 void VulkanEngine::update(const float dt)
 {
-
 	_window->input_update();
 
 	glm::mat4 view			= _camera->getView();
@@ -128,87 +129,73 @@ void VulkanEngine::update(const float dt)
 	cameraData.projection		= projection;
 	cameraData.viewprojection	= projection * view;
 
-	if (_mode != RAYTRACING) {
-		// Copy camera info to the buffer
-		void* data;
-		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-		memcpy(data, &cameraData.viewprojection, sizeof(glm::mat4));
-		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+	// Copy camera info to the buffer
+	void* data;
+	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+	memcpy(data, &cameraData.viewprojection, sizeof(glm::mat4));
+	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
 
-		// Copy scene data to the buffer
-		float framed = (_frameNumber / 120.f);
-		_sceneParameters.ambientColor = { sin(framed), 0, cos(framed), 1 };
+	// Copy scene data to the buffer
+	float framed = (_frameNumber / 120.f);
+	_sceneParameters.ambientColor = { sin(framed), 0, cos(framed), 1 };
 
-		char* sceneData;
-		vmaMapMemory(_allocator, _sceneBuffer._allocation, (void**)&sceneData);
+	char* sceneData;
+	vmaMapMemory(_allocator, _sceneBuffer._allocation, (void**)&sceneData);
 
-		sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData));
+	sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData));
 
-		memcpy(sceneData, &_sceneParameters, sizeof(GPUSceneData));
-		vmaUnmapMemory(_allocator, _sceneBuffer._allocation);
+	memcpy(sceneData, &_sceneParameters, sizeof(GPUSceneData));
+	vmaUnmapMemory(_allocator, _sceneBuffer._allocation);
 
-		// Copy matrices to the buffer
-		void* objData;
-		vmaMapMemory(_allocator, _objectBuffer._allocation, &objData);
+	// Copy matrices to the buffer
+	void* objData;
+	vmaMapMemory(_allocator, _objectBuffer._allocation, &objData);
 
-		GPUObjectData* objectSSBO = (GPUObjectData*)objData;
+	GPUObjectData* objectSSBO = (GPUObjectData*)objData;
 
-		for (int i = 0; i < _renderables.size(); i++)
-		{
-			Object *object = _renderables[i];
-			objectSSBO[i].modelMatrix = object->m_matrix;
-		}
-
-		vmaUnmapMemory(_allocator, _objectBuffer._allocation);
-		
-		void* lightData;
-		vmaMapMemory(_allocator, renderer->get_current_frame()._lightBuffer._allocation, &lightData);
-		uboLight* lightUBO = (uboLight*)lightData;
-		for (int i = 0; i < _lights.size(); i++)
-		{
-			_lights[i]->update();
-			Light *l = _lights[i];
-			lightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
-		}
-		vmaUnmapMemory(_allocator, renderer->get_current_frame()._lightBuffer._allocation);
-		
-	}
-	else {
-
-		RTCameraData camera;
-		camera.invProj = glm::inverse(projection);
-		camera.invView = glm::inverse(view);
-
-		void* data;
-		vmaMapMemory(_allocator, rtCameraBuffer._allocation, &data);
-		memcpy(data, &camera, sizeof(RTCameraData));
-		vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
-
-		void* lightData;
-		vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &lightData);
-		uboLight* lightUBO = (uboLight*)lightData;
-		for (int i = 0; i < _lights.size(); i++)
-		{
-			_lights[i]->update();
-			Light* l = _lights[i];
-			lightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
-		}
-		vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
-
-		std::vector<MTLMaterial> materials;
-		for (auto it : _MtlMaterials)
-		{
-			materials.push_back(it.second);
-		}
-
-		void* matData;
-		vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
-		memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
-		vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
+	for (int i = 0; i < _renderables.size(); i++)
+	{
+		Object *object = _renderables[i];
+		objectSSBO[i].modelMatrix = object->m_matrix;
+		//objectSSBO[i].materialIdx = object->materialIdx;
 	}
 
+	vmaUnmapMemory(_allocator, _objectBuffer._allocation);
+	
+	// copy ray tracing camera, it need the inverse
+	RTCameraData rtCamera;
+	rtCamera.invProj = glm::inverse(projection);
+	rtCamera.invView = glm::inverse(view);
+
+	void* rtCameraData;
+	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
+	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
+	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
+
+	// TODO unify with the deferred update buffer
+	void* rtLightData;
+	vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &rtLightData);
+	uboLight* rtLightUBO = (uboLight*)rtLightData;
+	for (int i = 0; i < _lights.size(); i++)
+	{
+		_lights[i]->update();
+		Light* l = _lights[i];
+		rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+		rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+	}
+	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
+	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+	
+	std::vector<MTLMaterial> materials;
+	for (auto it : _MtlMaterials)
+	{
+		materials.push_back(it.second);
+	}
+
+	void* matData;
+	vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
+	memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
+	vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
 }
 
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
@@ -272,6 +259,17 @@ int VulkanEngine::get_materialId(const std::string& name)
 	return i;
 }
 
+MTLMaterial VulkanEngine::get_MtlMaterial(const int id)
+{
+	int counter = 0;
+	for (const auto& m : _MtlMaterials) {
+		if (counter == id)
+			return m.second;
+		counter++;
+	}
+
+}
+
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
 {
 	VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_uploadContext._commandPool, 1);
@@ -296,21 +294,21 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 	vkResetCommandPool(_device, _uploadContext._commandPool, 0);
 }
 
-AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+void VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer)
 {
 	VkBufferCreateInfo bufferInfo = vkinit::buffer_create_info(allocSize, usage);
 	
 	VmaAllocationCreateInfo vmaallocinfo = {};
 	vmaallocinfo.usage = memoryUsage;
 
-	AllocatedBuffer newBuffer;
-
 	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaallocinfo,
-		&newBuffer._buffer, 
-		&newBuffer._allocation, 
+		&buffer._buffer, 
+		&buffer._allocation, 
 		nullptr));
 
-	return newBuffer;
+	_mainDeletionQueue.push_function([=]() {
+		vmaDestroyBuffer(_allocator, buffer._buffer, buffer._allocation);
+		});
 
 }
 
@@ -543,7 +541,7 @@ void VulkanEngine::init_scene()
 	_camera = new Camera(glm::vec3(0, 5, 2.5));
 
 	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 30, 0));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 10, 5));
 	light->intensity = 100.0f;
 	Light* light2 = new Light();
 	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
@@ -554,35 +552,52 @@ void VulkanEngine::init_scene()
 	light3->intensity = 250.0f;
 	light3->color = glm::vec3(0, 0, 1);
 
+	// Diffuse Material
 	MTLMaterial simple;
-	simple.illum = 0;
-	simple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
-	simple.glossiness = 1.0f;
+	simple.illum		= 0;
+	simple.diffuse		= { 1, 1, 1, 1 };
+	simple.ior			= 0.0f;
+	simple.glossiness	= 0.9f;
 
+	MTLMaterial redSimple = simple;
+	redSimple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
+	redSimple.glossiness = 0.1f;
+
+	// Metallic material
 	MTLMaterial gold;
 	gold.illum			= 3;
 	gold.diffuse		= { 0.982f, 0.857f, 0.4f, 1.0f };
+	gold.ior			= 1.0f;
 	gold.glossiness		= 5.0f;
 
+	MTLMaterial metal;
+	metal.illum			= 3;
+	metal.diffuse		= { 1, 1, 1, 1 };
+	metal.ior			= 1.0f;
+	metal.glossiness	= 5.0f;
+
 	MTLMaterial red_gold;
-	gold.illum			= 3;
-	gold.diffuse		= { 0.982f, 0.3f, 0.4f, 1.0f };
-	gold.glossiness		= 2.0f;
+	red_gold.illum			= 3;
+	red_gold.diffuse		= { 0.982f, 0.3f, 0.4f, 1.0f };
+	red_gold.ior			= 1.0f;
+	red_gold.glossiness		= 2.0f;
 
 	MTLMaterial glass;
 	glass.illum			= 4;
 	glass.diffuse		= {0, 0, 0, 1};
-	glass.glossiness	= 1.0f;
 	glass.ior			= 1.52f;
+	glass.glossiness	= 1.0f;
 	
-	_MtlMaterials["gold"]		= gold;
-	_MtlMaterials["redgold"]	= red_gold;
-	_MtlMaterials["glass"]		= glass;
 	_MtlMaterials["simple"]		= simple;
+	_MtlMaterials["gold"]		= gold;
+	//_MtlMaterials["redSimple"]	= redSimple;
+	//_MtlMaterials["metal"]		= metal;
+	//_MtlMaterials["redgold"]	= red_gold;
+	//_MtlMaterials["glass"]	= glass;
 
 	_lights.push_back(light);
-	_lights.push_back(light2);
-	_lights.push_back(light3);
+	//_lights.push_back(light2);
+	//_lights.push_back(light3);
 	
 	Object* monkey = new Object();
 	monkey->mesh			= get_mesh("monkey");
@@ -590,7 +605,7 @@ void VulkanEngine::init_scene()
 	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -3));
 	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
 	monkey->m_matrix		= translation * scale;
-	monkey->materialIdx		= get_materialId("glass");
+	monkey->materialIdx		= get_materialId("simple");
 	
 	Object* empire = new Object();
 	empire->mesh			= get_mesh("empire");
@@ -604,18 +619,21 @@ void VulkanEngine::init_scene()
 		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
 		glm::scale(glm::mat4(1), glm::vec3(100));
 	quad->materialIdx = get_materialId("simple");
+	quad->setColor(glm::vec3(0, 0, 1));
 
 	Object* tri = new Object();
 	tri->mesh		= get_mesh("triangle");
 	tri->material	= get_material("offscreen");
 	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5));
 	tri->setColor(glm::vec3(0, 0, 1));
+	tri->materialIdx = get_materialId("simple");
 
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
 	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -5));
 	cube->setColor(glm::vec3(1, 0, 0));
+	cube->materialIdx = get_materialId("simple");
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
@@ -857,12 +875,11 @@ void VulkanEngine::create_attachment(VkFormat format, VkImageUsageFlagBits usage
 	assert(aspectMask > 0);
 
 	VkExtent3D extent = { _window->getWidth(), _window->getHeight(), 1 };
-	//VkExtent3D extent = { _windowExtent.width, _windowExtent.height, 1 };
 	VkImageCreateInfo imageInfo = vkinit::image_create_info(format, usage | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
 
 	VmaAllocationCreateInfo memAlloc = {};
-	memAlloc.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	memAlloc.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	memAlloc.usage			= VMA_MEMORY_USAGE_GPU_ONLY;
+	memAlloc.requiredFlags	= VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	vmaCreateImage(_allocator, &imageInfo, &memAlloc, 
 		&texture->image._image, &texture->image._allocation, nullptr);
@@ -969,7 +986,6 @@ uint32_t VulkanEngine::getBufferDeviceAddress(VkBuffer buffer)
 void VulkanEngine::get_enabled_features()
 {
 	enabledIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
-	//enabledIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 	enabledIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
 	enabledIndexingFeatures.pNext = nullptr;
 
