@@ -61,7 +61,7 @@ void VulkanEngine::cleanup()
 		for (auto& frames : renderer->_frames)
 			vkWaitForFences(_device, 1, &frames._renderFence, VK_TRUE, 1000000000);
 
-		vkDeviceWaitIdle(_device);
+		//vkDeviceWaitIdle(_device);
 
 		_mainDeletionQueue.flush();
 
@@ -72,6 +72,14 @@ void VulkanEngine::cleanup()
 
 		_window->clean();
 	}
+}
+
+glm::vec3 uniformSamplerCone(float r1, float r2, float cosThetaMax)
+{
+	float cosTheta = (1.0 - r1) + r1 * cosThetaMax;
+	float sinTheta = std::sqrt(1.0 - cosTheta * cosTheta);
+	float phi = r2 * 2 * 3.1415;
+	return glm::vec3(std::cos(phi) * sinTheta, std::sin(phi) * sinTheta, cosTheta);
 }
 
 void VulkanEngine::run()
@@ -91,6 +99,17 @@ void VulkanEngine::run()
 		}
 
 		update(dt);
+
+		/*
+		std::srand(lastFrame);
+
+		double r1 = (double)std::rand() / RAND_MAX;
+		double r2 = (double)std::rand() / RAND_MAX;
+
+		glm::vec3 out = uniformSamplerCone(r1, r2, std::cos(10));
+		std::cout << "R1: " << r1 << " R2: " << r2 << std::endl;
+		std::cout << out.x << " " << out.y << " " << out.z << std::endl;
+		*/
 
 		renderer->render_gui();
 		switch (_mode)
@@ -157,7 +176,6 @@ void VulkanEngine::update(const float dt)
 	{
 		Object *object = _renderables[i];
 		objectSSBO[i].modelMatrix = object->m_matrix;
-		//objectSSBO[i].materialIdx = object->materialIdx;
 	}
 
 	vmaUnmapMemory(_allocator, _objectBuffer._allocation);
@@ -180,8 +198,14 @@ void VulkanEngine::update(const float dt)
 	{
 		_lights[i]->update();
 		Light* l = _lights[i];
-		rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-		rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+		if (l->type == DIRECTIONAL) {
+			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, -1);
+		}
+		else {
+			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+		}
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
@@ -538,10 +562,10 @@ void VulkanEngine::init_upload_commands()
 
 void VulkanEngine::init_scene()
 {
-	_camera = new Camera(glm::vec3(0, 5, 2.5));
+	_camera = new Camera(glm::vec3(0, 5, -10));
 
 	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 10, 5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, -10));
 	light->intensity = 100.0f;
 	Light* light2 = new Light();
 	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
@@ -552,12 +576,20 @@ void VulkanEngine::init_scene()
 	light3->intensity = 250.0f;
 	light3->color = glm::vec3(0, 0, 1);
 
+	Light* directional = new Light(DIRECTIONAL);
+	directional->m_matrix = glm::translate(glm::mat4(1), glm::vec3(20, 100, 20));
+
+	_lights.push_back(light);
+	_lights.push_back(directional);
+	//_lights.push_back(light2);
+	//_lights.push_back(light3);
+
 	// Diffuse Material
 	MTLMaterial simple;
 	simple.illum		= 0;
 	simple.diffuse		= { 1, 1, 1, 1 };
 	simple.ior			= 0.0f;
-	simple.glossiness	= 0.9f;
+	simple.glossiness	= 0.0f;
 
 	MTLMaterial redSimple = simple;
 	redSimple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
@@ -576,12 +608,6 @@ void VulkanEngine::init_scene()
 	metal.ior			= 1.0f;
 	metal.glossiness	= 5.0f;
 
-	MTLMaterial red_gold;
-	red_gold.illum			= 3;
-	red_gold.diffuse		= { 0.982f, 0.3f, 0.4f, 1.0f };
-	red_gold.ior			= 1.0f;
-	red_gold.glossiness		= 2.0f;
-
 	MTLMaterial glass;
 	glass.illum			= 4;
 	glass.diffuse		= {0, 0, 0, 1};
@@ -590,19 +616,14 @@ void VulkanEngine::init_scene()
 	
 	_MtlMaterials["simple"]		= simple;
 	_MtlMaterials["gold"]		= gold;
+	_MtlMaterials["metal"]		= metal;
+	_MtlMaterials["glass"]		= glass;
 	//_MtlMaterials["redSimple"]	= redSimple;
-	//_MtlMaterials["metal"]		= metal;
-	//_MtlMaterials["redgold"]	= red_gold;
-	//_MtlMaterials["glass"]	= glass;
-
-	_lights.push_back(light);
-	//_lights.push_back(light2);
-	//_lights.push_back(light3);
 	
 	Object* monkey = new Object();
 	monkey->mesh			= get_mesh("monkey");
 	monkey->material		= get_material("offscreen");
-	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -3));
+	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -8));
 	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
 	monkey->m_matrix		= translation * scale;
 	monkey->materialIdx		= get_materialId("simple");
@@ -617,37 +638,48 @@ void VulkanEngine::init_scene()
 	quad->material	= get_material("offscreen");
 	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
 		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(100));
+		glm::scale(glm::mat4(1), glm::vec3(50));
 	quad->materialIdx = get_materialId("simple");
-	quad->setColor(glm::vec3(0, 0, 1));
-
-	Object* tri = new Object();
-	tri->mesh		= get_mesh("triangle");
-	tri->material	= get_material("offscreen");
-	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5));
-	tri->setColor(glm::vec3(0, 0, 1));
-	tri->materialIdx = get_materialId("simple");
+	quad->id = get_textureId("asphalt");
 
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
 	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -5));
-	cube->setColor(glm::vec3(1, 0, 0));
 	cube->materialIdx = get_materialId("simple");
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
 	sphere->material	= get_material("offscreen");
 	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
-	sphere->setColor(glm::vec3(0, 1, 0));
 	sphere->materialIdx = get_materialId("gold");
+
+	Object* sphere2 = new Object();
+	sphere2->mesh = get_mesh("sphere");
+	sphere2->material = get_material("offscreen");
+	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
+	sphere2->materialIdx = get_materialId("simple");
+
+	Object* mirror = new Object();
+	mirror->mesh = get_mesh("cube");
+	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -20)) *
+		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
+	mirror->materialIdx = get_materialId("metal");
+
+	Object* mirror2 = new Object();
+	mirror2->mesh = get_mesh("cube");
+	mirror2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
+		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
+	mirror2->materialIdx = get_materialId("metal");
 
 	//_renderables.push_back(empire);
 	_renderables.push_back(sphere);
+	_renderables.push_back(sphere2);
 	_renderables.push_back(monkey);
-	_renderables.push_back(tri);
 	_renderables.push_back(cube);
 	_renderables.push_back(quad);
+	_renderables.push_back(mirror);
+	_renderables.push_back(mirror2);
 }
 
 void VulkanEngine::init_imgui()
@@ -719,10 +751,11 @@ void VulkanEngine::load_meshes()
 	_quad = Mesh::get_quad();
 	_quad->upload();
 	_triangleMesh.get_triangle();
+	_cube.get_cube();
 
 	_monkeyMesh.load_from_obj("data/meshes/monkey_smooth.obj");
 	//_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
-	_cube.load_from_obj("data/meshes/default_cube.obj");
+	//_cube.load_from_obj("data/meshes/default_cube.obj");
 	_sphere.load_from_obj("data/meshes/sphere.obj");
 
 	_meshes["triangle"] = _triangleMesh;
@@ -741,22 +774,28 @@ void VulkanEngine::load_images()
 	vkutil::load_image_from_file(*this, "data/textures/blackTexture.png", black.image);
 	//Texture lostEmpire;
 	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
+	Texture asphalt;
+	vkutil::load_image_from_file(*this, "data/textures/asphalt.png", asphalt.image);
 
 	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo asphaltImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, asphalt.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
 	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
 	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
+	vkCreateImageView(_device, &asphaltImageInfo, nullptr, &asphalt.imageView);
 
 	_textures["white"]  = white;
 	_textures["black"]	= black;
 	//_textures["empire"] = lostEmpire;
+	_textures["asphalt"]	= asphalt;
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, white.imageView, nullptr);
 		vkDestroyImageView(_device, black.imageView, nullptr);
 		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
+		vkDestroyImageView(_device, asphalt.imageView, nullptr);
 	});
 }
 

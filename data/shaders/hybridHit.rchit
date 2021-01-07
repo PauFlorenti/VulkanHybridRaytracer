@@ -12,7 +12,7 @@ layout (location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
 layout (set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout (set = 0, std140, binding = 7) uniform Lights { Light lights[1]; } lightsBuffer;
+layout (set = 0, std140, binding = 7) uniform Lights { Light lights[3]; } lightsBuffer;
 layout (set = 0, binding = 8, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout (set = 0, binding = 9) buffer Indices { int i[]; } indices[];
 layout (set = 0, binding = 10, scalar) buffer Matrices { mat4 m; } matrices[];
@@ -39,35 +39,30 @@ void main()
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-	vec3 color = vec3(0), light_color = vec3(0), specular = vec3(0);
+	vec3 color = vec3(0), specular = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
 
   int matIdx = matIndices[gl_InstanceCustomIndexEXT].matIdx;
 
-  //Material mat = materials.mat[matIdx];
   Material mat = materials.mat[matIdx];
 
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
     // Init basic light information
-    Light light = lightsBuffer.lights[i];
+		Light light 				      = lightsBuffer.lights[i];
+		bool isDirectional        = light.pos.w < 0;
+		vec3 L 						        = !isDirectional ? (light.pos.xyz - worldPos) : light.pos.xyz;
+		float NdotL 				      = clamp(dot(N, normalize(L)), 0.0, 1.0);
+		float light_max_distance 	= light.pos.w;
+		float light_distance 		  = length(L);
+		L = normalize(L);
+		float light_intensity 		= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
 
-		vec3 L      = normalize(light.pos.xyz - worldPos);
-		float NdotL = clamp(dot(N, L), 0.0, 1.0);
-		float light_max_distance = light.pos.w;
-		float light_distance = length(light.pos.xyz - worldPos);
-		light_intensity = light.color.w / (light_distance * light_distance);
-    light_color = light.color.xyz;
-    vec3 dif = mat.diffuse.xyz;
-    // Calculate color
-    //prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
-
+    // init as shadowed
+    shadowed = true;
     // Check if light has impact
-    if( NdotL > 0 )
+    if(NdotL > 0)
     {
-      // init as shadowed
-      shadowed = true;
-
       // Shadow ray cast
       float tmin = 0.001, tmax = light_distance + 1;
       traceRayEXT(topLevelAS, 
@@ -83,19 +78,34 @@ void main()
 		attenuation = light_max_distance - light_distance;
 		attenuation /= light_max_distance;
 		attenuation = max(attenuation, 0.0);
-		attenuation = attenuation * attenuation;
+		attenuation = isDirectional ? 0.3 : attenuation * attenuation;
 
-    if(shadowed){
+    if(shadowed)
+    {
       attenuation = 0;
     }
-    else{
-      //specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
+    else
+    {
+      specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
     }
-    color += light_intensity * attenuation * light_color * (dif + specular);
+
+    vec3 difColor;
+    difColor = computeDiffuse(mat, N, L);
+    if(mat.illum == 1)
+    {
+      difColor = computeDiffuse(mat, N, L);
+    }
+    else if(mat.illum == 3)
+    {
+      prd.origin        = worldPos;
+      vec3 reflected    = reflect(gl_WorldRayDirectionEXT, N);
+      bool isScattered  = dot(reflected, N) > 0;
+      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1); //computeDiffuse(mat, N, L);
+      prd.direction     = vec4(reflected, isScattered ? 1 : 0);
+    }
+    color += light_intensity * light.color.xyz * (difColor) /*attenuation*/;
   }
 
   // Return final color in the payload
-  prd.colorAndDist  = vec4(color, gl_HitTEXT);
-  prd.origin        = worldPos;
-  prd.direction     = vec4(reflect(N, gl_WorldRayDirectionEXT), 1);
+  prd.colorAndDist = vec4(color, 1);
 }

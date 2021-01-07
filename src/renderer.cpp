@@ -26,15 +26,15 @@ Renderer::Renderer()
 	build_previous_command_buffer();
 
 	// Ray tracing
-	vkCreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(vkGetDeviceProcAddr(*device, "vkCreateAccelerationStructureKHR"));
-	vkBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(*device, "vkBuildAccelerationStructuresKHR"));
-	vkGetAccelerationStructureBuildSizesKHR = reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(vkGetDeviceProcAddr(*device, "vkGetAccelerationStructureBuildSizesKHR"));
-	vkGetAccelerationStructureDeviceAddressKHR = reinterpret_cast<PFN_vkGetAccelerationStructureDeviceAddressKHR>(vkGetDeviceProcAddr(*device, "vkGetAccelerationStructureDeviceAddressKHR"));
-	vkCmdBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(*device, "vkCmdBuildAccelerationStructuresKHR"));
-	vkGetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(*device, "vkGetRayTracingShaderGroupHandlesKHR"));
-	vkCreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(*device, "vkCreateRayTracingPipelinesKHR"));
-	vkCmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(*device, "vkCmdTraceRaysKHR"));
-	vkDestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(*device, "vkDestroyAccelerationStructureKHR"));
+	vkCreateAccelerationStructureKHR			= reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(vkGetDeviceProcAddr(*device, "vkCreateAccelerationStructureKHR"));
+	vkBuildAccelerationStructuresKHR			= reinterpret_cast<PFN_vkBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(*device, "vkBuildAccelerationStructuresKHR"));
+	vkGetAccelerationStructureBuildSizesKHR		= reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(vkGetDeviceProcAddr(*device, "vkGetAccelerationStructureBuildSizesKHR"));
+	vkGetAccelerationStructureDeviceAddressKHR	= reinterpret_cast<PFN_vkGetAccelerationStructureDeviceAddressKHR>(vkGetDeviceProcAddr(*device, "vkGetAccelerationStructureDeviceAddressKHR"));
+	vkCmdBuildAccelerationStructuresKHR			= reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(vkGetDeviceProcAddr(*device, "vkCmdBuildAccelerationStructuresKHR"));
+	vkGetRayTracingShaderGroupHandlesKHR		= reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(vkGetDeviceProcAddr(*device, "vkGetRayTracingShaderGroupHandlesKHR"));
+	vkCreateRayTracingPipelinesKHR				= reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(vkGetDeviceProcAddr(*device, "vkCreateRayTracingPipelinesKHR"));
+	vkCmdTraceRaysKHR							= reinterpret_cast<PFN_vkCmdTraceRaysKHR>(vkGetDeviceProcAddr(*device, "vkCmdTraceRaysKHR"));
+	vkDestroyAccelerationStructureKHR			= reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(vkGetDeviceProcAddr(*device, "vkDestroyAccelerationStructureKHR"));
 
 	create_storage_image();
 
@@ -215,7 +215,7 @@ void Renderer::init_forward_render_pass()
 	dependency.dstAccessMask	= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 	//array of 2 attachments, one for the color, and other for depth
-	VkAttachmentDescription attachments[2] = { color_attachment,depth_attachment };
+	VkAttachmentDescription attachments[2] = { color_attachment, depth_attachment };
 
 	VkRenderPassCreateInfo render_pass_info = {};
 	render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -396,24 +396,24 @@ void Renderer::render()
 
 	// First pass
 	VkSubmitInfo submit = {};
-	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit.pNext				= nullptr;
-	submit.pWaitDstStageMask	= waitStages;
-	submit.waitSemaphoreCount	= 1;
-	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore;
-	submit.signalSemaphoreCount = 1;
-	submit.pSignalSemaphores	= &_offscreenSemaphore;
-	submit.commandBufferCount	= 1;
-	submit.pCommandBuffers		= &_offscreenComandBuffer;
+	submit.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.pNext					= nullptr;
+	submit.pWaitDstStageMask		= waitStages;
+	submit.waitSemaphoreCount		= 1;
+	submit.pWaitSemaphores			= &get_current_frame()._presentSemaphore;
+	submit.signalSemaphoreCount		= 1;
+	submit.pSignalSemaphores		= &_offscreenSemaphore;
+	submit.commandBufferCount		= 1;
+	submit.pCommandBuffers			= &_offscreenComandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	build_deferred_command_buffer();
 
 	// Second pass
-	submit.pWaitSemaphores		= &_offscreenSemaphore;
-	submit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
-	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
+	submit.pWaitSemaphores			= &_offscreenSemaphore;
+	submit.pSignalSemaphores		= &get_current_frame()._renderSemaphore;
+	submit.pCommandBuffers			= &get_current_frame()._mainCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
 
 	VkPresentInfoKHR presentInfo = {};
