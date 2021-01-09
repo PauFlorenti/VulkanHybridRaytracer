@@ -62,7 +62,7 @@ void main()
     light_color               = light.color.xyz;
 
     // Calculate color
-    prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed, prd.depth);
+    prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
     float att = 1.0;
 
     // Check if light has impact
@@ -72,13 +72,9 @@ void main()
       shadowed = true;
       mat3 dirMatrix = makeDirectionMatrix(L);
 
-      //for(int x = 0; x < 10; x++)
-      //{
         float r1 = rnd(prd.seed);
         float r2 = rnd(prd.seed);
         vec3 dir = normalize(uniformSampleCone(r1, r2, cos(10.0)));
-        //dir = worldPos + dir;
-        //dir = normalize(dir * dirMatrix);
 
         // Shadow ray cast
         float tmin = 0.001, tmax = light_distance + 1;
@@ -89,11 +85,6 @@ void main()
           worldPos, tmin, 
           L, tmax, 
           1);
-        //if(!shadowed)
-        //  att++;
-      //}
-      //if(att != 0.0)
-      //  att = att / 10;
     }
 
     // Calculate attenuation factor
@@ -106,7 +97,7 @@ void main()
       attenuation = 0;
     }
     else{
-      specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
+      //specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
     }
     color += light_intensity * attenuation * light_color * (prd.colorAndDist.xyz + specular);
   }

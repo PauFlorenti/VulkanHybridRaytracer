@@ -45,13 +45,13 @@ vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
     return vec3(1) * specular;
 };
 
-hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint depth)
+hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
 {
     const vec3 diffuse = computeDiffuse(m, normal, L);
-    return hitPayload( vec4(diffuse, t), vec4(0), normal, 1, depth);
+    return hitPayload( vec4(diffuse, t), vec4(0), normal, 1);
 };
 
-hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint depth)
+hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
 {
     const vec3 reflected    = reflect(direction, normal);
     const bool isScattered  = dot( reflected, normal ) > 0;
@@ -59,10 +59,10 @@ hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, 
     const vec3 diffuse      = computeDiffuse( m, normal, L);
     const vec4 colorAndDist = isScattered ? vec4(diffuse, t) : vec4(1, 1, 1, -1);
 
-    return hitPayload( colorAndDist, vec4( reflected, isScattered ? 1 : 0), normal, 1, depth);
+    return hitPayload( colorAndDist, vec4( reflected, isScattered ? 1 : 0), normal, 1);
 };
 
-hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed, uint depth)
+hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
 {
     const float NdotD       = dot( normal, direction );
     const vec3 refrNormal   = NdotD > 0.0 ? -normal : normal;
@@ -72,27 +72,27 @@ hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal,
     vec3 refracted          = refract( direction, refrNormal, refrEta );
     const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, m.ior ) : 1;
 
-    if( refracted == vec3( 0.0 ))
-	    refracted = reflect( direction, normal );
-	return hitPayload( vec4( 1, 1, 1, t ) , vec4( refracted, 1 ), normal, seed, depth );
+    //if( refracted == vec3( 0.0 ))
+	//    refracted = reflect( direction, normal );
+	//return hitPayload( vec4( 1, 1, 1, t ) , vec4( refracted, 1 ), normal, seed);
 
-    //return rnd(seed) < reflectProb 
-    //    ? hitPayload(vec4(1, 1, 1, t), vec4( reflect(direction, normal), 1), normal, 1, depth)
-    //    : hitPayload(vec4(1, 1, 1, t), vec4( refracted, 1), normal, 1, depth);
+    return rnd(seed) < reflectProb 
+        ? hitPayload(vec4(1, 1, 1, t), vec4( reflect(direction, normal), 1), normal, 1)
+        : hitPayload(vec4(1, 1, 1, t), vec4( refracted, 1), normal, 1);
 };
 
-hitPayload Scatter(const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed, uint depth)
+hitPayload Scatter(const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
 {
     const vec3 normDirection = normalize(direction);
 
     switch(m.illum)
     {
         case 0:
-            return Diffuse( m, normDirection, normal, L, t, depth);
+            return Diffuse( m, normDirection, normal, L, t);
         case 3:
-            return Metallic(m, normDirection, normal, L, t, depth);
+            return Metallic(m, normDirection, normal, L, t);
         case 4:
-            return Dieletric( m, normDirection, normal, L, t, seed, depth);
+            return Dieletric( m, normDirection, normal, L, t, seed);
     }
 };
 

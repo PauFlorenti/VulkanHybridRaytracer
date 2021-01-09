@@ -55,7 +55,6 @@ void main()
 		float NdotL 				      = clamp(dot(N, normalize(L)), 0.0, 1.0);
 		float light_max_distance 	= light.pos.w;
 		float light_distance 		  = length(L);
-		L = normalize(L);
 		float light_intensity 		= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
 
     // init as shadowed
@@ -64,12 +63,12 @@ void main()
     if(NdotL > 0)
     {
       // Shadow ray cast
-      float tmin = 0.001, tmax = light_distance + 1;
+      float tmin = 0.001, tmax = light_distance;
       traceRayEXT(topLevelAS, 
         gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
         0xFF, 
         1, 0, 1, 
-        worldPos, tmin, 
+        worldPos + N * 1e-4, tmin, 
         L, tmax, 
         1);
     }
@@ -80,9 +79,9 @@ void main()
 		attenuation = max(attenuation, 0.0);
 		attenuation = isDirectional ? 0.3 : attenuation * attenuation;
 
-    if(shadowed)
+    if(shadowed || light_intensity == 0)
     {
-      attenuation = 0;
+      attenuation = 0.0;
     }
     else
     {
@@ -90,22 +89,36 @@ void main()
     }
 
     vec3 difColor;
-    difColor = computeDiffuse(mat, N, L);
-    if(mat.illum == 1)
+
+    if(mat.illum == 0)  // DIFUS
     {
       difColor = computeDiffuse(mat, N, L);
+      color += light_intensity * light.color.xyz * (difColor) * attenuation;
+      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
-    else if(mat.illum == 3)
+    else if(mat.illum == 3) // MIRALL
     {
-      prd.origin        = worldPos;
       vec3 reflected    = reflect(gl_WorldRayDirectionEXT, N);
       bool isScattered  = dot(reflected, N) > 0;
-      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1); //computeDiffuse(mat, N, L);
-      prd.direction     = vec4(reflected, isScattered ? 1 : 0);
-    }
-    color += light_intensity * light.color.xyz * (difColor) /*attenuation*/;
-  }
+      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
 
-  // Return final color in the payload
-  prd.colorAndDist = vec4(color, 1);
+      color += light_intensity * light.color.xyz * (difColor) * attenuation;
+      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
+    }
+    else if(mat.illum == 4) // VIDRE
+    {
+      float NdotD     = dot( N, gl_WorldRayDirectionEXT );
+			vec3 refrNormal = NdotD > 0.0 ? -N : N;
+			float refrEta   = NdotD > 0.0 ? 1 / mat.ior : mat.ior;
+			float cosine    = NdotD > 0.0 ? mat.ior * NdotD : -NdotD;
+
+			vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
+			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, mat.ior ) : 1;
+      float k = 1 - refrEta * refrEta * (1 - cosine * cosine);
+			
+			vec4 direction = rnd(prd.seed) < reflectProb ? vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : vec4(refracted, 1);
+      color += vec3(0);
+      prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+    }
+  }
 }

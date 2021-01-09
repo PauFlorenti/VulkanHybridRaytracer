@@ -117,6 +117,7 @@ public:
 	AccelerationStructure				_topLevelAS;
 
 	std::vector<BlasInput>		_blas;
+	std::vector<TlasInstance>	_tlas;
 	AllocatedBuffer				lightBuffer;
 	AllocatedBuffer				_matBuffer;
 
@@ -164,7 +165,7 @@ public:
 
 	void rasterize_hybrid();
 
-	void render_gui();
+	void render_gui(float dt);
 
 	void init_commands();
 
@@ -179,6 +180,8 @@ public:
 	void create_storage_image();
 
 	void recreate_renderer();
+
+	void buildTlas(const std::vector<TlasInstance>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, bool update = false);
 private:
 
 	void init_framebuffers();
@@ -214,8 +217,6 @@ private:
 	BlasInput object_to_geometry(const Object& model);
 
 	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-
-	void buildTlas(const std::vector<TlasInstance>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
 	VkAccelerationStructureInstanceKHR object_to_instance(const TlasInstance& instance);
 

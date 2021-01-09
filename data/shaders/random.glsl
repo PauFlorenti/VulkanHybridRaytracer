@@ -14,7 +14,7 @@ uint tea( uint val0, uint val1 )
 	}
 
 	return v0;
-}
+};
 
 // Generate a random unsigned int in [0, 2^24) given the previous RNG state
 // using the Numerical Recipes linear congruential generator
@@ -24,10 +24,33 @@ uint lcg(inout uint prev)
   uint LCG_C = 1013904223u;
   prev       = (LCG_A * prev + LCG_C);
   return prev & 0x00FFFFFF;
-}
+};
 
 // Generate a random float in [0, 1) given the previous RNG state
 float rnd(inout uint prev)
 {
   return (float(lcg(prev)) / float(0x01000000));
-}
+};
+
+
+vec3 samplingHemisphere(inout uint seed, in vec3 x, in vec3 y, in vec3 z)
+{
+	const float PI = 3.141592;
+	float r1 = rnd(seed);
+	float r2 = rnd(seed);
+	float sq = sqrt(1 - r2);
+
+	vec3 direction = vec3(cos(2 * PI * r1) * sq, sin(2 * PI * r1) * sq, sqrt(r2));
+	direction = direction.x * x + direction.y * y + direction.z * z;
+
+	return direction;
+};
+
+void createCoordSystem(in vec3 N, out vec3 tangent, out vec3 binormal)
+{
+	if(abs(N.x) > abs(N.y))
+		tangent = vec3(N.z, 0, -N.x) / sqrt(N.x * N.x + N.z * N.z);
+	else
+		tangent = vec3(0, -N.z, N.y) / sqrt(N.y * N.y + N.z * N.z);
+	binormal = cross(N, tangent); 
+};

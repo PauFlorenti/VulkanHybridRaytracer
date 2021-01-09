@@ -90,8 +90,9 @@ void VulkanEngine::run()
 	while (!_bQuit)
 	{
 		double currentTime = SDL_GetTicks();
-		float dt = float(currentTime - lastFrame);
+		double dt = (currentTime - lastFrame);
 		lastFrame = currentTime;
+
 		while (SDL_PollEvent(&e) != 0)
 		{
 			if (e.type == SDL_QUIT) _bQuit = true;
@@ -111,7 +112,12 @@ void VulkanEngine::run()
 		std::cout << out.x << " " << out.y << " " << out.z << std::endl;
 		*/
 
-		renderer->render_gui();
+		float fps = _frameNumber / (SDL_GetTicks() / 1000.f);
+		double time = SDL_GetTicks() / 1000.0;
+
+		//std::cout << _frameNumber << " " << time << " " << _frameNumber / time << std::endl;
+
+		renderer->render_gui(fps);
 		switch (_mode)
 		{
 		case FORWARD_RENDER:
@@ -220,6 +226,13 @@ void VulkanEngine::update(const float dt)
 	vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
 	memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
 	vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
+
+	for (int i = 0; i < renderer->_tlas.size(); i++)
+	{
+		TlasInstance& tinst = renderer->_tlas[i];
+		tinst.transform = _renderables[i]->m_matrix;
+	}
+	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);
 }
 
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
@@ -482,7 +495,7 @@ void VulkanEngine::recreate_swapchain()
 	//	SDL_PollEvent(&e);
 	//}
 
-	vkDeviceWaitIdle(_device);
+	//vkDeviceWaitIdle(_device);
 
 	clean_swapchain();
 
@@ -567,10 +580,12 @@ void VulkanEngine::init_scene()
 	Light *light = new Light();
 	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, -10));
 	light->intensity = 100.0f;
+
 	Light* light2 = new Light();
 	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
 	light2->intensity = 250.0f;
 	light2->color = glm::vec3(1, 0, 0);
+
 	Light* light3 = new Light();
 	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 30, 0));
 	light3->intensity = 250.0f;
@@ -579,8 +594,8 @@ void VulkanEngine::init_scene()
 	Light* directional = new Light(DIRECTIONAL);
 	directional->m_matrix = glm::translate(glm::mat4(1), glm::vec3(20, 100, 20));
 
+	//_lights.push_back(directional);
 	_lights.push_back(light);
-	_lights.push_back(directional);
 	//_lights.push_back(light2);
 	//_lights.push_back(light3);
 
@@ -611,7 +626,7 @@ void VulkanEngine::init_scene()
 	MTLMaterial glass;
 	glass.illum			= 4;
 	glass.diffuse		= {0, 0, 0, 1};
-	glass.ior			= 1.52f;
+	glass.ior			= 1.31f;
 	glass.glossiness	= 1.0f;
 	
 	_MtlMaterials["simple"]		= simple;
@@ -645,8 +660,8 @@ void VulkanEngine::init_scene()
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
-	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -5));
-	cube->materialIdx = get_materialId("simple");
+	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
+	cube->materialIdx = get_materialId("glass");
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
@@ -657,8 +672,8 @@ void VulkanEngine::init_scene()
 	Object* sphere2 = new Object();
 	sphere2->mesh = get_mesh("sphere");
 	sphere2->material = get_material("offscreen");
-	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
-	sphere2->materialIdx = get_materialId("simple");
+	sphere2->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -15));
+	sphere2->materialIdx = get_materialId("glass");
 
 	Object* mirror = new Object();
 	mirror->mesh = get_mesh("cube");

@@ -552,17 +552,17 @@ void Renderer::rasterize_hybrid()
 		throw std::runtime_error("failed to present swap chain images!");
 }
 
-void Renderer::render_gui()
+void Renderer::render_gui(float dt)
 {
 	// Imgui new frame
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplSDL2_NewFrame(VulkanEngine::engine->_window->_handle);
-	//ImGui_ImplSDL2_NewFrame(VulkanEngine::engine->_window);
 
 	ImGui::NewFrame();
 
 	ImGui::Begin("Debug window");
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	ImGui::Text("DT %.3f ms/frame %.1f FPS ", 1000.0 / dt,  dt);
 	for (auto& light : VulkanEngine::engine->_lights)
 	{
 		if (ImGui::TreeNode(&light, "Light")) {
@@ -1447,8 +1447,7 @@ void Renderer::create_top_acceleration_structure()
 {
 	uint32_t nInstances = static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
 
-	std::vector<TlasInstance> tlas;
-	tlas.reserve(nInstances);
+	_tlas.reserve(nInstances);
 
 	for (uint32_t i = 0; i < nInstances; i++)
 	{
@@ -1457,10 +1456,10 @@ void Renderer::create_top_acceleration_structure()
 		instance.transform	= node->m_matrix;
 		instance.blasId		= i;
 		instance.instanceId = i;	// gl_InstanceCustomIndexEXT
-		tlas.emplace_back(instance);
+		_tlas.emplace_back(instance);
 	}
 
-	buildTlas(tlas);
+	buildTlas(_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1528,10 +1527,10 @@ void Renderer::buildBlas(const std::vector<BlasInput>& input, VkBuildAcceleratio
 
 // ---------------------------------------------------------------------------------------
 // This creates the TLAS from the input instances
-void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAccelerationStructureFlagsKHR flags)
+void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAccelerationStructureFlagsKHR flags, bool update)
 {
 	// Cannot be built twice
-	assert(_topLevelAS.handle == VK_NULL_HANDLE);
+	assert(_topLevelAS.handle == VK_NULL_HANDLE || update);
 
 	std::vector<VkAccelerationStructureInstanceKHR> geometryInstances;
 	geometryInstances.reserve(instances.size());
@@ -1571,11 +1570,11 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 	// Find sizes
 	VkAccelerationStructureBuildGeometryInfoKHR asBuildGeometryInfo = vkinit::acceleration_structure_build_geometry_info();
 	asBuildGeometryInfo.type			= VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-	asBuildGeometryInfo.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	asBuildGeometryInfo.mode			= update ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 	asBuildGeometryInfo.flags			= flags;
 	asBuildGeometryInfo.geometryCount	= 1;
 	asBuildGeometryInfo.pGeometries		= &asGeometry;
-	asBuildGeometryInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+	asBuildGeometryInfo.srcAccelerationStructure = update ? _topLevelAS.handle : VK_NULL_HANDLE;
 
 	uint32_t									primitiveCount = static_cast<uint32_t>(instances.size());
 	VkAccelerationStructureBuildSizesInfoKHR	asBuildSizesInfo = vkinit::acceleration_structure_build_sizes_info();
@@ -1587,7 +1586,8 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 		&asBuildSizesInfo
 	);
 
-	create_acceleration_structure(_topLevelAS, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, asBuildSizesInfo);
+	if(!update)
+		create_acceleration_structure(_topLevelAS, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, asBuildSizesInfo);
 
 	ScratchBuffer scratchBuffer = VulkanEngine::engine->createScratchBuffer(asBuildSizesInfo.buildScratchSize);
 

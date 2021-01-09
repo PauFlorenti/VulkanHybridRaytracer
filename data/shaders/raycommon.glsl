@@ -3,5 +3,4 @@ struct hitPayload{
     vec4 direction;
     vec3 origin;
     uint seed;
-    uint depth;
 };
