@@ -21,7 +21,7 @@ VulkanEngine::VulkanEngine()
 
 void VulkanEngine::init()
 {
-	_mode =	RAYTRACING;
+	_mode =	HYBRID;
 
 	_window->init("Vulkan Pinut", 1700, 900);
 
@@ -61,6 +61,8 @@ void VulkanEngine::cleanup()
 		for (auto& frames : renderer->_frames)
 			vkWaitForFences(_device, 1, &frames._renderFence, VK_TRUE, 1000000000);
 
+		//vkDeviceWaitIdle(_device);
+
 		_mainDeletionQueue.flush();
 
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -72,6 +74,14 @@ void VulkanEngine::cleanup()
 	}
 }
 
+glm::vec3 uniformSamplerCone(float r1, float r2, float cosThetaMax)
+{
+	float cosTheta = (1.0 - r1) + r1 * cosThetaMax;
+	float sinTheta = std::sqrt(1.0 - cosTheta * cosTheta);
+	float phi = r2 * 2 * 3.1415;
+	return glm::vec3(std::cos(phi) * sinTheta, std::sin(phi) * sinTheta, cosTheta);
+}
+
 void VulkanEngine::run()
 {
 	SDL_Event e;
@@ -80,8 +90,9 @@ void VulkanEngine::run()
 	while (!_bQuit)
 	{
 		double currentTime = SDL_GetTicks();
-		float dt = float(currentTime - lastFrame);
+		double dt = (currentTime - lastFrame);
 		lastFrame = currentTime;
+
 		while (SDL_PollEvent(&e) != 0)
 		{
 			if (e.type == SDL_QUIT) _bQuit = true;
@@ -90,7 +101,23 @@ void VulkanEngine::run()
 
 		update(dt);
 
-		renderer->render_gui();
+		/*
+		std::srand(lastFrame);
+
+		double r1 = (double)std::rand() / RAND_MAX;
+		double r2 = (double)std::rand() / RAND_MAX;
+
+		glm::vec3 out = uniformSamplerCone(r1, r2, std::cos(10));
+		std::cout << "R1: " << r1 << " R2: " << r2 << std::endl;
+		std::cout << out.x << " " << out.y << " " << out.z << std::endl;
+		*/
+
+		float fps = _frameNumber / (SDL_GetTicks() / 1000.f);
+		double time = SDL_GetTicks() / 1000.0;
+
+		//std::cout << _frameNumber << " " << time << " " << _frameNumber / time << std::endl;
+
+		renderer->render_gui(fps);
 		switch (_mode)
 		{
 		case FORWARD_RENDER:
@@ -115,7 +142,6 @@ void VulkanEngine::run()
 
 void VulkanEngine::update(const float dt)
 {
-
 	_window->input_update();
 
 	glm::mat4 view			= _camera->getView();
@@ -128,87 +154,85 @@ void VulkanEngine::update(const float dt)
 	cameraData.projection		= projection;
 	cameraData.viewprojection	= projection * view;
 
-	if (_mode != RAYTRACING) {
-		// Copy camera info to the buffer
-		void* data;
-		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-		memcpy(data, &cameraData.viewprojection, sizeof(glm::mat4));
-		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+	// Copy camera info to the buffer
+	void* data;
+	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+	memcpy(data, &cameraData.viewprojection, sizeof(glm::mat4));
+	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
 
-		// Copy scene data to the buffer
-		float framed = (_frameNumber / 120.f);
-		_sceneParameters.ambientColor = { sin(framed), 0, cos(framed), 1 };
+	// Copy scene data to the buffer
+	float framed = (_frameNumber / 120.f);
+	_sceneParameters.ambientColor = { sin(framed), 0, cos(framed), 1 };
 
-		char* sceneData;
-		vmaMapMemory(_allocator, _sceneBuffer._allocation, (void**)&sceneData);
+	char* sceneData;
+	vmaMapMemory(_allocator, _sceneBuffer._allocation, (void**)&sceneData);
 
-		sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData));
+	sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData));
 
-		memcpy(sceneData, &_sceneParameters, sizeof(GPUSceneData));
-		vmaUnmapMemory(_allocator, _sceneBuffer._allocation);
+	memcpy(sceneData, &_sceneParameters, sizeof(GPUSceneData));
+	vmaUnmapMemory(_allocator, _sceneBuffer._allocation);
 
-		// Copy matrices to the buffer
-		void* objData;
-		vmaMapMemory(_allocator, _objectBuffer._allocation, &objData);
+	// Copy matrices to the buffer
+	void* objData;
+	vmaMapMemory(_allocator, _objectBuffer._allocation, &objData);
 
-		GPUObjectData* objectSSBO = (GPUObjectData*)objData;
+	GPUObjectData* objectSSBO = (GPUObjectData*)objData;
 
-		for (int i = 0; i < _renderables.size(); i++)
-		{
-			Object *object = _renderables[i];
-			objectSSBO[i].modelMatrix = object->m_matrix;
-		}
-
-		vmaUnmapMemory(_allocator, _objectBuffer._allocation);
-		
-		void* lightData;
-		vmaMapMemory(_allocator, renderer->get_current_frame()._lightBuffer._allocation, &lightData);
-		uboLight* lightUBO = (uboLight*)lightData;
-		for (int i = 0; i < _lights.size(); i++)
-		{
-			_lights[i]->update();
-			Light *l = _lights[i];
-			lightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
-		}
-		vmaUnmapMemory(_allocator, renderer->get_current_frame()._lightBuffer._allocation);
-		
-	}
-	else {
-
-		RTCameraData camera;
-		camera.invProj = glm::inverse(projection);
-		camera.invView = glm::inverse(view);
-
-		void* data;
-		vmaMapMemory(_allocator, rtCameraBuffer._allocation, &data);
-		memcpy(data, &camera, sizeof(RTCameraData));
-		vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
-
-		void* lightData;
-		vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &lightData);
-		uboLight* lightUBO = (uboLight*)lightData;
-		for (int i = 0; i < _lights.size(); i++)
-		{
-			_lights[i]->update();
-			Light* l = _lights[i];
-			lightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			lightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
-		}
-		vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
-
-		std::vector<MTLMaterial> materials;
-		for (auto it : _MtlMaterials)
-		{
-			materials.push_back(it.second);
-		}
-
-		void* matData;
-		vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
-		memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
-		vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
+	for (int i = 0; i < _renderables.size(); i++)
+	{
+		Object *object = _renderables[i];
+		objectSSBO[i].modelMatrix = object->m_matrix;
 	}
 
+	vmaUnmapMemory(_allocator, _objectBuffer._allocation);
+	
+	// copy ray tracing camera, it need the inverse
+	RTCameraData rtCamera;
+	rtCamera.invProj = glm::inverse(projection);
+	rtCamera.invView = glm::inverse(view);
+
+	void* rtCameraData;
+	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
+	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
+	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
+
+	// TODO unify with the deferred update buffer
+	void* rtLightData;
+	vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &rtLightData);
+	uboLight* rtLightUBO = (uboLight*)rtLightData;
+	for (int i = 0; i < _lights.size(); i++)
+	{
+		_lights[i]->update();
+		Light* l = _lights[i];
+		if (l->type == DIRECTIONAL) {
+			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, -1);
+		}
+		else {
+			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+		}
+	}
+	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
+	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+	
+	std::vector<MTLMaterial> materials;
+	for (auto it : _MtlMaterials)
+	{
+		materials.push_back(it.second);
+	}
+
+	void* matData;
+	vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
+	memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
+	vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
+
+	for (int i = 0; i < renderer->_tlas.size(); i++)
+	{
+		TlasInstance& tinst = renderer->_tlas[i];
+		tinst.transform = _renderables[i]->m_matrix;
+	}
+	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);
 }
 
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
@@ -272,6 +296,17 @@ int VulkanEngine::get_materialId(const std::string& name)
 	return i;
 }
 
+MTLMaterial VulkanEngine::get_MtlMaterial(const int id)
+{
+	int counter = 0;
+	for (const auto& m : _MtlMaterials) {
+		if (counter == id)
+			return m.second;
+		counter++;
+	}
+
+}
+
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
 {
 	VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_uploadContext._commandPool, 1);
@@ -296,21 +331,21 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 	vkResetCommandPool(_device, _uploadContext._commandPool, 0);
 }
 
-AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+void VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer)
 {
 	VkBufferCreateInfo bufferInfo = vkinit::buffer_create_info(allocSize, usage);
 	
 	VmaAllocationCreateInfo vmaallocinfo = {};
 	vmaallocinfo.usage = memoryUsage;
 
-	AllocatedBuffer newBuffer;
-
 	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaallocinfo,
-		&newBuffer._buffer, 
-		&newBuffer._allocation, 
+		&buffer._buffer, 
+		&buffer._allocation, 
 		nullptr));
 
-	return newBuffer;
+	_mainDeletionQueue.push_function([=]() {
+		vmaDestroyBuffer(_allocator, buffer._buffer, buffer._allocation);
+		});
 
 }
 
@@ -460,7 +495,7 @@ void VulkanEngine::recreate_swapchain()
 	//	SDL_PollEvent(&e);
 	//}
 
-	vkDeviceWaitIdle(_device);
+	//vkDeviceWaitIdle(_device);
 
 	clean_swapchain();
 
@@ -540,57 +575,73 @@ void VulkanEngine::init_upload_commands()
 
 void VulkanEngine::init_scene()
 {
-	_camera = new Camera(glm::vec3(0, 5, 2.5));
+	_camera = new Camera(glm::vec3(0, 5, -10));
 
 	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 30, 0));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, -10));
 	light->intensity = 100.0f;
+
 	Light* light2 = new Light();
 	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
 	light2->intensity = 250.0f;
 	light2->color = glm::vec3(1, 0, 0);
+
 	Light* light3 = new Light();
 	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 30, 0));
 	light3->intensity = 250.0f;
 	light3->color = glm::vec3(0, 0, 1);
 
-	MTLMaterial simple;
-	simple.illum = 0;
-	simple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
-	simple.glossiness = 1.0f;
+	Light* directional = new Light(DIRECTIONAL);
+	directional->m_matrix = glm::translate(glm::mat4(1), glm::vec3(20, 100, 20));
 
+	//_lights.push_back(directional);
+	_lights.push_back(light);
+	//_lights.push_back(light2);
+	//_lights.push_back(light3);
+
+	// Diffuse Material
+	MTLMaterial simple;
+	simple.illum		= 0;
+	simple.diffuse		= { 1, 1, 1, 1 };
+	simple.ior			= 0.0f;
+	simple.glossiness	= 0.0f;
+
+	MTLMaterial redSimple = simple;
+	redSimple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
+	redSimple.glossiness = 0.1f;
+
+	// Metallic material
 	MTLMaterial gold;
 	gold.illum			= 3;
 	gold.diffuse		= { 0.982f, 0.857f, 0.4f, 1.0f };
+	gold.ior			= 1.0f;
 	gold.glossiness		= 5.0f;
 
-	MTLMaterial red_gold;
-	gold.illum			= 3;
-	gold.diffuse		= { 0.982f, 0.3f, 0.4f, 1.0f };
-	gold.glossiness		= 2.0f;
+	MTLMaterial metal;
+	metal.illum			= 3;
+	metal.diffuse		= { 1, 1, 1, 1 };
+	metal.ior			= 1.0f;
+	metal.glossiness	= 5.0f;
 
 	MTLMaterial glass;
 	glass.illum			= 4;
 	glass.diffuse		= {0, 0, 0, 1};
+	glass.ior			= 1.31f;
 	glass.glossiness	= 1.0f;
-	glass.ior			= 1.52f;
 	
-	_MtlMaterials["gold"]		= gold;
-	_MtlMaterials["redgold"]	= red_gold;
-	_MtlMaterials["glass"]		= glass;
 	_MtlMaterials["simple"]		= simple;
-
-	_lights.push_back(light);
-	_lights.push_back(light2);
-	_lights.push_back(light3);
+	_MtlMaterials["gold"]		= gold;
+	_MtlMaterials["metal"]		= metal;
+	_MtlMaterials["glass"]		= glass;
+	//_MtlMaterials["redSimple"]	= redSimple;
 	
 	Object* monkey = new Object();
 	monkey->mesh			= get_mesh("monkey");
 	monkey->material		= get_material("offscreen");
-	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -3));
+	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -8));
 	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
 	monkey->m_matrix		= translation * scale;
-	monkey->materialIdx		= get_materialId("glass");
+	monkey->materialIdx		= get_materialId("simple");
 	
 	Object* empire = new Object();
 	empire->mesh			= get_mesh("empire");
@@ -602,34 +653,48 @@ void VulkanEngine::init_scene()
 	quad->material	= get_material("offscreen");
 	quad->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
 		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(100));
+		glm::scale(glm::mat4(1), glm::vec3(50));
 	quad->materialIdx = get_materialId("simple");
-
-	Object* tri = new Object();
-	tri->mesh		= get_mesh("triangle");
-	tri->material	= get_material("offscreen");
-	tri->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5));
-	tri->setColor(glm::vec3(0, 0, 1));
+	quad->id = get_textureId("asphalt");
 
 	Object* cube = new Object();
 	cube->mesh		= get_mesh("cube");
 	cube->material	= get_material("offscreen");
-	cube->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -5));
-	cube->setColor(glm::vec3(1, 0, 0));
+	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
+	cube->materialIdx = get_materialId("glass");
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
 	sphere->material	= get_material("offscreen");
 	sphere->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
-	sphere->setColor(glm::vec3(0, 1, 0));
 	sphere->materialIdx = get_materialId("gold");
+
+	Object* sphere2 = new Object();
+	sphere2->mesh = get_mesh("sphere");
+	sphere2->material = get_material("offscreen");
+	sphere2->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -15));
+	sphere2->materialIdx = get_materialId("glass");
+
+	Object* mirror = new Object();
+	mirror->mesh = get_mesh("cube");
+	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -20)) *
+		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
+	mirror->materialIdx = get_materialId("metal");
+
+	Object* mirror2 = new Object();
+	mirror2->mesh = get_mesh("cube");
+	mirror2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
+		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
+	mirror2->materialIdx = get_materialId("metal");
 
 	//_renderables.push_back(empire);
 	_renderables.push_back(sphere);
+	_renderables.push_back(sphere2);
 	_renderables.push_back(monkey);
-	_renderables.push_back(tri);
 	_renderables.push_back(cube);
 	_renderables.push_back(quad);
+	_renderables.push_back(mirror);
+	_renderables.push_back(mirror2);
 }
 
 void VulkanEngine::init_imgui()
@@ -701,10 +766,11 @@ void VulkanEngine::load_meshes()
 	_quad = Mesh::get_quad();
 	_quad->upload();
 	_triangleMesh.get_triangle();
+	_cube.get_cube();
 
 	_monkeyMesh.load_from_obj("data/meshes/monkey_smooth.obj");
 	//_lostEmpire.load_from_obj("data/meshes/lost_empire.obj");
-	_cube.load_from_obj("data/meshes/default_cube.obj");
+	//_cube.load_from_obj("data/meshes/default_cube.obj");
 	_sphere.load_from_obj("data/meshes/sphere.obj");
 
 	_meshes["triangle"] = _triangleMesh;
@@ -723,22 +789,28 @@ void VulkanEngine::load_images()
 	vkutil::load_image_from_file(*this, "data/textures/blackTexture.png", black.image);
 	//Texture lostEmpire;
 	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
+	Texture asphalt;
+	vkutil::load_image_from_file(*this, "data/textures/asphalt.png", asphalt.image);
 
 	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo asphaltImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, asphalt.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
 	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
 	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
+	vkCreateImageView(_device, &asphaltImageInfo, nullptr, &asphalt.imageView);
 
 	_textures["white"]  = white;
 	_textures["black"]	= black;
 	//_textures["empire"] = lostEmpire;
+	_textures["asphalt"]	= asphalt;
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, white.imageView, nullptr);
 		vkDestroyImageView(_device, black.imageView, nullptr);
 		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
+		vkDestroyImageView(_device, asphalt.imageView, nullptr);
 	});
 }
 
@@ -857,12 +929,11 @@ void VulkanEngine::create_attachment(VkFormat format, VkImageUsageFlagBits usage
 	assert(aspectMask > 0);
 
 	VkExtent3D extent = { _window->getWidth(), _window->getHeight(), 1 };
-	//VkExtent3D extent = { _windowExtent.width, _windowExtent.height, 1 };
 	VkImageCreateInfo imageInfo = vkinit::image_create_info(format, usage | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
 
 	VmaAllocationCreateInfo memAlloc = {};
-	memAlloc.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	memAlloc.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	memAlloc.usage			= VMA_MEMORY_USAGE_GPU_ONLY;
+	memAlloc.requiredFlags	= VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	vmaCreateImage(_allocator, &imageInfo, &memAlloc, 
 		&texture->image._image, &texture->image._allocation, nullptr);
@@ -969,7 +1040,6 @@ uint32_t VulkanEngine::getBufferDeviceAddress(VkBuffer buffer)
 void VulkanEngine::get_enabled_features()
 {
 	enabledIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
-	//enabledIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 	enabledIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
 	enabledIndexingFeatures.pNext = nullptr;
 

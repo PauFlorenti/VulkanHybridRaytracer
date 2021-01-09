@@ -34,7 +34,6 @@ struct AccelerationStructure {
 	uint64_t					deviceAddress = 0;
 	VkBuffer					buffer;
 	VkDeviceMemory				memory;
-	//AllocatedBuffer			buffer;
 };
 
 struct BlasInput {
@@ -118,6 +117,7 @@ public:
 	AccelerationStructure				_topLevelAS;
 
 	std::vector<BlasInput>		_blas;
+	std::vector<TlasInstance>	_tlas;
 	AllocatedBuffer				lightBuffer;
 	AllocatedBuffer				_matBuffer;
 
@@ -146,9 +146,16 @@ public:
 	std::vector<VkFramebuffer>	_postFramebuffers;
 
 	// HYBRID VARIABLES -----------------------
-	VkPipelineLayout		_hybridPipelineLayout;
-	VkDescriptorSet			_hybridPipelineDesc;
-	VkDescriptorSetLayout	_hybridPipelineDescLayout;
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> hybridShaderGroups{};
+	VkPipeline					_hybridPipeline;
+	VkPipelineLayout			_hybridPipelineLayout;
+	VkDescriptorSet				_hybridDescSet;
+	VkDescriptorSetLayout		_hybridDescSetLayout;
+	VkCommandBuffer				_hybridCommandBuffer;
+
+	AllocatedBuffer				raygenSBT;
+	AllocatedBuffer				missSBT;
+	AllocatedBuffer				hitSBT;
 
 	void rasterize();
 
@@ -158,7 +165,7 @@ public:
 
 	void rasterize_hybrid();
 
-	void render_gui();
+	void render_gui(float dt);
 
 	void init_commands();
 
@@ -173,6 +180,8 @@ public:
 	void create_storage_image();
 
 	void recreate_renderer();
+
+	void buildTlas(const std::vector<TlasInstance>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR, bool update = false);
 private:
 
 	void init_framebuffers();
@@ -182,8 +191,6 @@ private:
 	void init_sync_structures();
 
 	void init_descriptors();
-
-	void setup_descriptors();
 
 	void init_deferred_descriptors();
 
@@ -211,8 +218,6 @@ private:
 
 	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
-	void buildTlas(const std::vector<TlasInstance>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-
 	VkAccelerationStructureInstanceKHR object_to_instance(const TlasInstance& instance);
 
 	void create_rt_descriptors();
@@ -233,4 +238,9 @@ private:
 	void create_post_descriptor();
 
 	void build_post_command_buffers();
+
+	// HYBRID
+	void create_hybrid_descriptors();
+
+	void build_hybrid_command_buffers();
 };

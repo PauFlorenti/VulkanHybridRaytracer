@@ -8,5 +8,5 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 
 void main()
 {
-    prd.colorAndDist = vec4(0.2, 0.2, 0.2, -1);
+    prd.colorAndDist = vec4(0.0, 0.0, 0.0, -1);
 }

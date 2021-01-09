@@ -51,32 +51,40 @@ void main()
   {
     // Init basic light information
     Light light = lightsBuffer.lights[i];
+    bool isDirectional = light.pos.w < 0;
 
-		vec3 L      = normalize(light.pos.xyz - worldPos);
-		float NdotL = clamp(dot(N, L), 0.0, 1.0);
-		float light_max_distance = light.pos.w;
-		float light_distance = length(light.pos.xyz - worldPos);
-		light_intensity = light.color.w / (light_distance * light_distance);
-    light_color = light.color.xyz;
+		vec3 L                    = isDirectional ? light.pos.xyz : light.pos.xyz - worldPos;
+		float light_max_distance  = light.pos.w;
+		float light_distance      = length(L);
+    L                         = normalize(L);
+		float NdotL               = clamp(dot(N, L), 0.0, 1.0);
+		light_intensity           = isDirectional ? 1.0 : light.color.w / (light_distance * light_distance);
+    light_color               = light.color.xyz;
 
     // Calculate color
     prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
+    float att = 1.0;
 
     // Check if light has impact
     if( NdotL > 0 )
     {
       // init as shadowed
       shadowed = true;
+      mat3 dirMatrix = makeDirectionMatrix(L);
 
-      // Shadow ray cast
-      float tmin = 0.001, tmax = light_distance + 1;
-      traceRayEXT(topLevelAS, 
-        gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
-        0xFF, 
-        1, 0, 1, 
-        worldPos, tmin, 
-        L, tmax, 
-        1);
+        float r1 = rnd(prd.seed);
+        float r2 = rnd(prd.seed);
+        vec3 dir = normalize(uniformSampleCone(r1, r2, cos(10.0)));
+
+        // Shadow ray cast
+        float tmin = 0.001, tmax = light_distance + 1;
+        traceRayEXT(topLevelAS, 
+          gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
+          0xFF, 
+          1, 0, 1, 
+          worldPos, tmin, 
+          L, tmax, 
+          1);
     }
 
     // Calculate attenuation factor
@@ -89,7 +97,7 @@ void main()
       attenuation = 0;
     }
     else{
-      specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
+      //specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
     }
     color += light_intensity * attenuation * light_color * (prd.colorAndDist.xyz + specular);
   }

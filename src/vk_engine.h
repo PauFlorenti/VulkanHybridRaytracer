@@ -204,9 +204,11 @@ public:
 
 	int get_materialId(const std::string& name);
 
+	MTLMaterial get_MtlMaterial(const int id);
+
 	void immediate_submit(std::function<void(VkCommandBuffer)>&& function);
 
-	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	void create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer);
 
 	size_t pad_uniform_buffer_size(size_t originalSize);
 

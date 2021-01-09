@@ -203,8 +203,7 @@ void Mesh::get_cube()
 	};
 
 	// upload mesh
-	create_vertex_buffer();
-	create_index_buffer();
+	upload();
 }
 
 void Mesh::create_vertex_buffer()
@@ -249,9 +248,9 @@ void Mesh::create_vertex_buffer()
 		vkCmdCopyBuffer(cmd, stagingBuffer._buffer, _vertexBuffer._buffer, 1, &copy);
 		});
 
-	//VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
-	//	vmaDestroyBuffer(VulkanEngine::engine->_allocator, this->_vertexBuffer._buffer, this->_vertexBuffer._allocation);
-	//	});
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+		vmaDestroyBuffer(VulkanEngine::engine->_allocator, this->_vertexBuffer._buffer, this->_vertexBuffer._allocation);
+		});
 
 	vmaDestroyBuffer(VulkanEngine::engine->_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
 
@@ -297,7 +296,6 @@ void Mesh::create_index_buffer()
 		});
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
-		//vmaDestroyBuffer(VulkanEngine::engine->_allocator, _vertexBuffer._buffer, _vertexBuffer._allocation);
 		vmaDestroyBuffer(VulkanEngine::engine->_allocator, this->_indexBuffer._buffer, this->_indexBuffer._allocation);
 		});
 	
