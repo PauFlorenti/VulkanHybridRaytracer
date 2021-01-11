@@ -17,7 +17,7 @@ layout (set = 0, binding = 2) uniform CameraProperties
 layout (set = 0, binding = 3) uniform sampler2D positionTexture;
 layout (set = 0, binding = 4) uniform sampler2D normalTexture;
 layout (set = 0, binding = 5) uniform sampler2D albedoTexture;
-layout (std140, set = 0, binding = 7) uniform Lights { Light lights[3]; } lightsBuffer;
+layout (std140, set = 0, binding = 6) uniform Lights { Light lights[3]; } lightsBuffer;
 layout (set = 0, binding = 11) uniform MaterialBuffer { Material mat[10]; } materials;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
@@ -40,7 +40,7 @@ void main()
 	float matIdx 			= round(texture(positionTexture, inUV).w * 10);
 	vec3 normal 			= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 			= texture(albedoTexture, inUV).xyz;
-	//vec4 material 		= texture(materialTexture, inUV);
+	bool background 		= texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 
 	// Using the pixel coordinates we can apply the inverse transformation of the view and procjection matrices of the camera to obtain
 	// the origin and target of the ray
@@ -115,13 +115,14 @@ void main()
 			vec3 difColor 		= computeDiffuse(mat, N, L);
 			for(;depth < MAX_RECURSION; depth++)
 			{
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz, tmin, direction, tmax, 0);
+				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
 
 				if(prd.direction.w == 0 || prd.colorAndDist.w < 0){
+					//color /= depth;
 					color += (prd.colorAndDist.xyz * difColor) * light.color.xyz * light_intensity * attenuation;
 					break;
 				}
-				
+				//color += prd.colorAndDist.xyz;
 				origin 			= prd.origin;
 				direction 		= prd.direction.xyz;
 				prd.direction.w = 1;
@@ -143,11 +144,10 @@ void main()
 
 			for(;depth < MAX_RECURSION; depth++)
 			{
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz /*+ normalize(direction) * 0.01*/, tmin, direction, tmax, 0);
+				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz, tmin, direction, tmax, 0);
 
 				if(prd.direction.w == 0 || prd.colorAndDist.w < 0){
-					//color += (prd.colorAndDist.xyz * light.color.xyz) * light_intensity;
-					color += prd.colorAndDist.xyz;// * light.color.xyz;
+					color += prd.colorAndDist.xyz * light.color.xyz * light_intensity;
 					break;
 				}
 				
@@ -158,6 +158,9 @@ void main()
 		}
 	}
 
-	color *= albedo;
+	if(!background)
+		color *= albedo;
+	else
+		color = albedo;
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
 }

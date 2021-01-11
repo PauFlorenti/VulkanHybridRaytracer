@@ -28,7 +28,8 @@ struct ObjectData{
 // Set 0 - Camera information
 layout(set = 0, binding = 0) uniform CameraBuffer
 {
-	mat4 viewprojection;
+	mat4 view;
+	mat4 projection;
 } cameraData;
 
 // Set 1 - Object info, matrices at the moment
@@ -44,11 +45,11 @@ layout(push_constant) uniform constants
 void main()
 {
 	mat4 modelMatrix = objectBuffer.objects[gl_BaseInstance].model;
-	mat4 transformationMatrix = cameraData.viewprojection * modelMatrix;
+	mat4 transformationMatrix = cameraData.projection * cameraData.view * modelMatrix;
 	gl_Position =  transformationMatrix * vec4(inPosition, 1.0);
 
 	outPosition = vec3(modelMatrix * vec4(inPosition, 1.0)).xyz;
-    outColor  	= inColor; // * m.diffuse.xyz;
+    outColor  	= inColor;
 	outNormal 	= vec3(vec4(inNormal, 1.0) * modelMatrix).xyz;
     outUV 		= inUV;
 	outMat 		= float(pushC.matIdx) / 10;

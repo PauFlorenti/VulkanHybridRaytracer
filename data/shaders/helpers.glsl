@@ -5,6 +5,7 @@ struct Vertex
 {
   vec4 normal;
   vec4 color;
+  vec4 uv;
 };
 
 struct Light{

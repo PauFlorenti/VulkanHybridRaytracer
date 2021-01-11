@@ -11,13 +11,19 @@ layout(location = 0) rayPayloadInEXT hitPayload prd;
 layout(location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 3, set = 0, scalar) buffer Vertices { Vertex v[]; } vertices[];
-layout(binding = 4, set = 0) buffer Indices { int i[]; } indices[];
-layout(binding = 5, set = 0, scalar) buffer Matrices { mat4 m; } matrices[];
-layout(std140, binding = 6, set = 0) uniform Lights { Light lights[3]; } lightsBuffer;
-layout( binding = 7, set = 0) uniform MaterialBuffer { Material mat[5]; } materials;
-layout(binding = 8, set = 0) buffer sceneBuffer { int matIdx; } matIndices[];
+struct entityIndices{
+  int matIdx;
+  int albedoIdx;
+};
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
+layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
+layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m; } matrices[];
+layout(set = 0, std140, binding = 6) uniform Lights { Light lights[3]; } lightsBuffer;
+layout(set = 0, binding = 7) uniform MaterialBuffer { Material mat[5]; } materials;
+layout(set = 0, binding = 8) buffer sceneBuffer { entityIndices idx; } matIndices[];
+layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
 void main()
 {
@@ -35,6 +41,7 @@ void main()
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
   vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
+  vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
   vec3 N        = normalize(vec4(vec4(normal, 1) * matrices[gl_InstanceCustomIndexEXT].m).xyz);
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
@@ -42,9 +49,11 @@ void main()
 	vec3 color = vec3(0), light_color = vec3(0), specular = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
 
-  int matIdx = matIndices[gl_InstanceCustomIndexEXT].matIdx;
+  int matIdx = matIndices[gl_InstanceCustomIndexEXT].idx.matIdx;
+  int textIdx = matIndices[gl_InstanceCustomIndexEXT].idx.albedoIdx;
 
   Material mat = materials.mat[matIdx];
+  vec3 albedo = texture(textures[textIdx], uv).xyz;
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -99,10 +108,11 @@ void main()
     else{
       //specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
     }
-    color += light_intensity * attenuation * light_color * (prd.colorAndDist.xyz + specular);
+    color += light_intensity * attenuation * light_color * (prd.colorAndDist.xyz * albedo + specular);
   }
 
   // Return final color in the payload
+  //prd.colorAndDist = vec4(color, gl_HitTEXT);
   prd.colorAndDist = vec4(color, gl_HitTEXT);
   prd.origin = worldPos;
 

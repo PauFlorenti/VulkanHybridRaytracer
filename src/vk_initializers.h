@@ -34,7 +34,9 @@ namespace vkinit {
 	VkImageCreateInfo image_create_info(
 		VkFormat format, 
 		VkImageUsageFlags usageFlags, 
-		VkExtent3D extent);
+		VkExtent3D extent,
+		uint32_t arrayLayers = 1,
+		VkImageCreateFlags flags = 0);
 
 	VkImageViewCreateInfo image_view_create_info(
 		VkFormat format,

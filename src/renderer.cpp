@@ -799,7 +799,7 @@ void Renderer::init_descriptors()
 	vkCreateDescriptorSetLayout(*device, &set2Info, nullptr, &_objectDescriptorSetLayout);
 
 	// Set = 2
-	// binding single texture at 0
+	// binding nText textures at 0
 	uint32_t nText = (uint32_t)VulkanEngine::engine->_textures.size();
 	VkDescriptorSetLayoutBinding textureBind = vkinit::descriptorset_layout_binding(
 		VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, nText);
@@ -813,9 +813,30 @@ void Renderer::init_descriptors()
 
 	vkCreateDescriptorSetLayout(*device, &set3Info, nullptr, &_textureDescriptorSetLayout);
 
+	// SKYBOX PASS --------------------
+	// Skybox set = 0
+	// binding single texture as skybox
+	VkDescriptorSetLayoutBinding skyBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	VkDescriptorSetLayoutBinding skyBufferBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 2);
+	
+	std::vector<VkDescriptorSetLayoutBinding> skyboxBindings = {
+		cameraBind,
+		skyBind,
+		skyBufferBind
+	};
+
+	VkDescriptorSetLayoutCreateInfo skyboxSetInfo = {};
+	skyboxSetInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	skyboxSetInfo.pNext			= nullptr;
+	skyboxSetInfo.bindingCount	= static_cast<uint32_t>(skyboxBindings.size());
+	skyboxSetInfo.pBindings		= skyboxBindings.data();
+	
+	vkCreateDescriptorSetLayout(*device, &skyboxSetInfo, nullptr, &_skyboxDescriptorSetLayout);
+	
 	// Once the layouts have been created, we allocate the descriptor sets
 
-	VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	//VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
 	const size_t sceneBufferSize		= VulkanEngine::engine->pad_uniform_buffer_size(sizeof(GPUSceneData));
 	VulkanEngine::engine->create_buffer(sceneBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_sceneBuffer);
 	const int MAX_OBJECTS = 10000;
@@ -842,7 +863,7 @@ void Renderer::init_descriptors()
 	VkDescriptorBufferInfo cameraInfo = {};
 	cameraInfo.buffer = VulkanEngine::engine->_cameraBuffer._buffer;
 	cameraInfo.offset = 0;
-	cameraInfo.range  = sizeof(glm::mat4);
+	cameraInfo.range  = sizeof(GPUCameraData);
 
 	VkDescriptorBufferInfo sceneInfo = {};
 	sceneInfo.buffer = VulkanEngine::engine->_sceneBuffer._buffer;
@@ -897,11 +918,47 @@ void Renderer::init_descriptors()
 
 	vkUpdateDescriptorSets(*device, 1, &write, 0, nullptr);
 
+	// Skybox descriptor
+	
+	VkDescriptorSetAllocateInfo skyboxAllocInfo = {};
+	skyboxAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	skyboxAllocInfo.pNext				= nullptr;
+	skyboxAllocInfo.descriptorSetCount	= 1;
+	skyboxAllocInfo.pSetLayouts			= &_skyboxDescriptorSetLayout;
+	skyboxAllocInfo.descriptorPool		= _descriptorPool;
+
+	VK_CHECK(vkAllocateDescriptorSets(*device, &skyboxAllocInfo, &_skyboxDescriptorSet));
+
+	VkDescriptorImageInfo skyboxImageInfo = {};
+	skyboxImageInfo.sampler		= sampler;
+	skyboxImageInfo.imageView	= VulkanEngine::engine->_skyboxTexture.imageView;
+	skyboxImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _skyboxBuffer);
+
+	VkDescriptorBufferInfo skyboxBufferInfo = {};
+	skyboxBufferInfo.buffer = _skyboxBuffer._buffer;
+	skyboxBufferInfo.offset = 0;
+	skyboxBufferInfo.range	= sizeof(glm::mat4);
+
+	VkWriteDescriptorSet camWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &cameraInfo, 0);
+	VkWriteDescriptorSet skyboxWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _skyboxDescriptorSet, &skyboxImageInfo, 1);
+	VkWriteDescriptorSet skyboxBuffer = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &skyboxBufferInfo, 2);
+
+	std::vector<VkWriteDescriptorSet> skyboxWrites = {
+		camWrite,
+		skyboxWrite,
+		skyboxBuffer
+	};
+
+	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(skyboxWrites.size()), skyboxWrites.data(), 0, nullptr);
+	
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorPool(*device, _descriptorPool, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _offscreenDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _objectDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _textureDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(*device, _skyboxDescriptorSetLayout, nullptr);
 		vkDestroySampler(*device, sampler, nullptr);
 		});
 }
@@ -916,7 +973,6 @@ void Renderer::init_deferred_descriptors()
 	VkDescriptorSetLayoutBinding positionBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0);	// Position
 	VkDescriptorSetLayoutBinding normalBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);	// Normals
 	VkDescriptorSetLayoutBinding albedoBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2);	// Albedo
-	//VkDescriptorSetLayoutBinding materialBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3);	// Material
 	VkDescriptorSetLayoutBinding lightBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 4);	// Lights buffer
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
@@ -924,7 +980,6 @@ void Renderer::init_deferred_descriptors()
 		positionBinding,
 		normalBinding,
 		albedoBinding,
-		//materialBinding,
 		lightBinding
 	};
 
@@ -953,8 +1008,6 @@ void Renderer::init_deferred_descriptors()
 			_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
 		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
-		//VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_create_info(
-		//	_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Material
 
 		int nLights = VulkanEngine::engine->_lights.size();
 		if (!lightBuffer._buffer)
@@ -968,14 +1021,12 @@ void Renderer::init_deferred_descriptors()
 		VkWriteDescriptorSet positionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorPosition, 0);
 		VkWriteDescriptorSet normalWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorNormal, 1);
 		VkWriteDescriptorSet albedoWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorAlbedo, 2);
-		//VkWriteDescriptorSet materialWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorMaterial, 3);
 		VkWriteDescriptorSet lightBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &lightBufferDesc, 4);
 
 		std::vector<VkWriteDescriptorSet> writes = {
 			positionWrite,
 			normalWrite,
 			albedoWrite,
-			//materialWrite,
 			lightBufferWrite
 		};
 
@@ -1084,6 +1135,14 @@ void Renderer::init_deferred_pipelines()
 	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/deferred.frag.spv", &deferredFragmentShader)) {
 		std::cout << "Could not load deferred fragment shader!" << std::endl;
 	}
+	VkShaderModule skyboxVertexShader;
+	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.vert.spv", &skyboxVertexShader)) {
+		std::cout << "Could not load skybox vertex shader!" << std::endl;
+	}
+	VkShaderModule skyboxFragmentShader;
+	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.frag.spv", &skyboxFragmentShader)) {
+		std::cout << "Could not load skybox fragment shader!" << std::endl;
+	}
 
 	PipelineBuilder pipBuilder;
 	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, offscreenVertexShader));
@@ -1139,7 +1198,6 @@ void Renderer::init_deferred_pipelines()
 			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT, VK_FALSE),
 		vkinit::color_blend_attachment_state(0xf, VK_FALSE),
 		vkinit::color_blend_attachment_state(0xf, VK_FALSE)
-		//vkinit::color_blend_attachment_state(0xf, VK_FALSE)
 	};
 
 	VkPipelineColorBlendStateCreateInfo colorBlendInfo = vkinit::color_blend_state_create_info(static_cast<uint32_t>(blendAttachmentStates.size()), blendAttachmentStates.data());
@@ -1150,6 +1208,24 @@ void Renderer::init_deferred_pipelines()
 	_offscreenPipeline = pipBuilder.build_pipeline(*device, _offscreenRenderPass);
 
 	VulkanEngine::engine->create_material(_offscreenPipeline, _offscreenPipelineLayout, "offscreen");
+
+	// Skybox pipeline -----------------------------------------------------------------------------
+
+	VkPipelineLayoutCreateInfo skyboxPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
+	skyboxPipelineLayoutInfo.setLayoutCount = 1;
+	skyboxPipelineLayoutInfo.pSetLayouts	= &_skyboxDescriptorSetLayout;
+
+	VK_CHECK(vkCreatePipelineLayout(*device, &skyboxPipelineLayoutInfo, nullptr, &_skyboxPipelineLayout));
+
+	pipBuilder._shaderStages.clear();
+	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, skyboxVertexShader));
+	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, skyboxFragmentShader));
+
+	pipBuilder._pipelineLayout					= _skyboxPipelineLayout;
+	pipBuilder._depthStencil.depthTestEnable	= VK_FALSE;
+	pipBuilder._depthStencil.depthWriteEnable	= VK_TRUE;
+
+	_skyboxPipeline = pipBuilder.build_pipeline(*device, _offscreenRenderPass);
 
 	// Second pipeline -----------------------------------------------------------------------------
 
@@ -1175,19 +1251,25 @@ void Renderer::init_deferred_pipelines()
 		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, deferredVertexShader));
 	pipBuilder._shaderStages.push_back(
 		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, deferredFragmentShader));
+	pipBuilder._depthStencil.depthTestEnable = VK_TRUE;
+	pipBuilder._depthStencil.depthWriteEnable = VK_TRUE;
 	pipBuilder._pipelineLayout = _finalPipelineLayout;
 
 	_finalPipeline = pipBuilder.build_pipeline(*device, _renderPass);
 
 	vkDestroyShaderModule(*device, offscreenVertexShader, nullptr);
 	vkDestroyShaderModule(*device, offscreenFragmentShader, nullptr);
+	vkDestroyShaderModule(*device, skyboxVertexShader, nullptr);
+	vkDestroyShaderModule(*device, skyboxFragmentShader, nullptr);
 	vkDestroyShaderModule(*device, deferredVertexShader, nullptr);
 	vkDestroyShaderModule(*device, deferredFragmentShader, nullptr);
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyPipelineLayout(*device, _offscreenPipelineLayout, nullptr);
+		vkDestroyPipelineLayout(*device, _skyboxPipelineLayout, nullptr);
 		vkDestroyPipelineLayout(*device, _finalPipelineLayout, nullptr);
 		vkDestroyPipeline(*device, _offscreenPipeline, nullptr);
+		vkDestroyPipeline(*device, _skyboxPipeline, nullptr);
 		vkDestroyPipeline(*device, _finalPipeline, nullptr);
 		});
 }
@@ -1263,11 +1345,14 @@ void Renderer::build_previous_command_buffer()
 
 	VkCommandBufferBeginInfo cmdBufInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
+	VK_CHECK(vkBeginCommandBuffer(_offscreenComandBuffer, &cmdBufInfo));
+
+	VkDeviceSize offset = { 0 };
+
 	std::array<VkClearValue, 4> clearValues;
 	clearValues[0].color = { 0.f,  0.0f, 0.0f, 1.0f };
 	clearValues[1].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[2].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-	//clearValues[3].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[3].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -1279,9 +1364,17 @@ void Renderer::build_previous_command_buffer()
 	renderPassBeginInfo.clearValueCount				= static_cast<uint32_t>(clearValues.size());;
 	renderPassBeginInfo.pClearValues				= clearValues.data();
 
-	VK_CHECK(vkBeginCommandBuffer(_offscreenComandBuffer, &cmdBufInfo));
-
 	vkCmdBeginRenderPass(_offscreenComandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	// Skybox pass
+	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipelineLayout, 0, 1, &_skyboxDescriptorSet, 0, nullptr);
+	vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipeline);
+	Mesh* sphere = VulkanEngine::engine->get_mesh("sphere");
+	vkCmdBindVertexBuffers(_offscreenComandBuffer, 0, 1, &sphere->_vertexBuffer._buffer, &offset);
+	vkCmdBindIndexBuffer(_offscreenComandBuffer, sphere->_indexBuffer._buffer, offset, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(_offscreenComandBuffer, static_cast<uint32_t>(sphere->_indices.size()), 1, 0, 0, 1);
+
+	// Geometry pass
 	// Set = 0 Camera data descriptor
 	uint32_t uniform_offset = VulkanEngine::engine->pad_uniform_buffer_size(sizeof(GPUSceneData));
 	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 0, 1, &_offscreenDescriptorSet, 1, &uniform_offset);
@@ -1297,8 +1390,6 @@ void Renderer::build_previous_command_buffer()
 		Object* object = VulkanEngine::engine->_renderables[i];
 
 		vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipeline);
-
-		VkDeviceSize offset = { 0 };
 
 		int constant	= object->id;
 		int matIdx		= object->materialIdx;
@@ -1729,7 +1820,8 @@ void Renderer::create_rt_descriptors()
 		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
 		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 1);
@@ -1745,10 +1837,13 @@ void Renderer::create_rt_descriptors()
 	//  binding 6 = light buffer
 	//  binding 7 = material buffer
 	//  binding 8 = material indices
+	//  binding 9 = textures
 
-	const uint32_t nInstances = VulkanEngine::engine->_renderables.size();		
-	const int nLights = VulkanEngine::engine->_lights.size();
-	const int nMaterials = VulkanEngine::engine->_MtlMaterials.size();
+	const int nInstances	= VulkanEngine::engine->_renderables.size();		
+	const int nLights		= VulkanEngine::engine->_lights.size();
+	const int nMaterials	= VulkanEngine::engine->_MtlMaterials.size();
+	const int nTextures		= VulkanEngine::engine->_textures.size();
+
 	if (!lightBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
 	VulkanEngine::engine->create_buffer(sizeof(MTLMaterial) * nMaterials, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
@@ -1762,6 +1857,7 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
 	VkDescriptorSetLayoutBinding materialBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
 	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);
+	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -1772,7 +1868,8 @@ void Renderer::create_rt_descriptors()
 		matrixBufferBinding,
 		lightBufferBinding,
 		materialBufferBinding,
-		matIdxBufferBinding
+		matIdxBufferBinding,
+		texturesBufferBinding
 		});
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
@@ -1818,7 +1915,7 @@ void Renderer::create_rt_descriptors()
 		std::vector<rtVertexAttribute> vAttr;
 		vAttr.reserve(obj->mesh->_vertices.size());
 		for (Vertex& v : obj->mesh->_vertices) {
-			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1} });
+			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
@@ -1852,16 +1949,17 @@ void Renderer::create_rt_descriptors()
 		matrixDescInfo.push_back(matrixBufferDescriptor);
 
 		AllocatedBuffer sceneIdxBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sceneIdxBuffer);
+		VulkanEngine::engine->create_buffer(sizeof(EntityIndices), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sceneIdxBuffer);
+		EntityIndices entIdx = { obj->materialIdx, obj->id };
 		void* idata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation, &idata);
-		memcpy(idata, &obj->materialIdx, sizeof(int));
+		memcpy(idata, &entIdx, sizeof(EntityIndices));
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation);
 
 		VkDescriptorBufferInfo matIdxBufferInfo;
 		matIdxBufferInfo.buffer			= sceneIdxBuffer._buffer;
 		matIdxBufferInfo.offset			= 0;
-		matIdxBufferInfo.range			= sizeof(int);
+		matIdxBufferInfo.range			= sizeof(EntityIndices);
 		sceneIdxDescInfo.push_back(matIdxBufferInfo);
 	}
 
@@ -1875,6 +1973,32 @@ void Renderer::create_rt_descriptors()
 	materialBufferInfo.offset = 0;
 	materialBufferInfo.range  = sizeof(MTLMaterial) * nMaterials;
 
+	// Textures info
+	VkDescriptorSetAllocateInfo textureAllocInfo = {};
+	textureAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	textureAllocInfo.pNext				= nullptr;
+	textureAllocInfo.descriptorSetCount = 1;
+	textureAllocInfo.pSetLayouts		= &_textureDescriptorSetLayout;
+	textureAllocInfo.descriptorPool		= _descriptorPool;
+
+	//VK_CHECK(vkAllocateDescriptorSets(*device, &textureAllocInfo, &_textureDescriptorSet));
+
+	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
+	VkSampler sampler;
+	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
+
+	std::vector<VkDescriptorImageInfo> imageInfos;
+	for (auto const& texture : VulkanEngine::engine->_textures)
+	{
+		VkDescriptorImageInfo imageBufferInfo = {};
+		imageBufferInfo.sampler		= sampler;
+		imageBufferInfo.imageView	= texture.second.imageView;
+		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		imageInfos.push_back(imageBufferInfo);
+	}
+
+	// WRITES ---
 	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet uniformBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &_rtDescriptorBufferInfo, 2);
 	VkWriteDescriptorSet vertexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, vertexDescInfo.data(), 3, nInstances);
@@ -1883,6 +2007,7 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet lightsBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &lightBufferInfo, 6);
 	VkWriteDescriptorSet matBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &materialBufferInfo, 7);
 	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, sceneIdxDescInfo.data(), 8, nInstances);
+	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -1893,7 +2018,8 @@ void Renderer::create_rt_descriptors()
 		matrixBufferWrite,
 		lightsBufferWrite,
 		matBufferWrite,
-		matIdxBufferWrite
+		matIdxBufferWrite,
+		textureBufferWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
@@ -1901,6 +2027,7 @@ void Renderer::create_rt_descriptors()
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(*device, _rtDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorPool(*device, _rtDescriptorPool, nullptr);
+		vkDestroySampler(*device, sampler, nullptr);
 		});
 }
 
@@ -2380,8 +2507,23 @@ void Renderer::create_hybrid_descriptors()
 		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10}
 	};
 
-	const uint32_t nInstances = static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
-	const uint32_t nMaterials = static_cast<uint32_t>(VulkanEngine::engine->_MtlMaterials.size());
+	const uint32_t nInstances	= static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
+	const uint32_t nMaterials	= static_cast<uint32_t>(VulkanEngine::engine->_MtlMaterials.size());
+	const uint32_t nTextures	= static_cast<uint32_t>(VulkanEngine::engine->_textures.size());
+
+	// binding = 0 TLAS
+	// binding = 1 Storage image
+	// binding = 2 Camera buffer
+	// binding = 3 Position Gbuffer
+	// binding = 4 Normal Gbuffer
+	// binding = 5 Albedo Gbuffer
+	// binding = 6 Lights buffer
+	// binding = 7 Vertices buffer
+	// binding = 8 Indices buffer
+	// binding = 9 Textures buffer
+	// binding = 10 Matrices buffer
+	// binding = 11 Materials buffer
+	// binding = 12 Scene indices
 
 	VkDescriptorSetLayoutBinding TLASBinding			= 
 		vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);			// TLAS
@@ -2390,13 +2532,14 @@ void Renderer::create_hybrid_descriptors()
 	VkDescriptorSetLayoutBinding positionImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 3);	// Position	image
 	VkDescriptorSetLayoutBinding normalImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 4);	// Normals	image
 	VkDescriptorSetLayoutBinding albedoImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 5);	// Albedo	image
-	//VkDescriptorSetLayoutBinding materialImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 6);	// Material image
-	VkDescriptorSetLayoutBinding lightsBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);			// Lights
-	VkDescriptorSetLayoutBinding vertexBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);	// Vertices
-	VkDescriptorSetLayoutBinding indexBufferBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nInstances);	// Indices
+	VkDescriptorSetLayoutBinding lightsBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);			// Lights
+	VkDescriptorSetLayoutBinding vertexBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7, nInstances);	// Vertices
+	VkDescriptorSetLayoutBinding indexBufferBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);	// Indices
+	VkDescriptorSetLayoutBinding texturesBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures); // Textures buffer
 	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 10, nInstances);	// Matrices
 	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
-	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12, nInstances);
+	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12, nInstances); // Scene indices
+
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
@@ -2406,10 +2549,10 @@ void Renderer::create_hybrid_descriptors()
 		positionImageBinding,
 		normalImageBinding,
 		albedoImageBinding,
-		//materialImageBinding,
 		lightsBufferBinding,
 		vertexBufferBinding,
 		indexBufferBinding,
+		texturesBufferBinding,
 		matrixBufferBinding,
 		materialBufferBinding,
 		matIdxBufferBinding
@@ -2464,8 +2607,6 @@ void Renderer::create_hybrid_descriptors()
 		_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
 	VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 		_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
-	//VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_create_info(
-	//	_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Material
 
 	// lights write
 	int nLights = VulkanEngine::engine->_lights.size();
@@ -2489,7 +2630,7 @@ void Renderer::create_hybrid_descriptors()
 		std::vector<rtVertexAttribute> vAttr;
 		vAttr.reserve(obj->mesh->_vertices.size());
 		for (Vertex& v : obj->mesh->_vertices) {
-			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1} });
+			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
@@ -2523,16 +2664,17 @@ void Renderer::create_hybrid_descriptors()
 		matrixDescInfo.push_back(matrixBufferDescriptor);
 
 		AllocatedBuffer sceneIdxBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sceneIdxBuffer);
+		VulkanEngine::engine->create_buffer(sizeof(EntityIndices), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sceneIdxBuffer);
+		EntityIndices entIdx = { obj->materialIdx, obj->id };
 		void* idata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation, &idata);
-		memcpy(idata, &obj->materialIdx, sizeof(int));
+		memcpy(idata, &entIdx, sizeof(EntityIndices));
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, sceneIdxBuffer._allocation);
 
 		VkDescriptorBufferInfo matIdxBufferInfo;
 		matIdxBufferInfo.buffer = sceneIdxBuffer._buffer;
 		matIdxBufferInfo.offset = 0;
-		matIdxBufferInfo.range	= sizeof(int);
+		matIdxBufferInfo.range	= sizeof(EntityIndices);
 		sceneIdxDescInfo.push_back(matIdxBufferInfo);
 	}
 
@@ -2555,15 +2697,40 @@ void Renderer::create_hybrid_descriptors()
 	materialBufferInfo.offset	= 0;
 	materialBufferInfo.range	= sizeof(MTLMaterial) * nMaterials;
 
+	// Textures info
+	VkDescriptorSetAllocateInfo textureAllocInfo = {};
+	textureAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	textureAllocInfo.pNext				= nullptr;
+	textureAllocInfo.descriptorSetCount = 1;
+	textureAllocInfo.pSetLayouts		= &_textureDescriptorSetLayout;
+	textureAllocInfo.descriptorPool		= _descriptorPool;
+
+	VK_CHECK(vkAllocateDescriptorSets(*device, &textureAllocInfo, &_textureDescriptorSet));
+
+	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
+	VkSampler sampler;
+	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
+
+	std::vector<VkDescriptorImageInfo> imageInfos;
+	for (auto const& texture : VulkanEngine::engine->_textures)
+	{
+		VkDescriptorImageInfo imageBufferInfo = {};
+		imageBufferInfo.sampler = sampler;
+		imageBufferInfo.imageView = texture.second.imageView;
+		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+		imageInfos.push_back(imageBufferInfo);
+	}
+
 	VkWriteDescriptorSet storageImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet cameraWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &cameraBufferInfo, 2);
 	VkWriteDescriptorSet positionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorPosition, 3);
 	VkWriteDescriptorSet normalImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorNormal, 4);
 	VkWriteDescriptorSet albedoImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorAlbedo, 5);
-	//VkWriteDescriptorSet materialImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMaterial, 6);
-	VkWriteDescriptorSet lightWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &lightDescBuffer, 7);
-	VkWriteDescriptorSet vertexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, vertexDescInfo.data(), 8, nInstances);
-	VkWriteDescriptorSet indexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, indexDescInfo.data(), 9, nInstances);
+	VkWriteDescriptorSet lightWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &lightDescBuffer, 6);
+	VkWriteDescriptorSet vertexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, vertexDescInfo.data(), 7, nInstances);
+	VkWriteDescriptorSet indexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, indexDescInfo.data(), 8, nInstances);
+	VkWriteDescriptorSet texturesBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, matrixDescInfo.data(), 10, nInstances);
 	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &materialBufferInfo, 11);
 	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, sceneIdxDescInfo.data(), 12, nInstances);
@@ -2575,10 +2742,10 @@ void Renderer::create_hybrid_descriptors()
 		positionImageWrite,
 		normalImageWrite,
 		albedoImageWrite,
-		//materialImageWrite,
 		lightWrite,
 		vertexBufferWrite,
 		indexBufferWrite,
+		texturesBufferWrite,
 		matrixBufferWrite,
 		materialBufferWrite,
 		matIdxBufferWrite
@@ -2588,6 +2755,7 @@ void Renderer::create_hybrid_descriptors()
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(*device, _hybridDescSetLayout, nullptr);
+		vkDestroySampler(*device, sampler, nullptr);
 		});
 }
 
