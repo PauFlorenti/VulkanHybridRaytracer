@@ -21,7 +21,7 @@ VulkanEngine::VulkanEngine()
 
 void VulkanEngine::init()
 {
-	_mode =	HYBRID;
+	_mode =	DEFERRED;
 
 	_window->init("Vulkan Pinut", 1700, 900);
 
@@ -152,12 +152,21 @@ void VulkanEngine::update(const float dt)
 	GPUCameraData cameraData;
 	cameraData.view				= view;
 	cameraData.projection		= projection;
-	cameraData.viewprojection	= projection * view;
+	//cameraData.viewprojection	= projection * view;
+
+	// Skybox Matrix followin the camera
+	if (_skyboxFollow) {
+		glm::mat4 skyMatrix = glm::translate(glm::mat4(1), _camera->_position);
+		void* skyMatData;
+		vmaMapMemory(_allocator, renderer->_skyboxBuffer._allocation, &skyMatData);
+		memcpy(skyMatData, &skyMatrix, sizeof(glm::mat4));
+		vmaUnmapMemory(_allocator, renderer->_skyboxBuffer._allocation);
+	}
 
 	// Copy camera info to the buffer
 	void* data;
 	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-	memcpy(data, &cameraData.viewprojection, sizeof(glm::mat4));
+	memcpy(data, &cameraData, sizeof(GPUCameraData));
 	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
 
 	// Copy scene data to the buffer
@@ -608,7 +617,6 @@ void VulkanEngine::init_scene()
 
 	MTLMaterial redSimple = simple;
 	redSimple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
-	redSimple.glossiness = 0.1f;
 
 	// Metallic material
 	MTLMaterial gold;
@@ -633,7 +641,7 @@ void VulkanEngine::init_scene()
 	_MtlMaterials["gold"]		= gold;
 	_MtlMaterials["metal"]		= metal;
 	_MtlMaterials["glass"]		= glass;
-	//_MtlMaterials["redSimple"]	= redSimple;
+	_MtlMaterials["redSimple"]	= redSimple;
 	
 	Object* monkey = new Object();
 	monkey->mesh			= get_mesh("monkey");
@@ -658,10 +666,10 @@ void VulkanEngine::init_scene()
 	quad->id = get_textureId("asphalt");
 
 	Object* cube = new Object();
-	cube->mesh		= get_mesh("cube");
-	cube->material	= get_material("offscreen");
-	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
-	cube->materialIdx = get_materialId("glass");
+	cube->mesh			= get_mesh("cube");
+	cube->material		= get_material("offscreen");
+	cube->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
+	cube->materialIdx	= get_materialId("redSimple");
 
 	Object* sphere = new Object();
 	sphere->mesh		= get_mesh("sphere");
@@ -674,6 +682,13 @@ void VulkanEngine::init_scene()
 	sphere2->material = get_material("offscreen");
 	sphere2->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -15));
 	sphere2->materialIdx = get_materialId("glass");
+
+	Object* sphere3 = new Object();
+	sphere3->mesh = get_mesh("sphere");
+	sphere3->material = get_material("offscreen");
+	sphere3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -15));
+	sphere3->materialIdx = get_materialId("simple");
+	sphere3->id = get_textureId("asphalt");
 
 	Object* mirror = new Object();
 	mirror->mesh = get_mesh("cube");
@@ -690,9 +705,10 @@ void VulkanEngine::init_scene()
 	//_renderables.push_back(empire);
 	_renderables.push_back(sphere);
 	_renderables.push_back(sphere2);
+	_renderables.push_back(sphere3);
 	_renderables.push_back(monkey);
 	_renderables.push_back(cube);
-	_renderables.push_back(quad);
+	//_renderables.push_back(quad);
 	_renderables.push_back(mirror);
 	_renderables.push_back(mirror2);
 }
@@ -791,26 +807,32 @@ void VulkanEngine::load_images()
 	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
 	Texture asphalt;
 	vkutil::load_image_from_file(*this, "data/textures/asphalt.png", asphalt.image);
+	vkutil::load_image_from_file(*this, "data/textures/woods.jpg", _skyboxTexture.image);
 
 	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VkImageViewCreateInfo asphaltImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, asphalt.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo woodsImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, _skyboxTexture.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+
 	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
 	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
 	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
 	vkCreateImageView(_device, &asphaltImageInfo, nullptr, &asphalt.imageView);
+	vkCreateImageView(_device, &woodsImageInfo, nullptr, &_skyboxTexture.imageView);
 
-	_textures["white"]  = white;
-	_textures["black"]	= black;
+	_textures["white"]		= white;
+	_textures["black"]		= black;
 	//_textures["empire"] = lostEmpire;
 	_textures["asphalt"]	= asphalt;
+	_textures["skybox"]		= _skyboxTexture;
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, white.imageView, nullptr);
 		vkDestroyImageView(_device, black.imageView, nullptr);
 		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
 		vkDestroyImageView(_device, asphalt.imageView, nullptr);
+		vkDestroyImageView(_device, _skyboxTexture.imageView, nullptr);
 	});
 }
 

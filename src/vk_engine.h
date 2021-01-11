@@ -53,7 +53,7 @@ struct GPUCameraData
 {
 	glm::mat4 view;
 	glm::mat4 projection;
-	glm::mat4 viewprojection;
+	//glm::mat4 viewprojection;
 };
 
 struct RTCameraData
@@ -110,6 +110,8 @@ public:
 	bool		_bQuit{ false };
 	uint32_t	_indexSwapchainImage{ 0 };
 
+	bool _skyboxFollow{ true };
+
 	Window *_window;
 
 	DeletionQueue _mainDeletionQueue;
@@ -159,6 +161,7 @@ public:
 	std::unordered_map<std::string, Mesh>			_meshes;
 	std::unordered_map<std::string, Texture>		_textures;
 	std::unordered_map<std::string, MTLMaterial>	_MtlMaterials;
+	Texture _skyboxTexture;
 
 	Camera* _camera;
 	bool mouse_locked;

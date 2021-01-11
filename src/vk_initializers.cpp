@@ -133,7 +133,9 @@ VkPipelineLayoutCreateInfo vkinit::pipeline_layout_create_info()
 VkImageCreateInfo vkinit::image_create_info(
 	VkFormat format,
 	VkImageUsageFlags usageFlags,
-	VkExtent3D extent)
+	VkExtent3D extent,
+	uint32_t arrayLayers /*= 1*/,
+	VkImageCreateFlags flags /*= 0*/)
 {
 	VkImageCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -145,9 +147,10 @@ VkImageCreateInfo vkinit::image_create_info(
 	info.extent			= extent;
 	info.usage			= usageFlags;
 	info.mipLevels		= 1;
-	info.arrayLayers	= 1;
+	info.arrayLayers	= arrayLayers;
 	info.samples		= VK_SAMPLE_COUNT_1_BIT;
 	info.tiling			= VK_IMAGE_TILING_OPTIMAL;
+	info.flags			= flags;
 	
 	return info;
 }

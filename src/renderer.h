@@ -103,6 +103,13 @@ public:
 	VkPipelineLayout			_offscreenPipelineLayout;
 	VkPipeline					_offscreenPipeline;
 
+	// Skybox pass
+	VkDescriptorSetLayout		_skyboxDescriptorSetLayout;
+	VkDescriptorSet				_skyboxDescriptorSet;
+	VkPipeline					_skyboxPipeline;
+	VkPipelineLayout			_skyboxPipelineLayout;
+	AllocatedBuffer				_skyboxBuffer;
+
 	// RAYTRACING VARIABLES ------------------------
 	VkDescriptorPool			_rtDescriptorPool;
 	VkDescriptorSetLayout		_rtDescriptorSetLayout;

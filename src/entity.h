@@ -20,6 +20,11 @@ struct MTLMaterial {
 	alignas(8) int	illum{ 0 };
 };
 
+struct EntityIndices {
+	int matIdx;
+	int albedoIdx;
+};
+
 class Entity {
 public:
 	glm::mat4 m_matrix;

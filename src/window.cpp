@@ -86,6 +86,10 @@ void Window::handleEvent(SDL_Event& e, const float dt)
 		if (e.key.keysym.sym == SDLK_4) {
 			VulkanEngine::engine->_mode = HYBRID;
 		}
+		if (e.key.keysym.sym == SDLK_5) {
+			VulkanEngine::engine->_skyboxFollow = !VulkanEngine::engine->_skyboxFollow;
+			std::cout << VulkanEngine::engine->_skyboxFollow << std::endl;
+		}
 		if (e.key.keysym.sym == SDLK_ESCAPE) VulkanEngine::engine->_bQuit = true;
 	}
 	if (e.type == SDL_MOUSEBUTTONDOWN) {

@@ -18,13 +18,14 @@ layout (std140, set = 0, binding = 4) uniform LightBuffer
 	Light lights[3];
 }lightBuffer;
 
-const vec3 ambient_light = vec3(0.0);
+const vec3 ambient_light = vec3(0.2);
 
 void main() 
 {
 	vec3 position 	= texture(positionTexture, inUV).xyz;
 	vec3 normal 	= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
+	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 
 	vec3 color = vec3(0), light_color = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
@@ -65,7 +66,10 @@ void main()
 		}
 	}
 	
-	color *= light_color;
+	if(!background)
+		color *= light_color;
+	else
+		color = albedo;
 
 	outFragColor = vec4( color, 1.0f );
 }
