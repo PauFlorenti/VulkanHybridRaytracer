@@ -20,17 +20,18 @@ layout(set = 0, binding = 1) uniform sceneData
 	vec4 sunlightColor;
 }scene;
 
-layout(push_constant) uniform constants
-{
-	int id;
-}pushC;
+//layout(push_constant) uniform constants
+//{
+//	int id;
+//}pushC;
 
 layout(set = 2, binding = 0) uniform sampler2D[] textures;
 
 void main()
 {
     vec3 N      = normalize( inNormal );
-    vec3 color  = texture(textures[pushC.id], inUV).xyz * inColor;
+    //vec3 color  = texture(textures[pushC.id], inUV).xyz * inColor;
+    vec3 color = vec3(1);
 
     float materialIdx = float(inMat);
 

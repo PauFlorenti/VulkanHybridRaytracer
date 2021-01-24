@@ -18,7 +18,7 @@ layout (std140, set = 0, binding = 4) uniform LightBuffer
 	Light lights[3];
 }lightBuffer;
 
-const vec3 ambient_light = vec3(0.2);
+const vec3 ambient_light = vec3(0.0);
 
 void main() 
 {
@@ -37,39 +37,34 @@ void main()
 	
 	for(int i = 0; i < lightBuffer.lights.length(); i++)
 	{
-		Light light = lightBuffer.lights[i];
-		vec3 L;
+		Light light 		= lightBuffer.lights[i];
+		bool isDirectional 	= light.pos.w < 0;
+		vec3 L 				= isDirectional ? light.pos.xyz : (light.pos.xyz - position.xyz);
+		float NdotL 		= clamp(dot(N, normalize(L)), 0.0, 1.0);
 
 		// Calculate the directional light
-		bool isDirectional = light.pos.w < 0;
 		if(isDirectional)
 		{
-			L = light.pos.xyz;
-			float NdotL = clamp(dot(N, normalize(L)), 0.0, 1.0);
-			light_color += (NdotL * light.color.xyz) * light_intensity * attenuation;
+			light_color += (NdotL * light.color.xyz);
 		}
 		else	// Calculate point lights
 		{
-			L = normalize(light.pos.xyz - position.xyz);
-
-			float light_max_distance = light.pos.w;
-			float light_distance = length(L);
-			light_intensity = light.color.w / (light_distance * light_distance);
+			float light_max_distance 	= light.pos.w;
+			float light_distance 		= length(L);
+			light_intensity 			= light.color.w / (light_distance * light_distance);
 
 			attenuation = light_max_distance - light_distance;
 			attenuation /= light_max_distance;
 			attenuation = max(attenuation, 0.0);
 			attenuation = attenuation * attenuation;
 
-			float NdotL = clamp(dot(N, normalize(L)), 0.0, 1.0);
-			light_color += (NdotL * light.color.xyz) * attenuation * light_intensity;
+			//light_color += (NdotL * light.color.xyz) * attenuation * light_intensity;
+			light_color += NdotL * light.color.xyz * light_intensity * attenuation;
 		}
 	}
 	
 	if(!background)
 		color *= light_color;
-	else
-		color = albedo;
 
 	outFragColor = vec4( color, 1.0f );
 }

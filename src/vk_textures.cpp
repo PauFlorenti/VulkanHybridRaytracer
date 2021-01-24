@@ -1,10 +1,9 @@
 #include <vk_textures.h>
-#include <iostream>
 
 #include <vk_initializers.h>
+#include "vk_engine.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image/stb_image.h>
+#include "stb_image.h"
 
 bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, AllocatedImage& outImage)
 {
@@ -104,6 +103,7 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, Al
 	return true;
 }
 
+/*
 bool vkutil::load_cubemap(VulkanEngine& engine, const char* filename, const VkFormat format, AllocatedImage& outImage)
 {
 	int texWidth, textHeight, texChannels;
@@ -199,3 +199,4 @@ bool vkutil::load_cubemap(VulkanEngine& engine, const char* filename, const VkFo
 
 
 }
+*/

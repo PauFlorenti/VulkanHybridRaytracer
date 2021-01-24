@@ -1,11 +1,6 @@
 #include "window.h"
 #include "vk_engine.h"
 
-//#include <imgui/imgui.h>
-//#include <imgui/ImGuizmo.h>
-//#include <imgui/imgui_impl_sdl.h>
-//#include <imgui/imgui_impl_vulkan.h>
-
 Window::Window() : 
 	_handle(NULL), 
 	_width(0), _height(0),

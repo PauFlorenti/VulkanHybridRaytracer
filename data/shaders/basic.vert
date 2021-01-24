@@ -37,20 +37,26 @@ layout(std140, set = 1, binding = 0) readonly buffer ObjectBuffer{
 	ObjectData objects[];
 }objectBuffer;
 
+//layout(push_constant) uniform constants
+//{
+//	layout(offset = 16)mat4 matrix;
+//    int matIdx;
+//}pushC;
+
 layout(push_constant) uniform constants
 {
-    layout(offset = 4) int matIdx;
+	mat4 matrix;
 }pushC;
 
 void main()
 {
-	mat4 modelMatrix = objectBuffer.objects[gl_BaseInstance].model;
-	mat4 transformationMatrix = cameraData.projection * cameraData.view * modelMatrix;
-	gl_Position =  transformationMatrix * vec4(inPosition, 1.0);
+	//mat4 modelMatrix 			= objectBuffer.objects[gl_BaseInstance].model;
+	mat4 transformationMatrix 	= cameraData.projection * cameraData.view * pushC.matrix; //modelMatrix;
+	gl_Position 				=  transformationMatrix * vec4(inPosition, 1.0);
 
-	outPosition = vec3(modelMatrix * vec4(inPosition, 1.0)).xyz;
+	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
-	outNormal 	= vec3(vec4(inNormal, 1.0) * modelMatrix).xyz;
+	outNormal 	= vec3(vec4(inNormal, 1.0) * pushC.matrix).xyz;
     outUV 		= inUV;
-	outMat 		= float(pushC.matIdx) / 10;
+	outMat 		= 0; //float(pushC.matIdx) / 10;
 }

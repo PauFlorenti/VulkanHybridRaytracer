@@ -16,7 +16,7 @@ layout(binding = 2, set = 0) uniform CameraProperties
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
 const int MAX_RECURSION = 10;
-const int NSAMPLES = 10;
+const int NSAMPLES = 1;
 
 void main() 
 {
@@ -28,10 +28,10 @@ void main()
 	{
 		float r1 = rnd(prd.seed);
 		float r2 = rnd(prd.seed);
-		vec2 pixel_offset = nS == 0 ? vec2(0.5) : vec2(r1, r2);
-		const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
-		const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
-		vec2 d = inUV * 2.0 - 1.0;
+		vec2 pixel_offset 		= nS == 0 ? vec2(0.5) : vec2(r1, r2);
+		const vec2 pixelCenter 	= vec2(gl_LaunchIDEXT.xy) + pixel_offset;	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
+		const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
+		vec2 d 					= inUV * 2.0 - 1.0;
 
 		// Using the pixel coordinates we can apply the inverse transformation of the view and procjection matrices of the camera to obtain
 		// the origin and target of the ray

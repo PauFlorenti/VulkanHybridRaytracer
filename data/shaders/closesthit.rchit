@@ -71,8 +71,7 @@ void main()
     light_color               = light.color.xyz;
 
     // Calculate color
-    prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
-    float att = 1.0;
+    //prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
 
     // Check if light has impact
     if( NdotL > 0 )
@@ -81,19 +80,19 @@ void main()
       shadowed = true;
       mat3 dirMatrix = makeDirectionMatrix(L);
 
-        float r1 = rnd(prd.seed);
-        float r2 = rnd(prd.seed);
-        vec3 dir = normalize(uniformSampleCone(r1, r2, cos(10.0)));
+      float r1 = rnd(prd.seed);
+      float r2 = rnd(prd.seed);
+      vec3 dir = normalize(uniformSampleCone(r1, r2, cos(10.0)));
 
-        // Shadow ray cast
-        float tmin = 0.001, tmax = light_distance + 1;
-        traceRayEXT(topLevelAS, 
-          gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
-          0xFF, 
-          1, 0, 1, 
-          worldPos, tmin, 
-          L, tmax, 
-          1);
+      // Shadow ray cast
+      float tmin = 0.001, tmax = light_distance + 1;
+      traceRayEXT(topLevelAS, 
+        gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
+        0xFF, 
+        1, 0, 1, 
+        worldPos, tmin, 
+        L, tmax, 
+        1);
     }
 
     // Calculate attenuation factor
@@ -105,15 +104,40 @@ void main()
     if(shadowed){
       attenuation = 0;
     }
-    else{
-      //specular += computeSpecular(mat, N, L, gl_WorldRayDirectionEXT);
+
+    vec3 difColor = vec3(0);
+
+    if(mat.illum == 0)  // DIFUS
+    {
+      difColor  = computeDiffuse(mat, N, L) * albedo;
+      specular  = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
+      color    += (difColor + specular) * light_intensity * light.color.xyz * attenuation;
+      prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
-    color += light_intensity * attenuation * light_color * (prd.colorAndDist.xyz * albedo + specular);
+    else if(mat.illum == 3) // MIRALL
+    {
+      
+      vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
+      bool isScattered  = dot(reflected, N) > 0;
+      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+      specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
+
+      color += light_intensity * light.color.xyz * (difColor + specular) * attenuation;
+      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
+    }
+    else if(mat.illum == 4) // VIDRE
+    {
+      float NdotD     = dot( N, normalize(gl_WorldRayDirectionEXT) );
+			vec3 refrNormal = NdotD > 0.0 ? -N : N;
+			float refrEta   = NdotD > 0.0 ? 1 / mat.ior : mat.ior;
+			float cosine    = NdotD > 0.0 ? mat.ior * NdotD : -NdotD;
+
+			vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
+			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, mat.ior ) : 1;
+			
+			vec4 direction = rnd(prd.seed) < reflectProb ? vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : vec4(refracted, 1);
+      color += computeDiffuse(mat, N, L);
+      prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+    }
   }
-
-  // Return final color in the payload
-  //prd.colorAndDist = vec4(color, gl_HitTEXT);
-  prd.colorAndDist = vec4(color, gl_HitTEXT);
-  prd.origin = worldPos;
-
 }

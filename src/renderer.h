@@ -36,21 +36,6 @@ struct AccelerationStructure {
 	VkDeviceMemory				memory;
 };
 
-struct BlasInput {
-	VkAccelerationStructureGeometryKHR			asGeometry;
-	VkAccelerationStructureBuildRangeInfoKHR	asBuildRangeInfo;
-	uint32_t									nTriangles;
-};
-
-struct TlasInstance {
-	uint32_t					blasId{ 0 };		// Index of the BLAS
-	uint32_t					instanceId{ 0 };	// Instance index
-	uint32_t					hitGroupId{ 0 };	// Hit group index in the SBT
-	uint32_t					mask{ 0xFF };		// Visibility mask
-	VkGeometryInstanceFlagsKHR	flags{ VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR };
-	glm::mat4					transform{ glm::mat4(1) };	// Identity model matrix
-};
-
 constexpr unsigned int FRAME_OVERLAP = 2;
 
 class Renderer {
@@ -72,6 +57,7 @@ public:
 	// RASTERIZER VARIABLES -----------------------
 	VkRenderPass				_forwardRenderPass;
 	VkCommandPool				_commandPool;
+	VkCommandPool				_resetCommandPool;
 	VkDescriptorPool			_descriptorPool;
 
 	// Forward stuff
@@ -220,8 +206,6 @@ private:
 	void create_acceleration_structure(AccelerationStructure& accelerationStructure, 
 		VkAccelerationStructureTypeKHR type, 
 		VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
-
-	BlasInput object_to_geometry(const Object& model);
 
 	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 

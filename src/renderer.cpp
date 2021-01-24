@@ -4,6 +4,8 @@
 #include <vk_initializers.h>
 #include "window.h"
 
+extern std::vector<std::string> searchPaths;
+
 Renderer::Renderer()
 {
 	device		= &VulkanEngine::engine->_device;
@@ -43,7 +45,8 @@ Renderer::Renderer()
 	create_post_framebuffers();
 	create_post_descriptor();
 	create_post_pipeline();
-
+	
+	// VKRay
 	create_bottom_acceleration_structure();
 	create_top_acceleration_structure();
 	create_hybrid_descriptors();
@@ -76,15 +79,19 @@ void Renderer::init_commands()
 	}
 
 	VK_CHECK(vkCreateCommandPool(*device, &uploadCommandPoolInfo, nullptr, &_commandPool));
+	VK_CHECK(vkCreateCommandPool(*device, &commandPoolInfo, nullptr, &_resetCommandPool));
+
+	VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_resetCommandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	VK_CHECK(vkAllocateCommandBuffers(*device, &allocInfo, &_offscreenComandBuffer));
 
 	VkCommandBufferAllocateInfo cmdDeferredAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
-	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdDeferredAllocInfo, &_offscreenComandBuffer));
 	VkCommandBufferAllocateInfo cmdPostAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_rtCommandBuffer));
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_hybridCommandBuffer));
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyCommandPool(*device, _commandPool, nullptr);
+		vkDestroyCommandPool(*device, _resetCommandPool, nullptr);
 		});
 }
 
@@ -394,6 +401,12 @@ void Renderer::render()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
+	if (VulkanEngine::engine->_indexSwapchainImage > 1)
+	{
+		VK_CHECK(vkResetCommandBuffer(_offscreenComandBuffer, 0));
+		build_previous_command_buffer();
+	}
+
 	// First pass
 	VkSubmitInfo submit = {};
 	submit.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -509,6 +522,12 @@ void Renderer::rasterize_hybrid()
 
 	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
+	if (VulkanEngine::engine->_indexSwapchainImage > 1)
+	{
+		//VK_CHECK(vkResetCommandBuffer(_offscreenComandBuffer, 0));
+		build_previous_command_buffer();
+	}
+
 	// First pass
 	VkSubmitInfo submit = {};
 	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -562,7 +581,6 @@ void Renderer::render_gui(float dt)
 
 	ImGui::Begin("Debug window");
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	ImGui::Text("DT %.3f ms/frame %.1f FPS ", 1000.0 / dt,  dt);
 	for (auto& light : VulkanEngine::engine->_lights)
 	{
 		if (ImGui::TreeNode(&light, "Light")) {
@@ -813,29 +831,8 @@ void Renderer::init_descriptors()
 
 	vkCreateDescriptorSetLayout(*device, &set3Info, nullptr, &_textureDescriptorSetLayout);
 
-	// SKYBOX PASS --------------------
-	// Skybox set = 0
-	// binding single texture as skybox
-	VkDescriptorSetLayoutBinding skyBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
-	VkDescriptorSetLayoutBinding skyBufferBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 2);
-	
-	std::vector<VkDescriptorSetLayoutBinding> skyboxBindings = {
-		cameraBind,
-		skyBind,
-		skyBufferBind
-	};
-
-	VkDescriptorSetLayoutCreateInfo skyboxSetInfo = {};
-	skyboxSetInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	skyboxSetInfo.pNext			= nullptr;
-	skyboxSetInfo.bindingCount	= static_cast<uint32_t>(skyboxBindings.size());
-	skyboxSetInfo.pBindings		= skyboxBindings.data();
-	
-	vkCreateDescriptorSetLayout(*device, &skyboxSetInfo, nullptr, &_skyboxDescriptorSetLayout);
-	
 	// Once the layouts have been created, we allocate the descriptor sets
-
-	//VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	// First create necessary buffers
 	VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
 	const size_t sceneBufferSize		= VulkanEngine::engine->pad_uniform_buffer_size(sizeof(GPUSceneData));
 	VulkanEngine::engine->create_buffer(sceneBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_sceneBuffer);
@@ -875,17 +872,6 @@ void Renderer::init_descriptors()
 	objectInfo.offset = 0;
 	objectInfo.range  = sizeof(GPUObjectData) * MAX_OBJECTS;
 
-	VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _offscreenDescriptorSet, &cameraInfo, 0);
-	VkWriteDescriptorSet sceneWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, _offscreenDescriptorSet, &sceneInfo, 1);
-	VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _objectDescriptorSet, &objectInfo, 0);
-
-	std::vector<VkWriteDescriptorSet> writes = { 
-		cameraWrite, 
-		sceneWrite, 
-		objectWrite 
-	};
-
-	vkUpdateDescriptorSets(*device, writes.size(), writes.data(), 0, nullptr);
 
 	// Textures descriptor ---
 
@@ -913,12 +899,42 @@ void Renderer::init_descriptors()
 		imageInfos.push_back(imageBufferInfo);
 	}
 
+	VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _offscreenDescriptorSet, &cameraInfo, 0);
+	VkWriteDescriptorSet sceneWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, _offscreenDescriptorSet, &sceneInfo, 1);
+	VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _objectDescriptorSet, &objectInfo, 0);
 	uint32_t nTextures = static_cast<uint32_t>(VulkanEngine::engine->_textures.size());
-	VkWriteDescriptorSet write = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _textureDescriptorSet, imageInfos.data(), 0, nTextures);
+	VkWriteDescriptorSet texturesWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _textureDescriptorSet, imageInfos.data(), 0, nTextures);
 
-	vkUpdateDescriptorSets(*device, 1, &write, 0, nullptr);
+	std::vector<VkWriteDescriptorSet> writes = { 
+		cameraWrite, 
+		sceneWrite, 
+		objectWrite,
+		texturesWrite
+	};
 
-	// Skybox descriptor
+	vkUpdateDescriptorSets(*device, writes.size(), writes.data(), 0, nullptr);
+
+	//vkUpdateDescriptorSets(*device, 1, &write, 0, nullptr);
+
+	// SKYBOX DESCRIPTOR --------------------
+	// Skybox set = 0
+	// binding single texture as skybox and matrix to position the sphere around camera
+	VkDescriptorSetLayoutBinding skyBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	VkDescriptorSetLayoutBinding skyBufferBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 2);
+
+	std::vector<VkDescriptorSetLayoutBinding> skyboxBindings = {
+		cameraBind,	// binding = 0 camera info
+		skyBind,	// binding = 1 sky texture
+		skyBufferBind // binding = 2 sphere matrix
+	};
+
+	VkDescriptorSetLayoutCreateInfo skyboxSetInfo = {};
+	skyboxSetInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	skyboxSetInfo.pNext = nullptr;
+	skyboxSetInfo.bindingCount = static_cast<uint32_t>(skyboxBindings.size());
+	skyboxSetInfo.pBindings = skyboxBindings.data();
+
+	vkCreateDescriptorSetLayout(*device, &skyboxSetInfo, nullptr, &_skyboxDescriptorSetLayout);
 	
 	VkDescriptorSetAllocateInfo skyboxAllocInfo = {};
 	skyboxAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -953,6 +969,7 @@ void Renderer::init_descriptors()
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(skyboxWrites.size()), skyboxWrites.data(), 0, nullptr);
 	
+	// Destroy all objects created
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorPool(*device, _descriptorPool, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _offscreenDescriptorSetLayout, nullptr);
@@ -1042,11 +1059,11 @@ void Renderer::init_forward_pipeline()
 {
 	VulkanEngine* engine = VulkanEngine::engine;
 	VkShaderModule vertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/basic.vert.spv", &vertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str() , &vertexShader)) {
 		std::cout << "Could not load forward vertex shader!" << std::endl;
 	}
 	VkShaderModule fragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/forward.frag.spv", &fragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("forward.frag.spv", searchPaths, true).c_str(), &fragmentShader)) {
 		std::cout << "Could not load fragment vertex shader!" << std::endl;
 	}
 
@@ -1062,17 +1079,22 @@ void Renderer::init_forward_pipeline()
 	push_constant.stageFlags	= VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkPushConstantRange test_constant;
-	test_constant.offset = sizeof(int);
-	test_constant.size = sizeof(int);
-	test_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	test_constant.offset		= sizeof(int);
+	test_constant.size			= sizeof(material_matrix);
+	test_constant.stageFlags	= VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPushConstantRange matrix_constant;
+	matrix_constant.offset = 0;
+	matrix_constant.size = sizeof(glm::mat4);
+	matrix_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPushConstantRange constants[] = { push_constant, test_constant };
 
 	VkPipelineLayoutCreateInfo offscreenPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
 	offscreenPipelineLayoutInfo.setLayoutCount			= 3;
 	offscreenPipelineLayoutInfo.pSetLayouts				= offscreenSetLayouts;
-	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 2;
-	offscreenPipelineLayoutInfo.pPushConstantRanges		= constants;
+	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 1;
+	offscreenPipelineLayoutInfo.pPushConstantRanges		= &matrix_constant;
 
 	VK_CHECK(vkCreatePipelineLayout(*device, &offscreenPipelineLayoutInfo, nullptr, &_forwardPipelineLayout));
 
@@ -1100,7 +1122,7 @@ void Renderer::init_forward_pipeline()
 	pipBuilder._scissor.extent		= extent;
 
 	pipBuilder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
-	pipBuilder._multisampling = vkinit::multisample_state_create_info();
+	pipBuilder._multisampling		= vkinit::multisample_state_create_info();
 
 	_forwardPipeline = pipBuilder.build_pipeline(*device, _forwardRenderPass);
 
@@ -1120,27 +1142,27 @@ void Renderer::init_deferred_pipelines()
 	VulkanEngine* engine = VulkanEngine::engine;
 
 	VkShaderModule offscreenVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/basic.vert.spv", &offscreenVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str(), &offscreenVertexShader)) {
 		std::cout << "Could not load geometry vertex shader!" << std::endl;
 	}
 	VkShaderModule offscreenFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/geometry_shader.frag.spv", &offscreenFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("geometry_shader.frag.spv", searchPaths, true).c_str(), &offscreenFragmentShader)) {
 		std::cout << "Could not load geometry fragment shader!" << std::endl;
 	}
 	VkShaderModule deferredVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/quad.vert.spv", &deferredVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("quad.vert.spv", searchPaths, true).c_str(), &deferredVertexShader)) {
 		std::cout << "Could not load deferred vertex shader!" << std::endl;
 	}
 	VkShaderModule deferredFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/deferred.frag.spv", &deferredFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("deferred.frag.spv", searchPaths, true).c_str(), &deferredFragmentShader)) {
 		std::cout << "Could not load deferred fragment shader!" << std::endl;
 	}
 	VkShaderModule skyboxVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.vert.spv", &skyboxVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("skybox.vert.spv", searchPaths, true).c_str(), &skyboxVertexShader)) {
 		std::cout << "Could not load skybox vertex shader!" << std::endl;
 	}
 	VkShaderModule skyboxFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.frag.spv", &skyboxFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("/skybox.frag.spv", searchPaths, true).c_str(), &skyboxFragmentShader)) {
 		std::cout << "Could not load skybox fragment shader!" << std::endl;
 	}
 
@@ -1156,17 +1178,22 @@ void Renderer::init_deferred_pipelines()
 	push_constant.stageFlags	= VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkPushConstantRange test_constant;
-	test_constant.offset = sizeof(int);
-	test_constant.size = sizeof(int);
-	test_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	test_constant.offset		= sizeof(int);
+	test_constant.size			= sizeof(material_matrix);
+	test_constant.stageFlags	= VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPushConstantRange matrix_constant;
+	matrix_constant.offset = 0;
+	matrix_constant.size = sizeof(glm::mat4);
+	matrix_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPushConstantRange constants[] = { push_constant, test_constant };
 
 	VkPipelineLayoutCreateInfo offscreenPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
 	offscreenPipelineLayoutInfo.setLayoutCount			= 3;
 	offscreenPipelineLayoutInfo.pSetLayouts				= offscreenSetLayouts;
-	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 2;
-	offscreenPipelineLayoutInfo.pPushConstantRanges		= constants;
+	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 1;
+	offscreenPipelineLayoutInfo.pPushConstantRanges		= &matrix_constant;
 
 	VK_CHECK(vkCreatePipelineLayout(*device, &offscreenPipelineLayoutInfo, nullptr, &_offscreenPipelineLayout));
 
@@ -1339,7 +1366,7 @@ void Renderer::build_previous_command_buffer()
 {
 	if (_offscreenComandBuffer == VK_NULL_HANDLE)
 	{
-		VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_commandPool);
+		VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 		VK_CHECK(vkAllocateCommandBuffers(*device, &allocInfo, &_offscreenComandBuffer));
 	}
 
@@ -1369,7 +1396,7 @@ void Renderer::build_previous_command_buffer()
 	// Skybox pass
 	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipelineLayout, 0, 1, &_skyboxDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipeline);
-	Mesh* sphere = VulkanEngine::engine->get_mesh("sphere");
+	Mesh* sphere = Mesh::GET("sphere.obj");
 	vkCmdBindVertexBuffers(_offscreenComandBuffer, 0, 1, &sphere->_vertexBuffer._buffer, &offset);
 	vkCmdBindIndexBuffer(_offscreenComandBuffer, sphere->_indexBuffer._buffer, offset, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(_offscreenComandBuffer, static_cast<uint32_t>(sphere->_indices.size()), 1, 0, 0, 1);
@@ -1385,6 +1412,7 @@ void Renderer::build_previous_command_buffer()
 
 	Mesh* lastMesh = nullptr;
 
+	uint32_t instance = 0;
 	for (size_t i = 0; i < VulkanEngine::engine->_renderables.size(); i++)
 	{
 		Object* object = VulkanEngine::engine->_renderables[i];
@@ -1393,15 +1421,10 @@ void Renderer::build_previous_command_buffer()
 
 		int constant	= object->id;
 		int matIdx		= object->materialIdx;
-		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int), &constant);
-		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(int), sizeof(int), &matIdx);
+		//vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int), &constant);
+		//vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(int), sizeof(int), &matIdx);
 
-		if (lastMesh != object->mesh) {
-			vkCmdBindVertexBuffers(_offscreenComandBuffer, 0, 1, &object->mesh->_vertexBuffer._buffer, &offset);
-			vkCmdBindIndexBuffer(_offscreenComandBuffer, object->mesh->_indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT32);
-			lastMesh = object->mesh;
-		}
-		vkCmdDrawIndexed(_offscreenComandBuffer, static_cast<uint32_t>(object->mesh->_indices.size()), VulkanEngine::engine->_renderables.size(), 0, 0, i);
+		object->draw(_offscreenComandBuffer, _offscreenPipelineLayout, object->m_matrix);
 	}
 
 	vkCmdEndRenderPass(_offscreenComandBuffer);
@@ -1434,7 +1457,7 @@ void Renderer::build_deferred_command_buffer()
 
 	VkDeviceSize offset = { 0 };
 
-	Mesh* quad = VulkanEngine::engine->get_mesh("quad");
+	Mesh* quad = Mesh::get_quad();
 
 	vkCmdPushConstants(get_current_frame()._mainCommandBuffer, _finalPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &_constants);
 
@@ -1525,29 +1548,55 @@ void Renderer::recreate_renderer()
 void Renderer::create_bottom_acceleration_structure()
 {
 	std::vector<BlasInput> allBlas; 
-	allBlas.reserve(VulkanEngine::engine->_renderables.size());
+
 	for (Object* obj : VulkanEngine::engine->_renderables) {
-		BlasInput input = object_to_geometry(*obj);
-		allBlas.push_back(input);
+		if (obj->mesh) {
+			allBlas.push_back(obj->mesh->mesh_to_geometry());
+		}
+		else {
+			std::vector<BlasInput> blasNodes = obj->prefab->gltf_to_geometry();
+			allBlas.insert(allBlas.end(), blasNodes.begin(), blasNodes.end());
+		}
 	}
 
-	buildBlas(allBlas);
+ 	buildBlas(allBlas);
 }
 
+// ---------------------------------------------------------------------------------------
+// Create all the TLAS
+// - Go through all meshes in the scene and convert them to Instances (holds matrices)
+// - Build as many Instances as BlasInput (geometries defined in the scene) and pass them to build the TLAS
 void Renderer::create_top_acceleration_structure()
 {
-	uint32_t nInstances = static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
-
-	_tlas.reserve(nInstances);
-
-	for (uint32_t i = 0; i < nInstances; i++)
+	int instanceIndex = 0;
+	for (auto& entity : VulkanEngine::engine->_renderables)
 	{
-		Object *node = VulkanEngine::engine->_renderables[i];
-		TlasInstance instance{};
-		instance.transform	= node->m_matrix;
-		instance.blasId		= i;
-		instance.instanceId = i;	// gl_InstanceCustomIndexEXT
-		_tlas.emplace_back(instance);
+		// obj instance
+		if (entity->mesh)
+		{
+			TlasInstance instance{};
+			instance.transform	= entity->m_matrix;
+			instance.blasId		= instanceIndex;
+			instance.instanceId = instanceIndex;
+			_tlas.emplace_back(instance);
+			instanceIndex++;
+		}
+		else // gltf instance
+		{
+			for(Node& node : entity->prefab->_nodes)
+			{
+				std::vector<TlasInstance> node_instances = node.node_to_instance(instanceIndex, entity->m_matrix);
+				_tlas.insert(_tlas.end(), node_instances.begin(), node_instances.end());
+				if (!node._children.empty())
+				{
+					for (Node* n : node._children)
+					{
+						std::vector<TlasInstance> child_instances = n->node_to_instance(instanceIndex, entity->m_matrix);
+						_tlas.insert(_tlas.end(), child_instances.begin(), child_instances.end());
+					}
+				}
+			}
+		}
 	}
 
 	buildTlas(_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
@@ -1682,8 +1731,8 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 
 	ScratchBuffer scratchBuffer = VulkanEngine::engine->createScratchBuffer(asBuildSizesInfo.buildScratchSize);
 
-	asBuildGeometryInfo.dstAccelerationStructure = _topLevelAS.handle;
-	asBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+	asBuildGeometryInfo.dstAccelerationStructure	= _topLevelAS.handle;
+	asBuildGeometryInfo.scratchData.deviceAddress	= scratchBuffer.deviceAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
 	asBuildRangeInfo.primitiveCount		= static_cast<uint32_t>(instances.size());
@@ -1746,48 +1795,6 @@ void Renderer::create_acceleration_structure(AccelerationStructure& acceleration
 		vkDestroyBuffer(*device, accelerationStructure.buffer, nullptr);
 		vkDestroyAccelerationStructureKHR(VulkanEngine::engine->_device, accelerationStructure.handle, nullptr);
 		});
-}
-
-// Use information from the model mesh passed to fill in all geometry information
-BlasInput Renderer::object_to_geometry(const Object& model)
-{
-	VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
-	VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
-
-	vertexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(model.mesh->_vertexBuffer._buffer);
-	indexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(model.mesh->_indexBuffer._buffer);
-
-	const uint32_t nTriangles = model.mesh->_indices.size() / 3;
-
-	// Set the triangles geometry
-	VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
-	triangles.sType						= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-	triangles.pNext						= nullptr;
-	triangles.vertexFormat				= VK_FORMAT_R32G32B32_SFLOAT;
-	triangles.vertexData				= vertexBufferDeviceAddress;
-	triangles.vertexStride				= sizeof(Vertex);
-	triangles.maxVertex					= static_cast<uint32_t>(model.mesh->_vertices.size());
-	triangles.indexData					= indexBufferDeviceAddress;
-	triangles.indexType					= VK_INDEX_TYPE_UINT32;
-
-	VkAccelerationStructureGeometryKHR asGeometry = vkinit::acceleration_structure_geometry_khr();
-	asGeometry.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
-	asGeometry.geometryType				= VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-	asGeometry.geometry.triangles		= triangles;
-
-	VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
-	asBuildRangeInfo.primitiveCount		= nTriangles;
-	asBuildRangeInfo.primitiveOffset	= 0;
-	asBuildRangeInfo.firstVertex		= 0;
-	asBuildRangeInfo.transformOffset	= 0;
-
-	// Store all info in the BlasInput structure to be returned
-	BlasInput input;
-	input.asBuildRangeInfo				= asBuildRangeInfo;
-	input.asGeometry					= asGeometry;
-	input.nTriangles					= nTriangles;
-
-	return input;
 }
 
 // Pass the information from our instance to the vk instance to function in the TLAS
@@ -1909,30 +1916,34 @@ void Renderer::create_rt_descriptors()
 	std::vector<VkDescriptorBufferInfo> sceneIdxDescInfo;
 	for (Object* obj : VulkanEngine::engine->_renderables)
 	{
+		std::vector<Vertex> vertices = obj->mesh ? obj->mesh->_vertices : obj->prefab->_mesh->_vertices;
+		std::vector<uint32_t> indices = obj->mesh ? obj->mesh->_indices : obj->prefab->_mesh->_indices;
+		size_t vertexBufferSize = sizeof(rtVertexAttribute) * vertices.size();
+		size_t indexBufferSize = sizeof(uint32_t) * indices.size();
 		AllocatedBuffer vBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
+		VulkanEngine::engine->create_buffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
 		std::vector<rtVertexAttribute> vAttr;
-		vAttr.reserve(obj->mesh->_vertices.size());
-		for (Vertex& v : obj->mesh->_vertices) {
+		vAttr.reserve(vertices.size());
+		for (Vertex& v : vertices) {
 			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation, &vdata);
-		memcpy(vdata, vAttr.data(), sizeof(rtVertexAttribute) * obj->mesh->_vertices.size());
+		memcpy(vdata, vAttr.data(), vertexBufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
 		vertexBufferDescriptor.buffer	= vBuffer._buffer;
 		vertexBufferDescriptor.offset	= 0;
-		vertexBufferDescriptor.range	= sizeof(rtVertexAttribute) * obj->mesh->_vertices.size();
+		vertexBufferDescriptor.range	= vertexBufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer	= obj->mesh->_indexBuffer._buffer;
+		indexBufferDescriptor.buffer	= obj->mesh ? obj->mesh->_indexBuffer._buffer : obj->prefab->_mesh->_indexBuffer._buffer;
 		indexBufferDescriptor.offset	= 0;
-		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->mesh->_indices.size();
+		indexBufferDescriptor.range		= indexBufferSize;
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		AllocatedBuffer matrixBuffer;
@@ -2033,6 +2044,8 @@ void Renderer::create_rt_descriptors()
 
 void Renderer::init_raytracing_pipeline()
 {
+	VulkanEngine* engine = VulkanEngine::engine;
+
 	// Setup ray tracing shader groups
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages = {};
 	std::vector<VkPipelineShaderStageCreateInfo> hybridShaderStages = {};
@@ -2040,8 +2053,8 @@ void Renderer::init_raytracing_pipeline()
 	// Ray generation group
 	VkShaderModule rayGenModule, hraygenModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/raygen.rgen.spv", &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/hybridRaygen.rgen.spv", &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("raygen.rgen.spv", searchPaths, true).c_str(), &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridRaygen.rgen.spv", searchPaths, true).c_str(), &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2057,8 +2070,8 @@ void Renderer::init_raytracing_pipeline()
 	// Miss group
 	VkShaderModule missModule, hmissModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/miss.rmiss.spv", &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/miss.rmiss.spv", &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2074,8 +2087,8 @@ void Renderer::init_raytracing_pipeline()
 	// Shadow miss
 	VkShaderModule shadowModule, hshadowModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/shadow.rmiss.spv", &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/shadow.rmiss.spv", &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2092,8 +2105,8 @@ void Renderer::init_raytracing_pipeline()
 	// Hit group
 	VkShaderModule hitModule, hhitModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/closesthit.rchit.spv", &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/hybridHit.rchit.spv", &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("closesthit.rchit.spv", searchPaths, true).c_str(), &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridHit.rchit.spv", searchPaths, true).c_str(), &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2354,10 +2367,10 @@ void Renderer::create_post_pipeline()
 {
 	// First of all load the shader modules and store them in the builder
 	VkShaderModule postVertexShader, postFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/postVertex.vert.spv", &postVertexShader)) {
+	if (!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postVertex.vert.spv", searchPaths, true).c_str(), &postVertexShader)) {
 		std::cout << "Post vertex failed to load" << std::endl;
 	}
-	if(!VulkanEngine::engine->load_shader_module("data/shaders/output/postFragment.frag.spv", &postFragmentShader)){
+	if(!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postFragment.frag.spv", searchPaths, true).c_str(), &postFragmentShader)){
 		std::cout << "Post fragment failed to load" << std::endl;
 	}
 
@@ -2482,7 +2495,7 @@ void Renderer::build_post_command_buffers()
 
 	VkDeviceSize offset = { 0 };
 
-	Mesh* quad = VulkanEngine::engine->get_mesh("quad");
+	Mesh* quad = Mesh::get_quad();
 
 	vkCmdBindDescriptorSets(get_current_frame()._mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipelineLayout, 0, 1, &get_current_frame().postDescriptorSet, 0, nullptr);
 	vkCmdBindVertexBuffers(get_current_frame()._mainCommandBuffer, 0, 1, &quad->_vertexBuffer._buffer, &offset);
@@ -2625,29 +2638,31 @@ void Renderer::create_hybrid_descriptors()
 	for (Object* obj : VulkanEngine::engine->_renderables)
 	{
 		AllocatedBuffer vBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
+		size_t bufferSize = sizeof(rtVertexAttribute) * (obj->mesh ? obj->mesh->_vertices.size() : obj->prefab->_mesh->_vertices.size());
+		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
 		std::vector<rtVertexAttribute> vAttr;
-		vAttr.reserve(obj->mesh->_vertices.size());
-		for (Vertex& v : obj->mesh->_vertices) {
+		std::vector<Vertex> vertices = obj->mesh ? obj->mesh->_vertices : obj->prefab->_mesh->_vertices;
+		vAttr.reserve(vertices.size());
+		for (Vertex& v : vertices) {
 			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation, &vdata);
-		memcpy(vdata, vAttr.data(), sizeof(rtVertexAttribute) * obj->mesh->_vertices.size());
+		memcpy(vdata, vAttr.data(), bufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer = vBuffer._buffer;
-		vertexBufferDescriptor.offset = 0;
-		vertexBufferDescriptor.range = sizeof(rtVertexAttribute) * obj->mesh->_vertices.size();
+		vertexBufferDescriptor.buffer	= vBuffer._buffer;
+		vertexBufferDescriptor.offset	= 0;
+		vertexBufferDescriptor.range	= bufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer = obj->mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset = 0;
-		indexBufferDescriptor.range = sizeof(uint32_t) * obj->mesh->_indices.size();
+		indexBufferDescriptor.buffer	= obj->mesh ? obj->mesh->_indexBuffer._buffer : obj->prefab->_mesh->_indexBuffer._buffer;
+		indexBufferDescriptor.offset	= 0;
+		indexBufferDescriptor.range		= sizeof(uint32_t) * (obj->mesh ? obj->mesh->_indices.size() : obj->prefab->_mesh->_indices.size());
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		AllocatedBuffer matrixBuffer;
