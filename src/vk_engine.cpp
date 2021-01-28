@@ -23,12 +23,13 @@ VulkanEngine::VulkanEngine()
 
 void VulkanEngine::init()
 {
-	_mode =	RAYTRACING;
+	_mode =	DEFERRED;
 
 	_window->init("Vulkan Pinut", 1700, 900);
 
 	searchPaths = {
 		"data/shaders/output",
+		"data",
 		"data/meshes",
 		"data/textures"
 	};
@@ -107,23 +108,7 @@ void VulkanEngine::run()
 
 		update(dt);
 
-		/*
-		std::srand(lastFrame);
-
-		double r1 = (double)std::rand() / RAND_MAX;
-		double r2 = (double)std::rand() / RAND_MAX;
-
-		glm::vec3 out = uniformSamplerCone(r1, r2, std::cos(10));
-		std::cout << "R1: " << r1 << " R2: " << r2 << std::endl;
-		std::cout << out.x << " " << out.y << " " << out.z << std::endl;
-		*/
-
-		float fps = _frameNumber / (SDL_GetTicks() / 1000.f);
-		double time = SDL_GetTicks() / 1000.0;
-
-		//std::cout << _frameNumber << " " << time << " " << _frameNumber / time << std::endl;
-
-		renderer->render_gui(fps);
+		renderer->render_gui();
 		switch (_mode)
 		{
 		case FORWARD_RENDER:
@@ -173,32 +158,6 @@ void VulkanEngine::update(const float dt)
 	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
 	memcpy(data, &cameraData, sizeof(GPUCameraData));
 	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
-
-	// Copy scene data to the buffer
-	float framed = (_frameNumber / 120.f);
-	_sceneParameters.ambientColor = { sin(framed), 0, cos(framed), 1 };
-
-	char* sceneData;
-	vmaMapMemory(_allocator, _sceneBuffer._allocation, (void**)&sceneData);
-
-	sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData));
-
-	memcpy(sceneData, &_sceneParameters, sizeof(GPUSceneData));
-	vmaUnmapMemory(_allocator, _sceneBuffer._allocation);
-
-	// Copy matrices to the buffer
-	void* objData;
-	vmaMapMemory(_allocator, _objectBuffer._allocation, &objData);
-
-	GPUObjectData* objectSSBO = (GPUObjectData*)objData;
-
-	for (int i = 0; i < _renderables.size(); i++)
-	{
-		Object *object = _renderables[i];
-		objectSSBO[i].modelMatrix = object->m_matrix;
-	}
-
-	vmaUnmapMemory(_allocator, _objectBuffer._allocation);
 	
 	// copy ray tracing camera, it need the inverse
 	RTCameraData rtCamera;
@@ -611,7 +570,7 @@ void VulkanEngine::init_upload_commands()
 
 void VulkanEngine::init_scene()
 {
-	_camera = new Camera(glm::vec3(0, 5, -10));
+	_camera = new Camera(glm::vec3(0, 5, 10));
 
 	Light *light = new Light();
 	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, -10));
@@ -672,21 +631,24 @@ void VulkanEngine::init_scene()
 	_MtlMaterials["glass"]		= glass;
 	_MtlMaterials["redSimple"]	= redSimple;
 	
+	Prefab* p_duck = Prefab::GET("duck.gltf");
+	Prefab* p_sphere = Prefab::GET("sphere.obj");
+	Prefab* p_quad = new Prefab();
+	p_quad->_materials.push_back(GltfMaterial());
+	p_quad->_materials[0].diffuseTexture = Texture::get_id("asphalt.png");
+	p_quad->_mesh = Mesh::get_quad();
+	Prefab* p_cube = new Prefab();
+	p_cube->_mesh = Mesh::get_cube();
+
 	Object* monkey = new Object();
-	monkey->mesh			= Mesh::GET("monkey_smooth.obj");
 	monkey->material		= get_material("offscreen");
 	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -8));
 	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
 	monkey->m_matrix		= translation * scale;
 	monkey->materialIdx		= get_materialId("simple");
 	
-	Object* empire = new Object();
-	empire->mesh			= Mesh::GET("empire.obj");
-	empire->material		= get_material("offscreen");
-	empire->id				= get_textureId("empire");
-
 	Object* quad = new Object();
-	quad->mesh				= Mesh::get_quad();
+	quad->prefab			= p_quad;
 	quad->material			= get_material("offscreen");
 	quad->m_matrix			= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
 		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
@@ -695,74 +657,73 @@ void VulkanEngine::init_scene()
 	quad->id				= get_textureId("asphalt");
 
 	Object* cube = new Object();
-	cube->mesh				= Mesh::get_cube();
+	cube->prefab			= p_cube;
 	cube->material			= get_material("offscreen");
 	cube->m_matrix			= glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
 	cube->materialIdx		= get_materialId("redSimple");
 
 	Object* sphere = new Object();
-	sphere->mesh			= Mesh::GET("sphere.obj");
+	sphere->prefab			= p_sphere;
 	sphere->material		= get_material("offscreen");
 	sphere->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
 	sphere->materialIdx		= get_materialId("gold");
 
 	Object* sphere2 = new Object();
-	sphere2->mesh			= Mesh::GET("sphere.obj");
+	sphere2->prefab			= p_sphere;
 	sphere2->material		= get_material("offscreen");
 	sphere2->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -15));
 	sphere2->materialIdx	= get_materialId("glass");
 
 	Object* sphere3 = new Object();
-	sphere3->mesh			= Mesh::GET("sphere.obj");
+	sphere3->prefab			= p_sphere;
 	sphere3->material		= get_material("offscreen");
 	sphere3->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(5, 5, -15));
 	sphere3->materialIdx	= get_materialId("simple");
 	//sphere3->id = get_textureId("asphalt");
 
 	Object* mirror = new Object();
-	mirror->mesh			= Mesh::get_cube();
+	mirror->prefab			= p_cube;
 	mirror->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(0, 0, -20)) *
 		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
 	mirror->materialIdx		= get_materialId("metal");
 
 	Object* mirror2 = new Object();
-	mirror2->mesh			= Mesh::get_cube();
+	mirror2->prefab			= p_cube;
 	mirror2->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
 		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
 	mirror2->materialIdx	= get_materialId("metal");
 
-	Object* car = new Object();
-	car->prefab = Prefab::GET("scene.gltf");
-	car->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -30))
-		* glm::scale(glm::mat4(1), glm::vec3(0.1));
+	//Object* car = new Object();
+	//car->prefab = Prefab::GET("CesiumMilkTruck.gltf");
+	//car->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -30));
+		//* glm::scale(glm::mat4(1), glm::vec3(0.1));
 
-	Object* helmet = new Object();
-	helmet->prefab = Prefab::GET("FlightHelmet.gltf");
-	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-30, 10, -30))
-		* glm::scale(glm::mat4(1), glm::vec3(5));;
+	//Object* helmet = new Object();
+	//helmet->prefab = Prefab::GET("FlightHelmet.gltf");
+	//helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-30, 10, -30))
+	//	* glm::scale(glm::mat4(1), glm::vec3(5));;
 
 	Object* duck = new Object();
-	duck->prefab = Prefab::GET("duck.gltf");
-	duck->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -20)) *
-		glm::scale(glm::mat4(1), glm::vec3(0.5));
+	duck->prefab = p_duck;
+	duck->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 0, -20));
 
 	Object* cornell = new Object();
 	cornell->prefab = Prefab::GET("cornellBox.gltf");
 	cornell->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -30));		
 
 	//_renderables.push_back(empire);
-	//_renderables.push_back(sphere);
+	_renderables.push_back(sphere);
 	//_renderables.push_back(sphere2);
 	//_renderables.push_back(sphere3);
-	_renderables.push_back(monkey);
-	_renderables.push_back(cube);
+	//_renderables.push_back(monkey);
+	//_renderables.push_back(cube);
 	_renderables.push_back(quad);
+	_renderables.push_back(duck);
 	//_renderables.push_back(mirror);
 	//_renderables.push_back(mirror2);
 	//_renderables.push_back(car);
 	//_renderables.push_back(helmet);
 	_renderables.push_back(cornell);
-	//_renderables.push_back(duck);
 }
 
 void VulkanEngine::init_imgui()
@@ -823,137 +784,10 @@ void VulkanEngine::init_imgui()
 
 void VulkanEngine::load_images()
 {
-	Texture white;
-	vkutil::load_image_from_file(*this, "data/textures/whiteTexture.png", white.image);
-	Texture black;
-	vkutil::load_image_from_file(*this, "data/textures/blackTexture.png", black.image);
-	//Texture lostEmpire;
-	//vkutil::load_image_from_file(*this, "data/textures/lost_empire-RGBA.png", lostEmpire.image);
-	Texture asphalt;
-	vkutil::load_image_from_file(*this, "data/textures/asphalt.png", asphalt.image);
-	vkutil::load_image_from_file(*this, "data/textures/woods.jpg", _skyboxTexture.image);
-
-	VkImageViewCreateInfo whiteImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, white.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VkImageViewCreateInfo blackImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, black.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	//VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, lostEmpire.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VkImageViewCreateInfo asphaltImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, asphalt.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VkImageViewCreateInfo woodsImageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, _skyboxTexture.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-
-	vkCreateImageView(_device, &whiteImageInfo, nullptr, &white.imageView);
-	vkCreateImageView(_device, &blackImageInfo, nullptr, &black.imageView);
-	//vkCreateImageView(_device, &imageInfo, nullptr, &lostEmpire.imageView);
-	vkCreateImageView(_device, &asphaltImageInfo, nullptr, &asphalt.imageView);
-	vkCreateImageView(_device, &woodsImageInfo, nullptr, &_skyboxTexture.imageView);
-
-	_textures["white"]		= white;
-	_textures["black"]		= black;
-	//_textures["empire"] = lostEmpire;
-	_textures["asphalt"]	= asphalt;
-	_textures["skybox"]		= _skyboxTexture;
-
-	_mainDeletionQueue.push_function([=]() {
-		vkDestroyImageView(_device, white.imageView, nullptr);
-		vkDestroyImageView(_device, black.imageView, nullptr);
-		//vkDestroyImageView(_device, lostEmpire.imageView, nullptr);
-		vkDestroyImageView(_device, asphalt.imageView, nullptr);
-		vkDestroyImageView(_device, _skyboxTexture.imageView, nullptr);
-	});
-}
-
-void VulkanEngine::create_vertex_buffer(Mesh& mesh)
-{
-	const size_t bufferSize = mesh._vertices.size() * sizeof(Vertex);
-
-	VkBufferCreateInfo stagingBufferInfo = vkinit::buffer_create_info(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
-	VmaAllocationCreateInfo vmaAllocInfo = {};
-	vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-
-	AllocatedBuffer stagingBuffer;
-
-	VK_CHECK(vmaCreateBuffer(_allocator,
-		&stagingBufferInfo, &vmaAllocInfo,
-		&stagingBuffer._buffer,
-		&stagingBuffer._allocation,
-		nullptr));
-
-	// Copy Vertex data
-	void* data;
-	vmaMapMemory(_allocator, stagingBuffer._allocation, &data);
-	memcpy(data, mesh._vertices.data(), bufferSize);
-	vmaUnmapMemory(_allocator, stagingBuffer._allocation);
-
-	VkBufferCreateInfo vertexBufferInfo = vkinit::buffer_create_info(bufferSize,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-	VK_CHECK(vmaCreateBuffer(_allocator, &vertexBufferInfo, &vmaAllocInfo,
-		&mesh._vertexBuffer._buffer,
-		&mesh._vertexBuffer._allocation,
-		nullptr));
-
-	// Copy vertex data
-	immediate_submit([=](VkCommandBuffer cmd) {
-		VkBufferCopy copy;
-		copy.dstOffset = 0;
-		copy.srcOffset = 0;
-		copy.size = bufferSize;
-		vkCmdCopyBuffer(cmd, stagingBuffer._buffer, mesh._vertexBuffer._buffer, 1, &copy);
-		});
-
-	_mainDeletionQueue.push_function([=]() {
-		vmaDestroyBuffer(VulkanEngine::engine->_allocator, mesh._vertexBuffer._buffer, mesh._vertexBuffer._allocation);
-		});
-
-	vmaDestroyBuffer(VulkanEngine::engine->_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
-
-}
-
-void VulkanEngine::create_index_buffer(Mesh& mesh)
-{
-	const size_t bufferSize = mesh._indices.size() * sizeof(uint32_t);
-	VkBufferCreateInfo stagingBufferInfo = vkinit::buffer_create_info(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
-	VmaAllocationCreateInfo vmaAllocInfo = {};
-	vmaAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-
-	AllocatedBuffer stagingBuffer;
-
-	VK_CHECK(vmaCreateBuffer(_allocator, &stagingBufferInfo, &vmaAllocInfo,
-		&stagingBuffer._buffer,
-		&stagingBuffer._allocation,
-		nullptr));
-
-	void* data;
-	vmaMapMemory(_allocator, stagingBuffer._allocation, &data);
-	memcpy(data, mesh._indices.data(), mesh._indices.size() * sizeof(uint32_t));
-	vmaUnmapMemory(_allocator, stagingBuffer._allocation);
-
-	vmaAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-
-	VkBufferCreateInfo indexBufferInfo = vkinit::buffer_create_info(bufferSize,
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-	VK_CHECK(vmaCreateBuffer(_allocator, &indexBufferInfo, &vmaAllocInfo,
-		&mesh._indexBuffer._buffer,
-		&mesh._indexBuffer._allocation,
-		nullptr));
-
-	// Copy index data
-	immediate_submit([=](VkCommandBuffer cmd) {
-		VkBufferCopy copy;
-		copy.dstOffset = 0;
-		copy.srcOffset = 0;
-		copy.size = bufferSize;
-		vkCmdCopyBuffer(cmd, stagingBuffer._buffer, mesh._indexBuffer._buffer, 1, &copy);
-		});
-
-	_mainDeletionQueue.push_function([=]() {
-		vmaDestroyBuffer(VulkanEngine::engine->_allocator, mesh._indexBuffer._buffer, mesh._indexBuffer._allocation);
-		});
-
-	vmaDestroyBuffer(VulkanEngine::engine->_allocator, stagingBuffer._buffer, stagingBuffer._allocation);
+	//Texture::GET("whiteTexture.png");
+	//Texture::GET("blackTexture.png");
+	//Texture::GET("asphalt.png");
+	//Texture::GET("woods.jpg");
 }
 
 void VulkanEngine::create_attachment(VkFormat format, VkImageUsageFlagBits usage, Texture* texture)

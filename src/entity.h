@@ -48,7 +48,6 @@ public:
 class Object : public Entity
 {
 public:
-	Mesh*			mesh;
 	Prefab*			prefab;
 	Material*		material;
 	int				materialIdx{ 0 };
@@ -57,7 +56,7 @@ public:
 	Object(glm::vec3 position = glm::vec3(0), Mesh* mesh = NULL, Material* material = NULL);
 
 	void update() {};
-	void setColor(glm::vec3 color);
+	void setColor(glm::vec3 color) {};
 	void draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4 model);
 };
 

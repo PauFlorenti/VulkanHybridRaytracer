@@ -5,6 +5,10 @@
 
 #include "stb_image.h"
 
+extern std::vector<std::string> searchPaths;
+//std::map<std::string, Texture*> Texture::_textures;
+std::vector<std::pair<std::string, Texture*>> Texture::_textures;
+
 bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, AllocatedImage& outImage)
 {
 	int texWidth, textHeight, texChannels;
@@ -200,3 +204,50 @@ bool vkutil::load_cubemap(VulkanEngine& engine, const char* filename, const VkFo
 
 }
 */
+
+bool isInVector(const std::string name, const std::pair<std::string, Texture*> textures)
+{
+	return textures.first == name;
+}
+
+Texture* Texture::GET(const char* filename)
+{
+	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
+
+	for (auto& tex : Texture::_textures)
+	{
+		if (std::get<0>(tex) == name)
+		{
+			return std::get<1>(tex);
+		}
+	}
+
+	Texture* t = new Texture();
+	vkutil::load_image_from_file(*VulkanEngine::engine, name.c_str(), t->image);
+
+	VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, t->image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	vkCreateImageView(VulkanEngine::engine->_device, &imageInfo, nullptr, &t->imageView);
+
+	_textures.push_back({ name, t });
+
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=](){
+		vkDestroyImageView(VulkanEngine::engine->_device, t->imageView, nullptr);
+		});
+
+	return t;
+}
+
+int Texture::get_id(const char* filename)
+{
+	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
+
+	for (int i = 0; i < Texture::_textures.size(); i++)
+	{
+		if (Texture::_textures.at(i).first == name)
+			return i;
+	}
+
+	GET(name.c_str());
+
+	return Texture::_textures.size() - 1;
+}

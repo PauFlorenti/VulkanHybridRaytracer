@@ -7,6 +7,8 @@
 #include <glm/glm/vec3.hpp>
 #include <glm/glm/mat4x4.hpp>
 
+#include <vk_textures.h>
+
 struct VertexInputDescription{
 	std::vector<VkVertexInputBindingDescription> bindings;
 	std::vector<VkVertexInputAttributeDescription> attributes;
@@ -50,6 +52,28 @@ struct TlasInstance {
 	glm::mat4					transform{ glm::mat4(1) };	// Identity model matrix
 };
 
+struct GltfMaterial
+{
+	int shadingModel{ 0 }; // 0: metallic-roughnes, 1: specular-glossines
+
+	// PBR Metallic-Roughness
+	glm::vec4 diffuseColor = glm::vec4(1);
+	float metallicFactor{ 1.f };
+	float roughnessFactor{ 1.f };
+	int diffuseTexture{ -1 };
+	int metallicRoughnessTexture{ -1 };
+
+	int emissiveTexture{ -1 };
+	int normalTexture{ -1 };
+};
+
+struct GPUMaterial
+{
+	glm::vec4 diffuseColor;
+	glm::vec4 textures;
+	glm::vec4 shadingMetallicRoughness;
+};
+
 struct material_matrix {
 	glm::mat4 matrix;
 	int material;
@@ -59,7 +83,7 @@ struct Primitive
 {
 	uint32_t firstIndex{ 0 };
 	uint32_t indexCount{ 0 };
-	uint32_t vertexOffset{ 0 };
+	uint32_t firstVertex{ 0 };
 	uint32_t vertexCount{ 0 };
 	int32_t materialIndex;
 };
@@ -103,14 +127,11 @@ public:
 	glm::mat4				_global_matrix;
 	int						_materialId;
 
-	Node() {};
-
 	void addChild(Node* child);
 	glm::mat4 getGlobalMatrix(bool fast = false);
 	std::vector<BlasInput> node_to_geometry(
 		const VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress, 
 		const VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress);
-	std::vector<TlasInstance> node_to_instance(int& instanceId, const glm::mat4 matrix);
 
 };
 
@@ -119,27 +140,40 @@ namespace tinygltf {
 	class Model;
 };
 
+struct gltfNode
+{
+	glm::mat4 matrix;
+	int primMesh{ 0 };
+};
+
 class Prefab
 {
 public:
-	std::string				_name;
-	std::vector<Node>		_nodes;
+	static std::unordered_map<std::string, Prefab*> _prefabsMap;
 
-	Mesh* _mesh;
+	std::string					_name;
+	std::vector<Node*>			_nodes;
+	std::vector<gltfNode>		_gltfNodes;
+	std::vector<Primitive>		_primitives;
+	std::vector<GltfMaterial>	_materials;
 
-	Prefab() { _mesh = new Mesh(); }
-
+	Mesh*						_mesh = NULL;
+	
 	static Prefab* GET(std::string filename);
 	void draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4& model);
-	std::vector<BlasInput> gltf_to_geometry();
+	BlasInput primitive_to_geometry(const Primitive& prim);
 
 private:
 
-	void loadNode(	const tinygltf::Node& inputNode,
-					const tinygltf::Model& input,
-					Node* parent,
-					std::vector<uint32_t>& indexBuffer,
-					std::vector<Vertex>& vertexBuffer);
-	void loadMaterials(const tinygltf::Model& tmodel);
+	std::unordered_map<int, std::vector<uint32_t>> _meshToPrimMeshes;
+
+	void loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent);
+	void importNode(const tinygltf::Model& inputModel);
+	void importMaterials(const tinygltf::Model& tmodel);
+	void importTextures(const tinygltf::Model& tmodel);
+	void processMesh(const tinygltf::Model& tmodel);
+	void processNode(const tinygltf::Model& tmodel, int& nodeIdx, const glm::mat4 parent_matrix);
 	void drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node node, glm::mat4& model);
+	void drawGltfNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, gltfNode node, glm::mat4& model);
+	glm::mat4 get_local_matrix(const tinygltf::Node& tnode);
 };

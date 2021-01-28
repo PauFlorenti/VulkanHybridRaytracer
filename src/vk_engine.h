@@ -220,10 +220,6 @@ public:
 
 	uint32_t getBufferDeviceAddress(VkBuffer buffer);
 
-	void create_vertex_buffer(Mesh& mesh);
-
-	void create_index_buffer(Mesh& mesh);
-
 	ScratchBuffer createScratchBuffer(VkDeviceSize size);
 
 	uint32_t get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags flags, VkBool32* memTypeFound = nullptr);

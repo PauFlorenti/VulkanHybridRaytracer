@@ -20,6 +20,7 @@ layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec3 outColor;
 layout(location = 3) out vec2 outUV;
 layout(location = 4) out float outMat;
+layout(location = 5) out mat4 outMatrix;
 
 struct ObjectData{
 	mat4 model;
@@ -32,17 +33,6 @@ layout(set = 0, binding = 0) uniform CameraBuffer
 	mat4 projection;
 } cameraData;
 
-// Set 1 - Object info, matrices at the moment
-layout(std140, set = 1, binding = 0) readonly buffer ObjectBuffer{
-	ObjectData objects[];
-}objectBuffer;
-
-//layout(push_constant) uniform constants
-//{
-//	layout(offset = 16)mat4 matrix;
-//    int matIdx;
-//}pushC;
-
 layout(push_constant) uniform constants
 {
 	mat4 matrix;
@@ -50,8 +40,7 @@ layout(push_constant) uniform constants
 
 void main()
 {
-	//mat4 modelMatrix 			= objectBuffer.objects[gl_BaseInstance].model;
-	mat4 transformationMatrix 	= cameraData.projection * cameraData.view * pushC.matrix; //modelMatrix;
+	mat4 transformationMatrix 	= cameraData.projection * cameraData.view * pushC.matrix;
 	gl_Position 				=  transformationMatrix * vec4(inPosition, 1.0);
 
 	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
@@ -59,4 +48,5 @@ void main()
 	outNormal 	= vec3(vec4(inNormal, 1.0) * pushC.matrix).xyz;
     outUV 		= inUV;
 	outMat 		= 0; //float(pushC.matIdx) / 10;
+	outMatrix = pushC.matrix;
 }

@@ -3,6 +3,7 @@
 #include <glm/glm/glm.hpp>
 
 #include "entity.h"
+#include "vk_textures.h"
 
 struct FrameData
 {
@@ -22,11 +23,6 @@ struct FrameData
 struct pushConstants {
 	glm::vec4 data;
 	glm::mat4 render_matrix;
-};
-
-struct Texture {
-	AllocatedImage  image;
-	VkImageView		imageView;
 };
 
 struct AccelerationStructure {
@@ -158,7 +154,7 @@ public:
 
 	void rasterize_hybrid();
 
-	void render_gui(float dt);
+	void render_gui();
 
 	void init_commands();
 

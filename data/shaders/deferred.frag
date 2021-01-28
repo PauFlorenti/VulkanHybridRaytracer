@@ -66,5 +66,6 @@ void main()
 	if(!background)
 		color *= light_color;
 
+	//color = N;
 	outFragColor = vec4( color, 1.0f );
 }
