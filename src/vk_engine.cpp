@@ -631,14 +631,15 @@ void VulkanEngine::init_scene()
 	_MtlMaterials["glass"]		= glass;
 	_MtlMaterials["redSimple"]	= redSimple;
 	
-	Prefab* p_duck = Prefab::GET("duck.gltf");
-	Prefab* p_sphere = Prefab::GET("sphere.obj");
-	Prefab* p_quad = new Prefab();
+	Prefab* p_duck		= Prefab::GET("duck.gltf");
+	Prefab* p_sphere	= Prefab::GET("sphere.obj");
+	Prefab* p_quad		= new Prefab();
 	p_quad->_materials.push_back(GltfMaterial());
 	p_quad->_materials[0].diffuseTexture = Texture::get_id("asphalt.png");
-	p_quad->_mesh = Mesh::get_quad();
-	Prefab* p_cube = new Prefab();
-	p_cube->_mesh = Mesh::get_cube();
+	p_quad->_mesh		= Mesh::get_quad();
+	Prefab* p_cube		= new Prefab();
+	p_cube->_mesh		= Mesh::get_cube();
+	Prefab* p_car		= Prefab::GET("scene.gltf", true);
 
 	Object* monkey = new Object();
 	monkey->material		= get_material("offscreen");
@@ -694,9 +695,9 @@ void VulkanEngine::init_scene()
 	mirror2->materialIdx	= get_materialId("metal");
 
 	//Object* car = new Object();
-	//car->prefab = Prefab::GET("CesiumMilkTruck.gltf");
-	//car->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -30));
-		//* glm::scale(glm::mat4(1), glm::vec3(0.1));
+	//car->prefab = p_car;
+	//car->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -30))
+	//	* glm::scale(glm::mat4(1), glm::vec3(0.1));
 
 	//Object* helmet = new Object();
 	//helmet->prefab = Prefab::GET("FlightHelmet.gltf");
@@ -723,7 +724,7 @@ void VulkanEngine::init_scene()
 	//_renderables.push_back(mirror2);
 	//_renderables.push_back(car);
 	//_renderables.push_back(helmet);
-	_renderables.push_back(cornell);
+	//_renderables.push_back(cornell);
 }
 
 void VulkanEngine::init_imgui()

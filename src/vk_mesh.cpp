@@ -423,47 +423,73 @@ std::vector<BlasInput> Node::node_to_geometry(
 	const VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress,
 	const VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress)
 {
+	std::vector<BlasInput> blasVector;
+	//blasVector.reserve(_primitives.size());
+	for (Primitive& p : _primitives)
+	{
+		const uint32_t nTriangles = p.indexCount / 3;
+
+		// Set the triangles geometry
+		VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
+		triangles.sType						= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+		triangles.pNext						= nullptr;
+		triangles.vertexFormat				= VK_FORMAT_R32G32B32_SFLOAT;
+		triangles.vertexData				= vertexBufferDeviceAddress;
+		triangles.vertexStride				= sizeof(Vertex);
+		triangles.maxVertex					= static_cast<uint32_t>(p.vertexCount);
+		triangles.indexData					= indexBufferDeviceAddress;
+		triangles.indexType					= VK_INDEX_TYPE_UINT32;
+
+		VkAccelerationStructureGeometryKHR asGeometry = vkinit::acceleration_structure_geometry_khr();
+		asGeometry.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
+		asGeometry.geometryType				= VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		asGeometry.geometry.triangles		= triangles;
+
+		VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
+		asBuildRangeInfo.firstVertex		= p.firstVertex;
+		asBuildRangeInfo.primitiveCount		= nTriangles;
+		asBuildRangeInfo.primitiveOffset	= p.firstIndex * sizeof(uint32_t);
+		asBuildRangeInfo.transformOffset	= 0;
+
+		// Store all info in the BlasInput structure to be returned
+		BlasInput input;
+		input.asBuildRangeInfo	= asBuildRangeInfo;
+		input.asGeometry		= asGeometry;
+		input.nTriangles		= nTriangles;
+
+		blasVector.emplace_back(input);
+	}
+	if (!_children.empty())
+	{
+		for (Node* child : _children)
+		{
+			std::vector<BlasInput> childBlas = child->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
+			blasVector.insert(blasVector.end(), childBlas.begin(), childBlas.end());
+		}
+		//return blasVector;
+	}
+	return blasVector;
+}
+
+std::vector<TlasInstance> Node::node_to_instance(int& index, glm::mat4 model)
+{
+	std::vector<TlasInstance> instances;
+	glm::mat4 matrix = model * getGlobalMatrix(false);
 	if (!_primitives.empty())
 	{
-		std::vector<BlasInput> blasVector;
-		blasVector.reserve(_primitives.size());
-		for (Primitive& p : _primitives)
-		{
-			const uint32_t nTriangles = p.indexCount / 3;
-
-			// Set the triangles geometry
-			VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
-			triangles.sType						= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-			triangles.pNext						= nullptr;
-			triangles.vertexFormat				= VK_FORMAT_R32G32B32_SFLOAT;
-			triangles.vertexData				= vertexBufferDeviceAddress;
-			triangles.vertexStride				= sizeof(Vertex);
-			triangles.maxVertex					= static_cast<uint32_t>(p.vertexCount);
-			triangles.indexData					= indexBufferDeviceAddress;
-			triangles.indexType					= VK_INDEX_TYPE_UINT32;
-
-			VkAccelerationStructureGeometryKHR asGeometry = vkinit::acceleration_structure_geometry_khr();
-			asGeometry.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
-			asGeometry.geometryType				= VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-			asGeometry.geometry.triangles		= triangles;
-
-			VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
-			asBuildRangeInfo.firstVertex		= p.firstVertex;
-			asBuildRangeInfo.primitiveCount		= nTriangles;
-			asBuildRangeInfo.primitiveOffset	= p.firstIndex * sizeof(uint32_t);
-			asBuildRangeInfo.transformOffset	= 0;
-
-			// Store all info in the BlasInput structure to be returned
-			BlasInput input;
-			input.asBuildRangeInfo	= asBuildRangeInfo;
-			input.asGeometry		= asGeometry;
-			input.nTriangles		= nTriangles;
-
-			blasVector.emplace_back(input);
-		}
-		return blasVector;
+		TlasInstance instance{};
+		instance.transform	= matrix;
+		instance.instanceId = index;
+		instance.blasId		= index;
+		instances.emplace_back(instance);
+		index++;
 	}
-	return {};
+	for (Node* child : _children)
+	{
+		std::vector<TlasInstance> childInstances = child->node_to_instance(index, model);
+		instances.insert(instances.begin(), childInstances.begin(), childInstances.end());
+	}
+	return instances;
 }
 
 BlasInput Prefab::primitive_to_geometry(const Primitive& p)
@@ -594,7 +620,7 @@ void Prefab::draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::ma
 	}
 }
 
-void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent)
+void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent, const bool invertNormals)
 {
 	// Init node and compute its local matrix
 	Node* node = new Node();
@@ -650,10 +676,12 @@ void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode
 				}
 
 				// Append data to model's vertex buffer
-				for (size_t v = 0; v < vertexCount; v++) {
+				for (size_t v = 0; v < vertexCount; v++) 
+				{
+					glm::vec3 normal = glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f)));
 					Vertex vert{};
 					vert.position	= glm::vec4(glm::make_vec3(&positionBuffer[v * 3]), 1.0f);
-					vert.normal		= glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f)));
+					vert.normal		= invertNormals ? normal * glm::vec3(-1) : normal;
 					vert.uv			= texCoordsBuffer ? glm::make_vec2(&texCoordsBuffer[v * 2]) : glm::vec3(0.0f);
 					vert.color		= glm::vec3(1.0f);
 					_mesh->_vertices.push_back(vert);
@@ -958,7 +986,7 @@ void Prefab::processMesh(const tinygltf::Model& input)
 	}
 }
 
-Prefab* Prefab::GET(const std::string filename)
+Prefab* Prefab::GET(const std::string filename, bool invertNormals)
 {
 	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
 	if (!_prefabsMap[name])
@@ -993,7 +1021,7 @@ Prefab* Prefab::GET(const std::string filename)
 
 				//prefab->importNode(gltfModel);
 				for(const int node : scene.nodes)
-					prefab->loadNode(gltfModel, gltfModel.nodes[node], nullptr);
+					prefab->loadNode(gltfModel, gltfModel.nodes[node], nullptr, invertNormals);
 				prefab->importMaterials(gltfModel);
 				prefab->importTextures(gltfModel);
 

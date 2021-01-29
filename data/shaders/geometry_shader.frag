@@ -24,12 +24,7 @@ layout(push_constant) uniform constants
 
 void main()
 {
-    /*
-    vec3 N      = pushC.textures.y > -1 
-        ? normalize( texture(textures[int(pushC.textures.y)], inUV).xyz * 2 - 1 )
-        //vec3(inMatrix * vec4(normalize( texture(textures[int(pushC.textures.y)], inUV).xyz * 2 - 1 ), 1.0)).xyz
-        : normalize( inNormal );
-    */
+
     vec3 N = normalize( inNormal );
     vec3 color      = pushC.textures.x > -1 ? texture(textures[int(pushC.textures.x)], inUV).xyz * inColor : pushC.color.xyz;
     vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);

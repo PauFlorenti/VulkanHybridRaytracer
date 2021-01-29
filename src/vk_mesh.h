@@ -132,6 +132,7 @@ public:
 	std::vector<BlasInput> node_to_geometry(
 		const VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress, 
 		const VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress);
+	std::vector<TlasInstance> node_to_instance(int& index, glm::mat4 model);
 
 };
 
@@ -159,7 +160,7 @@ public:
 
 	Mesh*						_mesh = NULL;
 	
-	static Prefab* GET(std::string filename);
+	static Prefab* GET(std::string filename, const bool invertNormals = false);
 	void draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4& model);
 	BlasInput primitive_to_geometry(const Primitive& prim);
 
@@ -167,7 +168,7 @@ private:
 
 	std::unordered_map<int, std::vector<uint32_t>> _meshToPrimMeshes;
 
-	void loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent);
+	void loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent, const bool invertNormals = false);
 	void importNode(const tinygltf::Model& inputModel);
 	void importMaterials(const tinygltf::Model& tmodel);
 	void importTextures(const tinygltf::Model& tmodel);

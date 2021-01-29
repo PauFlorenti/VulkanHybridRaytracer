@@ -1491,11 +1491,6 @@ void Renderer::create_bottom_acceleration_structure()
 			{
 				std::vector<BlasInput> nodeGeo = node->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
 				allBlas.insert(allBlas.end(), nodeGeo.begin(), nodeGeo.end());
-				for (auto& child : node->_children)
-				{
-					std::vector<BlasInput> childGeo = child->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
-					allBlas.insert(allBlas.end(), childGeo.begin(), childGeo.end());
-				}
 				//allBlas.push_back(obj->prefab->primitive_to_geometry(primMesh));
 			}
 		}
@@ -1528,15 +1523,17 @@ void Renderer::create_top_acceleration_structure()
 		{
 			for (auto& node : entity->prefab->_nodes)
 			{
-				if (!node->_primitives.empty())
-				{
-					TlasInstance instance{};
-					instance.transform	= entity->m_matrix * node->getGlobalMatrix(false);
-					instance.instanceId = instanceIndex;
-					instance.blasId		= instanceIndex;
-					_tlas.emplace_back(instance);
-					instanceIndex++;
-				}
+				std::vector<TlasInstance> instances = node->node_to_instance(instanceIndex, entity->m_matrix);
+				_tlas.insert(_tlas.end(), instances.begin(), instances.end());
+				//if (!node->_primitives.empty())
+				//{
+				//	TlasInstance instance{};
+				//	instance.transform	= entity->m_matrix * node->getGlobalMatrix(false);
+				//	instance.instanceId = instanceIndex;
+				//	instance.blasId		= instanceIndex;
+				//	_tlas.emplace_back(instance);
+				//	instanceIndex++;
+				//}
 			}
 		}
 	}
