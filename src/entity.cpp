@@ -2,15 +2,19 @@
 #include "entity.h"
 
 Object::Object(glm::vec3 position, Mesh* mesh, Material* material) :
-	mesh(mesh),
 	material(material)
 {
+	prefab = new Prefab();
+	prefab->_mesh = mesh;
 	m_matrix = glm::translate(glm::mat4(1), position);
 }
 
-void Object::setColor(glm::vec3 color) {
-	for (Vertex& v : mesh->_vertices)
-		v.color = color;
+void Object::draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4 model)
+{
+	if(prefab) 
+	{
+		prefab->draw(cmd, pipelineLayout, model);
+	}
 }
 
 Light::Light(lightType type, glm::vec3 color /*white*/, glm::vec3 position/*0,0,0*/, float intensity/*1000*/, float maxDistance/*500*/) :

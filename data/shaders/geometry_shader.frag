@@ -6,31 +6,29 @@ layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec2 inUV;
 layout (location = 4) in float inMat;
+layout (location = 5) in mat4 inMatrix;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 
-layout(set = 0, binding = 1) uniform sceneData
-{
-    vec4 fogColor;
-	vec4 fogDistances;
-	vec4 ambientColor;
-	vec4 sunlightDirection;
-	vec4 sunlightColor;
-}scene;
+// Set 1: texture array
+layout(set = 0, binding = 1) uniform sampler2D[] textures;
 
 layout(push_constant) uniform constants
 {
-	int id;
+	layout (offset = 64)vec4 color;
+    vec4 textures;
+    vec4 shadingMetallicRoughness;
 }pushC;
-
-layout(set = 2, binding = 0) uniform sampler2D[] textures;
 
 void main()
 {
-    vec3 N      = normalize( inNormal );
-    vec3 color  = texture(textures[pushC.id], inUV).xyz * inColor;
+
+    vec3 N = normalize( inNormal );
+    vec3 color      = pushC.textures.x > -1 ? texture(textures[int(pushC.textures.x)], inUV).xyz * inColor : pushC.color.xyz;
+    vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);
+    color += emissive;
 
     float materialIdx = float(inMat);
 

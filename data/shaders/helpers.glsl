@@ -40,10 +40,10 @@ vec3 computeDiffuse(Material m, vec3 normal, vec3 lightDir)
 vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
 {
     // Specular
-    vec3 V          = normalize(-viewDir);
-    vec3 R          = reflect(-lightDir, normal);
-    float specular  = pow(max(dot(V, R), 0.0), m.glossiness);
-    return vec3(1) * specular;
+    vec3 V          = normalize(viewDir);
+    vec3 R          = reflect(-normalize(lightDir), normalize(normal));
+    float specular  = pow(clamp(dot(normalize(R), V), 0.0, 1.0), m.glossiness);
+    return m.specular.xyz * specular;
 };
 
 hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
@@ -56,11 +56,9 @@ hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, 
 {
     const vec3 reflected    = reflect(direction, normal);
     const bool isScattered  = dot( reflected, normal ) > 0;
+    const vec4 diffuse      = isScattered ? vec4(computeDiffuse( m, normal, L), t) : vec4(1, 1, 1, -1);
 
-    const vec3 diffuse      = computeDiffuse( m, normal, L);
-    const vec4 colorAndDist = isScattered ? vec4(diffuse, t) : vec4(1, 1, 1, -1);
-
-    return hitPayload( colorAndDist, vec4( reflected, isScattered ? 1 : 0), normal, 1);
+    return hitPayload( diffuse, vec4( reflected, isScattered ? 1 : 0), normal, 1);
 };
 
 hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
@@ -68,7 +66,7 @@ hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal,
     const float NdotD       = dot( normal, direction );
     const vec3 refrNormal   = NdotD > 0.0 ? -normal : normal;
     const float refrEta     = NdotD > 0.0 ? 1 / m.ior : m.ior;
-    const float cosine      = NdotD > 0 ? m.ior * NdotD : -NdotD;
+    const float cosine      = NdotD > 0.0 ? m.ior * NdotD : -NdotD;
 
     vec3 refracted          = refract( direction, refrNormal, refrEta );
     const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, m.ior ) : 1;

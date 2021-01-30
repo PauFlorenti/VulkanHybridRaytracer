@@ -3,6 +3,7 @@
 #include <glm/glm/glm.hpp>
 
 #include "entity.h"
+#include "vk_textures.h"
 
 struct FrameData
 {
@@ -24,31 +25,11 @@ struct pushConstants {
 	glm::mat4 render_matrix;
 };
 
-struct Texture {
-	AllocatedImage  image;
-	VkImageView		imageView;
-};
-
 struct AccelerationStructure {
 	VkAccelerationStructureKHR	handle;
 	uint64_t					deviceAddress = 0;
 	VkBuffer					buffer;
 	VkDeviceMemory				memory;
-};
-
-struct BlasInput {
-	VkAccelerationStructureGeometryKHR			asGeometry;
-	VkAccelerationStructureBuildRangeInfoKHR	asBuildRangeInfo;
-	uint32_t									nTriangles;
-};
-
-struct TlasInstance {
-	uint32_t					blasId{ 0 };		// Index of the BLAS
-	uint32_t					instanceId{ 0 };	// Instance index
-	uint32_t					hitGroupId{ 0 };	// Hit group index in the SBT
-	uint32_t					mask{ 0xFF };		// Visibility mask
-	VkGeometryInstanceFlagsKHR	flags{ VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR };
-	glm::mat4					transform{ glm::mat4(1) };	// Identity model matrix
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
@@ -72,6 +53,7 @@ public:
 	// RASTERIZER VARIABLES -----------------------
 	VkRenderPass				_forwardRenderPass;
 	VkCommandPool				_commandPool;
+	VkCommandPool				_resetCommandPool;
 	VkDescriptorPool			_descriptorPool;
 
 	// Forward stuff
@@ -172,7 +154,7 @@ public:
 
 	void rasterize_hybrid();
 
-	void render_gui(float dt);
+	void render_gui();
 
 	void init_commands();
 
@@ -220,8 +202,6 @@ private:
 	void create_acceleration_structure(AccelerationStructure& accelerationStructure, 
 		VkAccelerationStructureTypeKHR type, 
 		VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo);
-
-	BlasInput object_to_geometry(const Object& model);
 
 	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 

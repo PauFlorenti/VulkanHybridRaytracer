@@ -227,6 +227,32 @@ VkDescriptorSetLayoutBinding vkinit::descriptorset_layout_binding(
 	return setBinding;
 }
 
+VkDescriptorSetLayoutCreateInfo vkinit::descriptor_set_layout_create_info(
+	uint32_t bindingCount, // = 0
+	const std::vector<VkDescriptorSetLayoutBinding>& bindings, // = empty vector
+	VkDescriptorSetLayoutCreateFlags flags)	// = 0
+{
+	VkDescriptorSetLayoutCreateInfo info = {};
+	info.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	info.pNext			= nullptr;
+	info.bindingCount	= bindingCount;
+	info.pBindings		= bindings.data();
+	info.flags			= flags;
+	return info;
+}
+
+VkDescriptorBufferInfo vkinit::descriptor_buffer_info(
+	const VkBuffer& buffer,		// = nullptr
+	const VkDeviceSize range,	// = 0
+	const VkDeviceSize offset)	// = 0
+{
+	VkDescriptorBufferInfo info = {};
+	info.buffer = buffer;
+	info.range	= range;
+	info.offset = offset;
+	return info;
+}
+
 VkWriteDescriptorSet vkinit::write_descriptor_buffer(
 	VkDescriptorType type,
 	VkDescriptorSet dstSet,

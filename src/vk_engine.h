@@ -7,10 +7,7 @@
 #include <imgui/imgui_impl_sdl.h>
 #include <imgui/imgui_impl_vulkan.h>
 
-#include "vk_types.h"
-#include "vk_mesh.h"
 #include "camera.h"
-#include "entity.h"
 #include "renderer.h"
 
 class Window;
@@ -158,7 +155,6 @@ public:
 	std::vector<Light*>					_lights;
 
 	std::unordered_map<std::string, Material>		_materials;
-	std::unordered_map<std::string, Mesh>			_meshes;
 	std::unordered_map<std::string, Texture>		_textures;
 	std::unordered_map<std::string, MTLMaterial>	_MtlMaterials;
 	Texture _skyboxTexture;
@@ -199,8 +195,6 @@ public:
 
 	Material* get_material(const std::string& name);
 
-	Mesh* get_mesh(const std::string& name);
-
 	Texture* get_texture(const std::string& name);
 
 	int get_textureId(const std::string& name);
@@ -226,15 +220,13 @@ public:
 
 	uint32_t getBufferDeviceAddress(VkBuffer buffer);
 
-	void create_vertex_buffer(Mesh& mesh);
-
-	void create_index_buffer(Mesh& mesh);
-
 	ScratchBuffer createScratchBuffer(VkDeviceSize size);
 
 	uint32_t get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags flags, VkBool32* memTypeFound = nullptr);
 
 	void recreate_swapchain();
+
+	std::string findFile(const std::string& filename, const std::vector<std::string>& directories, bool warn = false);
 
 private:
 
@@ -248,15 +240,11 @@ private:
 
 	void init_upload_commands();
 
-	void load_meshes();
-
 	void load_images();
 
 	void init_scene();
 
 	void init_imgui();
-
-	void upload_mesh(Mesh& mesh);
 
 	VkCommandBuffer create_command_buffer(VkCommandBufferLevel level, bool begin);
 

@@ -60,6 +60,13 @@ namespace vkinit {
 		uint32_t binding,
 		uint32_t count = 1);
 
+	VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info(
+		uint32_t bindingCount = 0, 
+		const std::vector<VkDescriptorSetLayoutBinding>& bindings = {}, 
+		VkDescriptorSetLayoutCreateFlags flags = 0);
+
+	VkDescriptorBufferInfo descriptor_buffer_info(const VkBuffer& buffer = nullptr, const VkDeviceSize range = 0, const VkDeviceSize offset = 0);
+
 	VkWriteDescriptorSet write_descriptor_buffer(
 		VkDescriptorType type, 
 		VkDescriptorSet dstSet, 

@@ -5,8 +5,6 @@
 
 #include <glm/glm/glm.hpp>
 
-
-
 class Window {
 public:
 	

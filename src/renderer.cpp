@@ -4,6 +4,9 @@
 #include <vk_initializers.h>
 #include "window.h"
 
+extern std::vector<std::string> searchPaths;
+//std::unordered_map<std::string, Prefab*> Prefab::_prefabsMap;
+
 Renderer::Renderer()
 {
 	device		= &VulkanEngine::engine->_device;
@@ -43,7 +46,8 @@ Renderer::Renderer()
 	create_post_framebuffers();
 	create_post_descriptor();
 	create_post_pipeline();
-
+	
+	// VKRay
 	create_bottom_acceleration_structure();
 	create_top_acceleration_structure();
 	create_hybrid_descriptors();
@@ -76,15 +80,19 @@ void Renderer::init_commands()
 	}
 
 	VK_CHECK(vkCreateCommandPool(*device, &uploadCommandPoolInfo, nullptr, &_commandPool));
+	VK_CHECK(vkCreateCommandPool(*device, &commandPoolInfo, nullptr, &_resetCommandPool));
+
+	VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_resetCommandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	VK_CHECK(vkAllocateCommandBuffers(*device, &allocInfo, &_offscreenComandBuffer));
 
 	VkCommandBufferAllocateInfo cmdDeferredAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
-	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdDeferredAllocInfo, &_offscreenComandBuffer));
 	VkCommandBufferAllocateInfo cmdPostAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_rtCommandBuffer));
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_hybridCommandBuffer));
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyCommandPool(*device, _commandPool, nullptr);
+		vkDestroyCommandPool(*device, _resetCommandPool, nullptr);
 		});
 }
 
@@ -394,6 +402,9 @@ void Renderer::render()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
+	VK_CHECK(vkResetCommandBuffer(_offscreenComandBuffer, 0));
+	build_previous_command_buffer();
+
 	// First pass
 	VkSubmitInfo submit = {};
 	submit.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -509,6 +520,12 @@ void Renderer::rasterize_hybrid()
 
 	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
+	if (VulkanEngine::engine->_indexSwapchainImage > 1)
+	{
+		//VK_CHECK(vkResetCommandBuffer(_offscreenComandBuffer, 0));
+		build_previous_command_buffer();
+	}
+
 	// First pass
 	VkSubmitInfo submit = {};
 	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -552,7 +569,7 @@ void Renderer::rasterize_hybrid()
 		throw std::runtime_error("failed to present swap chain images!");
 }
 
-void Renderer::render_gui(float dt)
+void Renderer::render_gui()
 {
 	// Imgui new frame
 	ImGui_ImplVulkan_NewFrame();
@@ -562,7 +579,6 @@ void Renderer::render_gui(float dt)
 
 	ImGui::Begin("Debug window");
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-	ImGui::Text("DT %.3f ms/frame %.1f FPS ", 1000.0 / dt,  dt);
 	for (auto& light : VulkanEngine::engine->_lights)
 	{
 		if (ImGui::TreeNode(&light, "Light")) {
@@ -749,201 +765,139 @@ void Renderer::init_sync_structures()
 void Renderer::init_descriptors()
 {
 	std::vector<VkDescriptorPoolSize> sizes = {
-		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 100},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 10},
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 10},
-		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10}
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 100}
 	};
 
 	VkDescriptorPoolCreateInfo pool_info = vkinit::descriptor_pool_create_info(sizes, 10, VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT);
 
 	vkCreateDescriptorPool(*device, &pool_info, nullptr, &_descriptorPool);
 
+	uint32_t nText = (uint32_t)Texture::_textures.size();
+	VkDescriptorSetLayoutBinding cameraBind		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
+	VkDescriptorSetLayoutBinding textureBind	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1, nText);
+	VkDescriptorSetLayoutBinding materialBind	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 0);
+
 	// Create descriptors set layouts
 	// Set = 0
 	// binding camera data at 0
-	VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(
-		VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
-	// binding scene data at 1
-	VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(
-		VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	std::vector<VkDescriptorSetLayoutBinding> bindings = { cameraBind, textureBind };
+	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_set_layout_create_info(bindings.size(), bindings);
 
-	VkDescriptorSetLayoutBinding bindings[] = { 
-		cameraBind, 
-		sceneBind 
-	};
-
-	VkDescriptorSetLayoutCreateInfo setInfo = {};
-	setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	setInfo.pNext = nullptr;
-
-	setInfo.bindingCount	= 2;
-	setInfo.pBindings		= bindings;
-	setInfo.flags			= 0;
-
-	vkCreateDescriptorSetLayout(*device, &setInfo, nullptr, &_offscreenDescriptorSetLayout);
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &setInfo, nullptr, &_offscreenDescriptorSetLayout));
 
 	// Set = 1
-	// binding matrices at 0
-	VkDescriptorSetLayoutBinding objectBind = vkinit::descriptorset_layout_binding(
-		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 0);
+	// binding nText textures at 0
+	VkDescriptorSetLayoutCreateInfo set1Info = vkinit::descriptor_set_layout_create_info();
+	set1Info.bindingCount	= 1;
+	set1Info.pBindings		= &textureBind;
 
-	VkDescriptorSetLayoutCreateInfo set2Info = {};
-	set2Info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	set2Info.pNext = nullptr;
-
-	set2Info.bindingCount	= 1;
-	set2Info.pBindings		= &objectBind;
-	set2Info.flags			= 0;
-
-	vkCreateDescriptorSetLayout(*device, &set2Info, nullptr, &_objectDescriptorSetLayout);
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &set1Info, nullptr, &_textureDescriptorSetLayout));
 
 	// Set = 2
-	// binding nText textures at 0
-	uint32_t nText = (uint32_t)VulkanEngine::engine->_textures.size();
-	VkDescriptorSetLayoutBinding textureBind = vkinit::descriptorset_layout_binding(
-		VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0, nText);
+	// binding the material info of each entity
+	VkDescriptorSetLayoutCreateInfo set2Info = vkinit::descriptor_set_layout_create_info();
+	set2Info.bindingCount	= 1;
+	set2Info.pBindings		= &materialBind;
 
-	VkDescriptorSetLayoutCreateInfo set3Info = {};
-	set3Info.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	set3Info.pNext			= nullptr;
-	set3Info.bindingCount	= 1;
-	set3Info.pBindings		= &textureBind;
-	set3Info.flags			= 0;
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &set2Info, nullptr, &_objectDescriptorSetLayout));
 
-	vkCreateDescriptorSetLayout(*device, &set3Info, nullptr, &_textureDescriptorSetLayout);
-
-	// SKYBOX PASS --------------------
-	// Skybox set = 0
-	// binding single texture as skybox
-	VkDescriptorSetLayoutBinding skyBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
-	VkDescriptorSetLayoutBinding skyBufferBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 2);
-	
-	std::vector<VkDescriptorSetLayoutBinding> skyboxBindings = {
-		cameraBind,
-		skyBind,
-		skyBufferBind
-	};
-
-	VkDescriptorSetLayoutCreateInfo skyboxSetInfo = {};
-	skyboxSetInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	skyboxSetInfo.pNext			= nullptr;
-	skyboxSetInfo.bindingCount	= static_cast<uint32_t>(skyboxBindings.size());
-	skyboxSetInfo.pBindings		= skyboxBindings.data();
-	
-	vkCreateDescriptorSetLayout(*device, &skyboxSetInfo, nullptr, &_skyboxDescriptorSetLayout);
-	
 	// Once the layouts have been created, we allocate the descriptor sets
-
-	//VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	// First create necessary buffers
 	VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
-	const size_t sceneBufferSize		= VulkanEngine::engine->pad_uniform_buffer_size(sizeof(GPUSceneData));
-	VulkanEngine::engine->create_buffer(sceneBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_sceneBuffer);
-	const int MAX_OBJECTS = 10000;
-	VulkanEngine::engine->create_buffer(sizeof(GPUObjectData) * MAX_OBJECTS, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
+	VulkanEngine::engine->create_buffer(sizeof(GPUMaterial), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
 
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.pNext					= nullptr;
-	allocInfo.descriptorPool		= _descriptorPool;
-	allocInfo.descriptorSetCount	= 1;
-	allocInfo.pSetLayouts			= &_offscreenDescriptorSetLayout;
+	// Allocate descriptor sets
+	// Camera descriptor set
+	VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptor_set_allocate_info(_descriptorPool, &_offscreenDescriptorSetLayout, 1);
+	VK_CHECK(vkAllocateDescriptorSets(*device, &allocInfo, &_offscreenDescriptorSet));
 
-	vkAllocateDescriptorSets(*device, &allocInfo, &_offscreenDescriptorSet);
-
-	VkDescriptorSetAllocateInfo objectAllocInfo = {};
-	objectAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	objectAllocInfo.pNext				= nullptr;
-	objectAllocInfo.descriptorPool		= _descriptorPool;
-	objectAllocInfo.descriptorSetCount	= 1;
-	objectAllocInfo.pSetLayouts			= &_objectDescriptorSetLayout;
-
-	vkAllocateDescriptorSets(*device, &objectAllocInfo, &_objectDescriptorSet);
-
-	VkDescriptorBufferInfo cameraInfo = {};
-	cameraInfo.buffer = VulkanEngine::engine->_cameraBuffer._buffer;
-	cameraInfo.offset = 0;
-	cameraInfo.range  = sizeof(GPUCameraData);
-
-	VkDescriptorBufferInfo sceneInfo = {};
-	sceneInfo.buffer = VulkanEngine::engine->_sceneBuffer._buffer;
-	sceneInfo.offset = 0;
-	sceneInfo.range  = VK_WHOLE_SIZE;
-
-	VkDescriptorBufferInfo objectInfo = {};
-	objectInfo.buffer = VulkanEngine::engine->_objectBuffer._buffer;
-	objectInfo.offset = 0;
-	objectInfo.range  = sizeof(GPUObjectData) * MAX_OBJECTS;
-
-	VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _offscreenDescriptorSet, &cameraInfo, 0);
-	VkWriteDescriptorSet sceneWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, _offscreenDescriptorSet, &sceneInfo, 1);
-	VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _objectDescriptorSet, &objectInfo, 0);
-
-	std::vector<VkWriteDescriptorSet> writes = { 
-		cameraWrite, 
-		sceneWrite, 
-		objectWrite 
-	};
-
-	vkUpdateDescriptorSets(*device, writes.size(), writes.data(), 0, nullptr);
-
-	// Textures descriptor ---
-
-	VkDescriptorSetAllocateInfo textureAllocInfo = {};
-	textureAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	textureAllocInfo.pNext				= nullptr;
-	textureAllocInfo.descriptorSetCount = 1;
-	textureAllocInfo.pSetLayouts		= &_textureDescriptorSetLayout;
-	textureAllocInfo.descriptorPool		= _descriptorPool;
-
+	// Textures descriptor set
+	VkDescriptorSetAllocateInfo textureAllocInfo = vkinit::descriptor_set_allocate_info(_descriptorPool, &_textureDescriptorSetLayout, 1);
 	VK_CHECK(vkAllocateDescriptorSets(*device, &textureAllocInfo, &_textureDescriptorSet));
 
+	// Material descriptor set
+	VkDescriptorSetAllocateInfo materialAllocInfo = vkinit::descriptor_set_allocate_info(_descriptorPool, &_objectDescriptorSetLayout, 1);
+	VK_CHECK(vkAllocateDescriptorSets(*device, &materialAllocInfo, &_objectDescriptorSet));
+
+	// Create descriptors infos to write
+	// Camera descriptor buffer
+	VkDescriptorBufferInfo cameraInfo = vkinit::descriptor_buffer_info(VulkanEngine::engine->_cameraBuffer._buffer, sizeof(GPUCameraData), 0);
+
+	// Textures descriptor image infos
 	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
 	VkSampler sampler;
 	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
 
 	std::vector<VkDescriptorImageInfo> imageInfos;
-	for (auto const& texture : VulkanEngine::engine->_textures)
+	for (auto const& texture : Texture::_textures)
 	{
 		VkDescriptorImageInfo imageBufferInfo = {};
 		imageBufferInfo.sampler		= sampler;
-		imageBufferInfo.imageView	= texture.second.imageView;
+		imageBufferInfo.imageView	= texture.second->imageView;
 		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		imageInfos.push_back(imageBufferInfo);
 	}
 
-	uint32_t nTextures = static_cast<uint32_t>(VulkanEngine::engine->_textures.size());
-	VkWriteDescriptorSet write = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _textureDescriptorSet, imageInfos.data(), 0, nTextures);
+	// Material descriptor infos
+	VkDescriptorBufferInfo materialInfo = vkinit::descriptor_buffer_info(VulkanEngine::engine->_objectBuffer._buffer, sizeof(GPUMaterial), 0);
 
-	vkUpdateDescriptorSets(*device, 1, &write, 0, nullptr);
+	// Writes
+	VkWriteDescriptorSet cameraWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _offscreenDescriptorSet, &cameraInfo, 0);
+	VkWriteDescriptorSet texturesWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _offscreenDescriptorSet, imageInfos.data(), 1, nText);
+	VkWriteDescriptorSet materialWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _objectDescriptorSet, &materialInfo, 0);
 
-	// Skybox descriptor
+	std::vector<VkWriteDescriptorSet> writes = { cameraWrite, texturesWrite, materialWrite };
+
+	vkUpdateDescriptorSets(*device, writes.size(), writes.data(), 0, nullptr);
+
+	// SKYBOX DESCRIPTOR --------------------
+	// Skybox set = 0
+	// binding single texture as skybox and matrix to position the sphere around camera
+	VkDescriptorSetLayoutBinding skyBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+	VkDescriptorSetLayoutBinding skyBufferBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT, 2);
+
+	std::vector<VkDescriptorSetLayoutBinding> skyboxBindings = {
+		cameraBind,		// binding = 0 camera info
+		skyBind,		// binding = 1 sky texture
+		skyBufferBind	// binding = 2 sphere matrix
+	};
+
+	VkDescriptorSetLayoutCreateInfo skyboxSetInfo = {};
+	skyboxSetInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	skyboxSetInfo.pNext					= nullptr;
+	skyboxSetInfo.bindingCount			= static_cast<uint32_t>(skyboxBindings.size());
+	skyboxSetInfo.pBindings				= skyboxBindings.data();
+
+	vkCreateDescriptorSetLayout(*device, &skyboxSetInfo, nullptr, &_skyboxDescriptorSetLayout);
 	
 	VkDescriptorSetAllocateInfo skyboxAllocInfo = {};
 	skyboxAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	skyboxAllocInfo.pNext				= nullptr;
+	skyboxAllocInfo.descriptorPool		= _descriptorPool;
 	skyboxAllocInfo.descriptorSetCount	= 1;
 	skyboxAllocInfo.pSetLayouts			= &_skyboxDescriptorSetLayout;
-	skyboxAllocInfo.descriptorPool		= _descriptorPool;
 
 	VK_CHECK(vkAllocateDescriptorSets(*device, &skyboxAllocInfo, &_skyboxDescriptorSet));
 
 	VkDescriptorImageInfo skyboxImageInfo = {};
-	skyboxImageInfo.sampler		= sampler;
-	skyboxImageInfo.imageView	= VulkanEngine::engine->_skyboxTexture.imageView;
-	skyboxImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	skyboxImageInfo.sampler				= sampler;
+	skyboxImageInfo.imageView			= Texture::GET("data/textures/woods.jpg")->imageView;
+	skyboxImageInfo.imageLayout			= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _skyboxBuffer);
 
 	VkDescriptorBufferInfo skyboxBufferInfo = {};
-	skyboxBufferInfo.buffer = _skyboxBuffer._buffer;
-	skyboxBufferInfo.offset = 0;
-	skyboxBufferInfo.range	= sizeof(glm::mat4);
+	skyboxBufferInfo.buffer				= _skyboxBuffer._buffer;
+	skyboxBufferInfo.offset				= 0;
+	skyboxBufferInfo.range				= sizeof(glm::mat4);
 
-	VkWriteDescriptorSet camWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &cameraInfo, 0);
-	VkWriteDescriptorSet skyboxWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _skyboxDescriptorSet, &skyboxImageInfo, 1);
-	VkWriteDescriptorSet skyboxBuffer = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &skyboxBufferInfo, 2);
+	VkWriteDescriptorSet camWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &cameraInfo, 0);
+	VkWriteDescriptorSet skyboxWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _skyboxDescriptorSet, &skyboxImageInfo, 1);
+	VkWriteDescriptorSet skyboxBuffer	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _skyboxDescriptorSet, &skyboxBufferInfo, 2);
 
 	std::vector<VkWriteDescriptorSet> skyboxWrites = {
 		camWrite,
@@ -953,11 +907,12 @@ void Renderer::init_descriptors()
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(skyboxWrites.size()), skyboxWrites.data(), 0, nullptr);
 	
+	// Destroy all objects created
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorPool(*device, _descriptorPool, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _offscreenDescriptorSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(*device, _objectDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _textureDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(*device, _objectDescriptorSetLayout, nullptr);
 		vkDestroyDescriptorSetLayout(*device, _skyboxDescriptorSetLayout, nullptr);
 		vkDestroySampler(*device, sampler, nullptr);
 		});
@@ -1042,11 +997,11 @@ void Renderer::init_forward_pipeline()
 {
 	VulkanEngine* engine = VulkanEngine::engine;
 	VkShaderModule vertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/basic.vert.spv", &vertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str() , &vertexShader)) {
 		std::cout << "Could not load forward vertex shader!" << std::endl;
 	}
 	VkShaderModule fragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/forward.frag.spv", &fragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("forward.frag.spv", searchPaths, true).c_str(), &fragmentShader)) {
 		std::cout << "Could not load fragment vertex shader!" << std::endl;
 	}
 
@@ -1054,7 +1009,7 @@ void Renderer::init_forward_pipeline()
 	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
 	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
 
-	VkDescriptorSetLayout offscreenSetLayouts[] = { _offscreenDescriptorSetLayout, _objectDescriptorSetLayout, _textureDescriptorSetLayout };
+	VkDescriptorSetLayout offscreenSetLayouts[] = { _offscreenDescriptorSetLayout, _textureDescriptorSetLayout };
 
 	VkPushConstantRange push_constant;
 	push_constant.offset		= 0;
@@ -1062,17 +1017,22 @@ void Renderer::init_forward_pipeline()
 	push_constant.stageFlags	= VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkPushConstantRange test_constant;
-	test_constant.offset = sizeof(int);
-	test_constant.size = sizeof(int);
-	test_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	test_constant.offset		= sizeof(int);
+	test_constant.size			= sizeof(material_matrix);
+	test_constant.stageFlags	= VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPushConstantRange matrix_constant;
+	matrix_constant.offset = 0;
+	matrix_constant.size = sizeof(glm::mat4);
+	matrix_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPushConstantRange constants[] = { push_constant, test_constant };
 
 	VkPipelineLayoutCreateInfo offscreenPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
-	offscreenPipelineLayoutInfo.setLayoutCount			= 3;
+	offscreenPipelineLayoutInfo.setLayoutCount			= 2;
 	offscreenPipelineLayoutInfo.pSetLayouts				= offscreenSetLayouts;
-	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 2;
-	offscreenPipelineLayoutInfo.pPushConstantRanges		= constants;
+	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 1;
+	offscreenPipelineLayoutInfo.pPushConstantRanges		= &matrix_constant;
 
 	VK_CHECK(vkCreatePipelineLayout(*device, &offscreenPipelineLayoutInfo, nullptr, &_forwardPipelineLayout));
 
@@ -1100,7 +1060,7 @@ void Renderer::init_forward_pipeline()
 	pipBuilder._scissor.extent		= extent;
 
 	pipBuilder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
-	pipBuilder._multisampling = vkinit::multisample_state_create_info();
+	pipBuilder._multisampling		= vkinit::multisample_state_create_info();
 
 	_forwardPipeline = pipBuilder.build_pipeline(*device, _forwardRenderPass);
 
@@ -1120,27 +1080,27 @@ void Renderer::init_deferred_pipelines()
 	VulkanEngine* engine = VulkanEngine::engine;
 
 	VkShaderModule offscreenVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/basic.vert.spv", &offscreenVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str(), &offscreenVertexShader)) {
 		std::cout << "Could not load geometry vertex shader!" << std::endl;
 	}
 	VkShaderModule offscreenFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/geometry_shader.frag.spv", &offscreenFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("geometry_shader.frag.spv", searchPaths, true).c_str(), &offscreenFragmentShader)) {
 		std::cout << "Could not load geometry fragment shader!" << std::endl;
 	}
 	VkShaderModule deferredVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/quad.vert.spv", &deferredVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("quad.vert.spv", searchPaths, true).c_str(), &deferredVertexShader)) {
 		std::cout << "Could not load deferred vertex shader!" << std::endl;
 	}
 	VkShaderModule deferredFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/deferred.frag.spv", &deferredFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("deferred.frag.spv", searchPaths, true).c_str(), &deferredFragmentShader)) {
 		std::cout << "Could not load deferred fragment shader!" << std::endl;
 	}
 	VkShaderModule skyboxVertexShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.vert.spv", &skyboxVertexShader)) {
+	if (!engine->load_shader_module(engine->findFile("skybox.vert.spv", searchPaths, true).c_str(), &skyboxVertexShader)) {
 		std::cout << "Could not load skybox vertex shader!" << std::endl;
 	}
 	VkShaderModule skyboxFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/skybox.frag.spv", &skyboxFragmentShader)) {
+	if (!engine->load_shader_module(engine->findFile("/skybox.frag.spv", searchPaths, true).c_str(), &skyboxFragmentShader)) {
 		std::cout << "Could not load skybox fragment shader!" << std::endl;
 	}
 
@@ -1148,22 +1108,22 @@ void Renderer::init_deferred_pipelines()
 	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, offscreenVertexShader));
 	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, offscreenFragmentShader));
 
-	VkDescriptorSetLayout offscreenSetLayouts[] = { _offscreenDescriptorSetLayout, _objectDescriptorSetLayout, _textureDescriptorSetLayout };
+	VkDescriptorSetLayout offscreenSetLayouts[] = { _offscreenDescriptorSetLayout, _objectDescriptorSetLayout };
 
-	VkPushConstantRange push_constant;
-	push_constant.offset		= 0;
-	push_constant.size			= sizeof(int);
-	push_constant.stageFlags	= VK_SHADER_STAGE_FRAGMENT_BIT;
+	VkPushConstantRange matrix_constant;
+	matrix_constant.offset								= 0;
+	matrix_constant.size								= sizeof(glm::mat4);
+	matrix_constant.stageFlags							= VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkPushConstantRange test_constant;
-	test_constant.offset = sizeof(int);
-	test_constant.size = sizeof(int);
-	test_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	VkPushConstantRange material_constant;
+	material_constant.offset							= sizeof(glm::mat4);
+	material_constant.size								= sizeof(GPUMaterial);
+	material_constant.stageFlags						= VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkPushConstantRange constants[] = { push_constant, test_constant };
+	VkPushConstantRange constants[] = { matrix_constant, material_constant };
 
 	VkPipelineLayoutCreateInfo offscreenPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
-	offscreenPipelineLayoutInfo.setLayoutCount			= 3;
+	offscreenPipelineLayoutInfo.setLayoutCount			= 2;
 	offscreenPipelineLayoutInfo.pSetLayouts				= offscreenSetLayouts;
 	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 2;
 	offscreenPipelineLayoutInfo.pPushConstantRanges		= constants;
@@ -1321,12 +1281,12 @@ void Renderer::build_forward_command_buffer()
 		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int), &constant);
 		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(int), sizeof(int), &matIdx);
 
-		if (lastMesh != object->mesh) {
-			vkCmdBindVertexBuffers(*cmd, 0, 1, &object->mesh->_vertexBuffer._buffer, &offset);
-			vkCmdBindIndexBuffer(*cmd, object->mesh->_indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT32);
-			lastMesh = object->mesh;
+		if (lastMesh != object->prefab->_mesh) {
+			vkCmdBindVertexBuffers(*cmd, 0, 1, &object->prefab->_mesh->_vertexBuffer._buffer, &offset);
+			vkCmdBindIndexBuffer(*cmd, object->prefab->_mesh->_indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT32);
+			lastMesh = object->prefab->_mesh;
 		}
-		vkCmdDrawIndexed(*cmd, static_cast<uint32_t>(object->mesh->_indices.size()), VulkanEngine::engine->_renderables.size(), 0, 0, i);
+		vkCmdDrawIndexed(*cmd, static_cast<uint32_t>(object->prefab->_mesh->_indices.size()), VulkanEngine::engine->_renderables.size(), 0, 0, i);
 	}
 
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *cmd);
@@ -1339,7 +1299,7 @@ void Renderer::build_previous_command_buffer()
 {
 	if (_offscreenComandBuffer == VK_NULL_HANDLE)
 	{
-		VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_commandPool);
+		VkCommandBufferAllocateInfo allocInfo = vkinit::command_buffer_allocate_info(_commandPool, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 		VK_CHECK(vkAllocateCommandBuffers(*device, &allocInfo, &_offscreenComandBuffer));
 	}
 
@@ -1361,7 +1321,7 @@ void Renderer::build_previous_command_buffer()
 	renderPassBeginInfo.framebuffer					= _offscreenFramebuffer;
 	renderPassBeginInfo.renderArea.extent.width		= VulkanEngine::engine->_window->getWidth();
 	renderPassBeginInfo.renderArea.extent.height	= VulkanEngine::engine->_window->getHeight();
-	renderPassBeginInfo.clearValueCount				= static_cast<uint32_t>(clearValues.size());;
+	renderPassBeginInfo.clearValueCount				= static_cast<uint32_t>(clearValues.size());
 	renderPassBeginInfo.pClearValues				= clearValues.data();
 
 	vkCmdBeginRenderPass(_offscreenComandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -1369,39 +1329,25 @@ void Renderer::build_previous_command_buffer()
 	// Skybox pass
 	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipelineLayout, 0, 1, &_skyboxDescriptorSet, 0, nullptr);
 	vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _skyboxPipeline);
-	Mesh* sphere = VulkanEngine::engine->get_mesh("sphere");
+	Mesh* sphere = Mesh::GET("sphere.obj");
 	vkCmdBindVertexBuffers(_offscreenComandBuffer, 0, 1, &sphere->_vertexBuffer._buffer, &offset);
 	vkCmdBindIndexBuffer(_offscreenComandBuffer, sphere->_indexBuffer._buffer, offset, VK_INDEX_TYPE_UINT32);
 	vkCmdDrawIndexed(_offscreenComandBuffer, static_cast<uint32_t>(sphere->_indices.size()), 1, 0, 0, 1);
 
 	// Geometry pass
 	// Set = 0 Camera data descriptor
-	uint32_t uniform_offset = VulkanEngine::engine->pad_uniform_buffer_size(sizeof(GPUSceneData));
-	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 0, 1, &_offscreenDescriptorSet, 1, &uniform_offset);
-	// Set = 1 Object data descriptor
-	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 1, 1, &_objectDescriptorSet, 0, nullptr);
-	// Set = 2 Texture data descriptor
-	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 2, 1, &_textureDescriptorSet, 0, nullptr);
+	vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 0, 1, &_offscreenDescriptorSet, 0, nullptr);
+	// Set = 1 Texture data descriptor
+	//vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 1, 1, &_offscreenDescriptorSet, 0, nullptr);
+	// Set = 2 Material data descriptor
+	//vkCmdBindDescriptorSets(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipelineLayout, 1, 1, &_objectDescriptorSet, 0, nullptr);
+	vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipeline);
 
-	Mesh* lastMesh = nullptr;
-
+	uint32_t instance = 0;
 	for (size_t i = 0; i < VulkanEngine::engine->_renderables.size(); i++)
 	{
 		Object* object = VulkanEngine::engine->_renderables[i];
-
-		vkCmdBindPipeline(_offscreenComandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _offscreenPipeline);
-
-		int constant	= object->id;
-		int matIdx		= object->materialIdx;
-		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(int), &constant);
-		vkCmdPushConstants(_offscreenComandBuffer, _offscreenPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, sizeof(int), sizeof(int), &matIdx);
-
-		if (lastMesh != object->mesh) {
-			vkCmdBindVertexBuffers(_offscreenComandBuffer, 0, 1, &object->mesh->_vertexBuffer._buffer, &offset);
-			vkCmdBindIndexBuffer(_offscreenComandBuffer, object->mesh->_indexBuffer._buffer, 0, VK_INDEX_TYPE_UINT32);
-			lastMesh = object->mesh;
-		}
-		vkCmdDrawIndexed(_offscreenComandBuffer, static_cast<uint32_t>(object->mesh->_indices.size()), VulkanEngine::engine->_renderables.size(), 0, 0, i);
+		object->draw(_offscreenComandBuffer, _offscreenPipelineLayout, object->m_matrix);
 	}
 
 	vkCmdEndRenderPass(_offscreenComandBuffer);
@@ -1434,7 +1380,7 @@ void Renderer::build_deferred_command_buffer()
 
 	VkDeviceSize offset = { 0 };
 
-	Mesh* quad = VulkanEngine::engine->get_mesh("quad");
+	Mesh* quad = Mesh::get_quad();
 
 	vkCmdPushConstants(get_current_frame()._mainCommandBuffer, _finalPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pushConstants), &_constants);
 
@@ -1524,30 +1470,72 @@ void Renderer::recreate_renderer()
 
 void Renderer::create_bottom_acceleration_structure()
 {
-	std::vector<BlasInput> allBlas; 
-	allBlas.reserve(VulkanEngine::engine->_renderables.size());
-	for (Object* obj : VulkanEngine::engine->_renderables) {
-		BlasInput input = object_to_geometry(*obj);
-		allBlas.push_back(input);
+	std::vector<BlasInput> allBlas;
+
+	for (Object* obj : VulkanEngine::engine->_renderables) 
+	{
+		Prefab* p = obj->prefab;
+		if (p->_nodes.empty()) 
+		{
+			allBlas.push_back(p->_mesh->mesh_to_geometry());
+		}
+		else 
+		{
+			VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
+			VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
+
+			vertexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(obj->prefab->_mesh->_vertexBuffer._buffer);
+			indexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(obj->prefab->_mesh->_indexBuffer._buffer);
+
+			for (auto& node : obj->prefab->_nodes)
+			{
+				std::vector<BlasInput> nodeGeo = node->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
+				allBlas.insert(allBlas.end(), nodeGeo.begin(), nodeGeo.end());
+				//allBlas.push_back(obj->prefab->primitive_to_geometry(primMesh));
+			}
+		}
 	}
 
-	buildBlas(allBlas);
+ 	buildBlas(allBlas);
 }
 
+// ---------------------------------------------------------------------------------------
+// Create all the TLAS
+// - Go through all meshes in the scene and convert them to Instances (holds matrices)
+// - Build as many Instances as BlasInput (geometries defined in the scene) and pass them to build the TLAS
 void Renderer::create_top_acceleration_structure()
 {
-	uint32_t nInstances = static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
-
-	_tlas.reserve(nInstances);
-
-	for (uint32_t i = 0; i < nInstances; i++)
+	int instanceIndex = 0;
+	for (auto& entity : VulkanEngine::engine->_renderables)
 	{
-		Object *node = VulkanEngine::engine->_renderables[i];
-		TlasInstance instance{};
-		instance.transform	= node->m_matrix;
-		instance.blasId		= i;
-		instance.instanceId = i;	// gl_InstanceCustomIndexEXT
-		_tlas.emplace_back(instance);
+		Prefab* p = entity->prefab;
+		// obj instance
+		if (p->_nodes.empty())
+		{
+			TlasInstance instance{};
+			instance.transform	= entity->m_matrix;
+			instance.blasId		= instanceIndex;
+			instance.instanceId = instanceIndex;
+			_tlas.emplace_back(instance);
+			instanceIndex++;
+		}
+		else // gltf instance
+		{
+			for (auto& node : entity->prefab->_nodes)
+			{
+				std::vector<TlasInstance> instances = node->node_to_instance(instanceIndex, entity->m_matrix);
+				_tlas.insert(_tlas.end(), instances.begin(), instances.end());
+				//if (!node->_primitives.empty())
+				//{
+				//	TlasInstance instance{};
+				//	instance.transform	= entity->m_matrix * node->getGlobalMatrix(false);
+				//	instance.instanceId = instanceIndex;
+				//	instance.blasId		= instanceIndex;
+				//	_tlas.emplace_back(instance);
+				//	instanceIndex++;
+				//}
+			}
+		}
 	}
 
 	buildTlas(_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
@@ -1682,8 +1670,8 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 
 	ScratchBuffer scratchBuffer = VulkanEngine::engine->createScratchBuffer(asBuildSizesInfo.buildScratchSize);
 
-	asBuildGeometryInfo.dstAccelerationStructure = _topLevelAS.handle;
-	asBuildGeometryInfo.scratchData.deviceAddress = scratchBuffer.deviceAddress;
+	asBuildGeometryInfo.dstAccelerationStructure	= _topLevelAS.handle;
+	asBuildGeometryInfo.scratchData.deviceAddress	= scratchBuffer.deviceAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
 	asBuildRangeInfo.primitiveCount		= static_cast<uint32_t>(instances.size());
@@ -1748,48 +1736,6 @@ void Renderer::create_acceleration_structure(AccelerationStructure& acceleration
 		});
 }
 
-// Use information from the model mesh passed to fill in all geometry information
-BlasInput Renderer::object_to_geometry(const Object& model)
-{
-	VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
-	VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
-
-	vertexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(model.mesh->_vertexBuffer._buffer);
-	indexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(model.mesh->_indexBuffer._buffer);
-
-	const uint32_t nTriangles = model.mesh->_indices.size() / 3;
-
-	// Set the triangles geometry
-	VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
-	triangles.sType						= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-	triangles.pNext						= nullptr;
-	triangles.vertexFormat				= VK_FORMAT_R32G32B32_SFLOAT;
-	triangles.vertexData				= vertexBufferDeviceAddress;
-	triangles.vertexStride				= sizeof(Vertex);
-	triangles.maxVertex					= static_cast<uint32_t>(model.mesh->_vertices.size());
-	triangles.indexData					= indexBufferDeviceAddress;
-	triangles.indexType					= VK_INDEX_TYPE_UINT32;
-
-	VkAccelerationStructureGeometryKHR asGeometry = vkinit::acceleration_structure_geometry_khr();
-	asGeometry.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
-	asGeometry.geometryType				= VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-	asGeometry.geometry.triangles		= triangles;
-
-	VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
-	asBuildRangeInfo.primitiveCount		= nTriangles;
-	asBuildRangeInfo.primitiveOffset	= 0;
-	asBuildRangeInfo.firstVertex		= 0;
-	asBuildRangeInfo.transformOffset	= 0;
-
-	// Store all info in the BlasInput structure to be returned
-	BlasInput input;
-	input.asBuildRangeInfo				= asBuildRangeInfo;
-	input.asGeometry					= asGeometry;
-	input.nTriangles					= nTriangles;
-
-	return input;
-}
-
 // Pass the information from our instance to the vk instance to function in the TLAS
 VkAccelerationStructureInstanceKHR Renderer::object_to_instance(const TlasInstance& instance)
 {
@@ -1838,11 +1784,12 @@ void Renderer::create_rt_descriptors()
 	//  binding 7 = material buffer
 	//  binding 8 = material indices
 	//  binding 9 = textures
+	//  binding 10 = skybox texture
 
 	const int nInstances	= VulkanEngine::engine->_renderables.size();		
 	const int nLights		= VulkanEngine::engine->_lights.size();
 	const int nMaterials	= VulkanEngine::engine->_MtlMaterials.size();
-	const int nTextures		= VulkanEngine::engine->_textures.size();
+	const int nTextures		= Texture::_textures.size();
 
 	if (!lightBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
@@ -1857,7 +1804,8 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
 	VkDescriptorSetLayoutBinding materialBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
 	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);
-	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures);
+	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
+	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -1869,7 +1817,8 @@ void Renderer::create_rt_descriptors()
 		lightBufferBinding,
 		materialBufferBinding,
 		matIdxBufferBinding,
-		texturesBufferBinding
+		texturesBufferBinding,
+		skyboxBufferBinding
 		});
 
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
@@ -1909,30 +1858,34 @@ void Renderer::create_rt_descriptors()
 	std::vector<VkDescriptorBufferInfo> sceneIdxDescInfo;
 	for (Object* obj : VulkanEngine::engine->_renderables)
 	{
+		std::vector<Vertex> vertices	= obj->prefab->_mesh->_vertices;
+		std::vector<uint32_t> indices	= obj->prefab->_mesh->_indices;
+		size_t vertexBufferSize = sizeof(rtVertexAttribute) * vertices.size();
+		size_t indexBufferSize = sizeof(uint32_t) * indices.size();
 		AllocatedBuffer vBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
+		VulkanEngine::engine->create_buffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
 		std::vector<rtVertexAttribute> vAttr;
-		vAttr.reserve(obj->mesh->_vertices.size());
-		for (Vertex& v : obj->mesh->_vertices) {
+		vAttr.reserve(vertices.size());
+		for (Vertex& v : vertices) {
 			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation, &vdata);
-		memcpy(vdata, vAttr.data(), sizeof(rtVertexAttribute) * obj->mesh->_vertices.size());
+		memcpy(vdata, vAttr.data(), vertexBufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
 		vertexBufferDescriptor.buffer	= vBuffer._buffer;
 		vertexBufferDescriptor.offset	= 0;
-		vertexBufferDescriptor.range	= sizeof(rtVertexAttribute) * obj->mesh->_vertices.size();
+		vertexBufferDescriptor.range	= vertexBufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer	= obj->mesh->_indexBuffer._buffer;
+		indexBufferDescriptor.buffer	= obj->prefab->_mesh->_indexBuffer._buffer;
 		indexBufferDescriptor.offset	= 0;
-		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->mesh->_indices.size();
+		indexBufferDescriptor.range		= indexBufferSize;
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		AllocatedBuffer matrixBuffer;
@@ -1973,30 +1926,25 @@ void Renderer::create_rt_descriptors()
 	materialBufferInfo.offset = 0;
 	materialBufferInfo.range  = sizeof(MTLMaterial) * nMaterials;
 
-	// Textures info
-	VkDescriptorSetAllocateInfo textureAllocInfo = {};
-	textureAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	textureAllocInfo.pNext				= nullptr;
-	textureAllocInfo.descriptorSetCount = 1;
-	textureAllocInfo.pSetLayouts		= &_textureDescriptorSetLayout;
-	textureAllocInfo.descriptorPool		= _descriptorPool;
-
-	//VK_CHECK(vkAllocateDescriptorSets(*device, &textureAllocInfo, &_textureDescriptorSet));
-
 	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
 	VkSampler sampler;
 	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
 
 	std::vector<VkDescriptorImageInfo> imageInfos;
-	for (auto const& texture : VulkanEngine::engine->_textures)
+	for (auto const& texture : Texture::_textures)
 	{
 		VkDescriptorImageInfo imageBufferInfo = {};
 		imageBufferInfo.sampler		= sampler;
-		imageBufferInfo.imageView	= texture.second.imageView;
+		imageBufferInfo.imageView	= texture.second->imageView;
 		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		imageInfos.push_back(imageBufferInfo);
 	}
+
+	VkDescriptorImageInfo skyboxBufferInfo = {};
+	skyboxBufferInfo.sampler		= sampler;
+	skyboxBufferInfo.imageView		= Texture::GET("woods.jpg")->imageView;
+	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	// WRITES ---
 	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
@@ -2008,6 +1956,7 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet matBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &materialBufferInfo, 7);
 	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, sceneIdxDescInfo.data(), 8, nInstances);
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
+	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2019,7 +1968,8 @@ void Renderer::create_rt_descriptors()
 		lightsBufferWrite,
 		matBufferWrite,
 		matIdxBufferWrite,
-		textureBufferWrite
+		textureBufferWrite,
+		skyboxBufferWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
@@ -2033,6 +1983,8 @@ void Renderer::create_rt_descriptors()
 
 void Renderer::init_raytracing_pipeline()
 {
+	VulkanEngine* engine = VulkanEngine::engine;
+
 	// Setup ray tracing shader groups
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages = {};
 	std::vector<VkPipelineShaderStageCreateInfo> hybridShaderStages = {};
@@ -2040,8 +1992,8 @@ void Renderer::init_raytracing_pipeline()
 	// Ray generation group
 	VkShaderModule rayGenModule, hraygenModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/raygen.rgen.spv", &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/hybridRaygen.rgen.spv", &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("raygen.rgen.spv", searchPaths, true).c_str(), &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridRaygen.rgen.spv", searchPaths, true).c_str(), &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2057,8 +2009,8 @@ void Renderer::init_raytracing_pipeline()
 	// Miss group
 	VkShaderModule missModule, hmissModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/miss.rmiss.spv", &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/miss.rmiss.spv", &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2074,8 +2026,8 @@ void Renderer::init_raytracing_pipeline()
 	// Shadow miss
 	VkShaderModule shadowModule, hshadowModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/shadow.rmiss.spv", &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/shadow.rmiss.spv", &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2092,8 +2044,8 @@ void Renderer::init_raytracing_pipeline()
 	// Hit group
 	VkShaderModule hitModule, hhitModule;
 	{
-		shaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/closesthit.rchit.spv", &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
-		hybridShaderStages.push_back(VulkanEngine::engine->load_shader_stage("data/shaders/output/hybridHit.rchit.spv", &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(engine->findFile("closesthit.rchit.spv", searchPaths, true).c_str(), &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridHit.rchit.spv", searchPaths, true).c_str(), &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2354,10 +2306,10 @@ void Renderer::create_post_pipeline()
 {
 	// First of all load the shader modules and store them in the builder
 	VkShaderModule postVertexShader, postFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module("data/shaders/output/postVertex.vert.spv", &postVertexShader)) {
+	if (!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postVertex.vert.spv", searchPaths, true).c_str(), &postVertexShader)) {
 		std::cout << "Post vertex failed to load" << std::endl;
 	}
-	if(!VulkanEngine::engine->load_shader_module("data/shaders/output/postFragment.frag.spv", &postFragmentShader)){
+	if(!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postFragment.frag.spv", searchPaths, true).c_str(), &postFragmentShader)){
 		std::cout << "Post fragment failed to load" << std::endl;
 	}
 
@@ -2482,7 +2434,7 @@ void Renderer::build_post_command_buffers()
 
 	VkDeviceSize offset = { 0 };
 
-	Mesh* quad = VulkanEngine::engine->get_mesh("quad");
+	Mesh* quad = Mesh::get_quad();
 
 	vkCmdBindDescriptorSets(get_current_frame()._mainCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _postPipelineLayout, 0, 1, &get_current_frame().postDescriptorSet, 0, nullptr);
 	vkCmdBindVertexBuffers(get_current_frame()._mainCommandBuffer, 0, 1, &quad->_vertexBuffer._buffer, &offset);
@@ -2509,7 +2461,7 @@ void Renderer::create_hybrid_descriptors()
 
 	const uint32_t nInstances	= static_cast<uint32_t>(VulkanEngine::engine->_renderables.size());
 	const uint32_t nMaterials	= static_cast<uint32_t>(VulkanEngine::engine->_MtlMaterials.size());
-	const uint32_t nTextures	= static_cast<uint32_t>(VulkanEngine::engine->_textures.size());
+	const uint32_t nTextures	= static_cast<uint32_t>(Texture::_textures.size());
 
 	// binding = 0 TLAS
 	// binding = 1 Storage image
@@ -2625,29 +2577,31 @@ void Renderer::create_hybrid_descriptors()
 	for (Object* obj : VulkanEngine::engine->_renderables)
 	{
 		AllocatedBuffer vBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * obj->mesh->_vertices.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
+		size_t bufferSize = sizeof(rtVertexAttribute) * obj->prefab->_mesh->_vertices.size();
+		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
 		std::vector<rtVertexAttribute> vAttr;
-		vAttr.reserve(obj->mesh->_vertices.size());
-		for (Vertex& v : obj->mesh->_vertices) {
+		std::vector<Vertex> vertices = obj->prefab->_mesh->_vertices;
+		vAttr.reserve(vertices.size());
+		for (Vertex& v : vertices) {
 			vAttr.push_back({ {v.normal.x, v.normal.y, v.normal.z, 1}, {v.color.x, v.color.y, v.color.z, 1}, {v.uv.x, v.uv.y, 1, 1} });
 		}
 
 		void* vdata;
 		vmaMapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation, &vdata);
-		memcpy(vdata, vAttr.data(), sizeof(rtVertexAttribute) * obj->mesh->_vertices.size());
+		memcpy(vdata, vAttr.data(), bufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer = vBuffer._buffer;
-		vertexBufferDescriptor.offset = 0;
-		vertexBufferDescriptor.range = sizeof(rtVertexAttribute) * obj->mesh->_vertices.size();
+		vertexBufferDescriptor.buffer	= vBuffer._buffer;
+		vertexBufferDescriptor.offset	= 0;
+		vertexBufferDescriptor.range	= bufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer = obj->mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset = 0;
-		indexBufferDescriptor.range = sizeof(uint32_t) * obj->mesh->_indices.size();
+		indexBufferDescriptor.buffer	= obj->prefab->_mesh->_indexBuffer._buffer;
+		indexBufferDescriptor.offset	= 0;
+		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->prefab->_mesh->_indices.size();
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		AllocatedBuffer matrixBuffer;
@@ -2712,11 +2666,11 @@ void Renderer::create_hybrid_descriptors()
 	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
 
 	std::vector<VkDescriptorImageInfo> imageInfos;
-	for (auto const& texture : VulkanEngine::engine->_textures)
+	for (auto const& texture : Texture::_textures)
 	{
 		VkDescriptorImageInfo imageBufferInfo = {};
-		imageBufferInfo.sampler = sampler;
-		imageBufferInfo.imageView = texture.second.imageView;
+		imageBufferInfo.sampler		= sampler;
+		imageBufferInfo.imageView	= texture.second->imageView;
 		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		imageInfos.push_back(imageBufferInfo);
