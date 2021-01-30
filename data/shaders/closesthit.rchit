@@ -31,8 +31,8 @@ void main()
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
   ivec3 ind     = ivec3(indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 0], 
-                    indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 1], 
-                    indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 2]);
+                        indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 1], 
+                        indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 2]);
 
   Vertex v0     = vertices[gl_InstanceCustomIndexEXT].v[ind.x];
   Vertex v1     = vertices[gl_InstanceCustomIndexEXT].v[ind.y];
