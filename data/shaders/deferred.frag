@@ -13,9 +13,9 @@ struct Light{
 	vec4 color;	// w used for intensity
 };
 
-layout (std140, set = 0, binding = 4) uniform LightBuffer
+layout (std140, set = 0, binding = 4) buffer LightBuffer
 {
-	Light lights[3];
+	Light lights[];
 }lightBuffer;
 
 const vec3 ambient_light = vec3(0.0);
@@ -58,14 +58,14 @@ void main()
 			attenuation = max(attenuation, 0.0);
 			attenuation = attenuation * attenuation;
 
-			//light_color += (NdotL * light.color.xyz) * attenuation * light_intensity;
 			light_color += NdotL * light.color.xyz * light_intensity * attenuation;
 		}
 	}
 	
 	if(!background)
 		color *= light_color;
-
+	
 	//color = N;
+
 	outFragColor = vec4( color, 1.0f );
 }

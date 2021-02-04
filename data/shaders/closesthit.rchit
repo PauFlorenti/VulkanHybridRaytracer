@@ -13,15 +13,14 @@ hitAttributeEXT vec3 attribs;
 
 struct entityIndices{
   int matIdx;
-  int albedoIdx;
 };
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
 layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m; } matrices[];
-layout(set = 0, std140, binding = 6) uniform Lights { Light lights[3]; } lightsBuffer;
-layout(set = 0, binding = 7) uniform MaterialBuffer { Material mat[5]; } materials;
+layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
+layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
 layout(set = 0, binding = 8) buffer sceneBuffer { entityIndices idx; } matIndices[];
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
@@ -49,11 +48,11 @@ void main()
 	vec3 color = vec3(0), light_color = vec3(0), specular = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
 
-  int matIdx = matIndices[gl_InstanceCustomIndexEXT].idx.matIdx;
-  int textIdx = matIndices[gl_InstanceCustomIndexEXT].idx.albedoIdx;
+  int matIdx  = matIndices[gl_InstanceCustomIndexEXT].idx.matIdx;
+  //int textIdx = matIndices[gl_InstanceCustomIndexEXT].idx.albedoIdx;
 
-  Material mat = materials.mat[matIdx];
-  vec3 albedo = texture(textures[textIdx], uv).xyz;
+  Material mat  = materials.mat[matIdx];
+  vec3 albedo   = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -69,9 +68,6 @@ void main()
 		float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		light_intensity           = isDirectional ? 1.0 : light.color.w / (light_distance * light_distance);
     light_color               = light.color.xyz;
-
-    // Calculate color
-    //prd = Scatter(mat, gl_WorldRayDirectionEXT, N, L, gl_HitTEXT, prd.seed);
 
     // Check if light has impact
     if( NdotL > 0 )
@@ -106,15 +102,15 @@ void main()
     }
 
     vec3 difColor = vec3(0);
-
-    if(mat.illum == 0)  // DIFUS
+    int shadingMode = int(mat.shadingMetallicRoughness.x);
+    if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
       specular  = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
       color    += (difColor + specular) * light_intensity * light.color.xyz * attenuation;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
-    else if(mat.illum == 3) // MIRALL
+    else if(shadingMode == 3) // MIRALL
     {
       
       vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
@@ -125,15 +121,16 @@ void main()
       color += light_intensity * light.color.xyz * (difColor + specular) * attenuation;
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
-    else if(mat.illum == 4) // VIDRE
+    else if(shadingMode == 4) // VIDRE
     {
+      float ior = mat.diffuse.w;
       float NdotD     = dot( N, normalize(gl_WorldRayDirectionEXT) );
 			vec3 refrNormal = NdotD > 0.0 ? -N : N;
-			float refrEta   = NdotD > 0.0 ? 1 / mat.ior : mat.ior;
-			float cosine    = NdotD > 0.0 ? mat.ior * NdotD : -NdotD;
+			float refrEta   = NdotD > 0.0 ? 1 / ior : ior;
+			float cosine    = NdotD > 0.0 ? ior * NdotD : -NdotD;
 
 			vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
-			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, mat.ior ) : 1;
+			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, ior ) : 1;
 			
 			vec4 direction = rnd(prd.seed) < reflectProb ? vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : vec4(refracted, 1);
       color += computeDiffuse(mat, N, L);

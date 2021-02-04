@@ -14,11 +14,9 @@ struct Light{
 };
 
 struct Material{
-	vec4	  diffuse;
-	vec4	  specular; // w is the Glossines factor
-	float	  ior;	    // index of refraction
-	float	  glossiness;
-	int 	  illum;
+	vec4 diffuse;
+    vec4 textures;
+    vec4 shadingMetallicRoughness;
 };
 
 const float PI = 3.14159265;
@@ -42,8 +40,8 @@ vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
     // Specular
     vec3 V          = normalize(viewDir);
     vec3 R          = reflect(-normalize(lightDir), normalize(normal));
-    float specular  = pow(clamp(dot(normalize(R), V), 0.0, 1.0), m.glossiness);
-    return m.specular.xyz * specular;
+    float specular  = pow(clamp(dot(normalize(R), V), 0.0, 1.0), m.shadingMetallicRoughness.z);
+    return vec3(1) * specular;
 };
 
 hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
@@ -63,13 +61,14 @@ hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, 
 
 hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
 {
+    float ior = m.diffuse.w;
     const float NdotD       = dot( normal, direction );
     const vec3 refrNormal   = NdotD > 0.0 ? -normal : normal;
-    const float refrEta     = NdotD > 0.0 ? 1 / m.ior : m.ior;
-    const float cosine      = NdotD > 0.0 ? m.ior * NdotD : -NdotD;
+    const float refrEta     = NdotD > 0.0 ? 1 / ior : ior;
+    const float cosine      = NdotD > 0.0 ? ior * NdotD : -NdotD;
 
     vec3 refracted          = refract( direction, refrNormal, refrEta );
-    const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, m.ior ) : 1;
+    const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, ior ) : 1;
 
     //if( refracted == vec3( 0.0 ))
 	//    refracted = reflect( direction, normal );
@@ -84,7 +83,7 @@ hitPayload Scatter(const Material m, const vec3 direction, const vec3 normal, co
 {
     const vec3 normDirection = normalize(direction);
 
-    switch(m.illum)
+    switch(int(m.shadingMetallicRoughness.x))
     {
         case 0:
             return Diffuse( m, normDirection, normal, L, t);

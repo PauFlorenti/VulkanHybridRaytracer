@@ -1,9 +1,5 @@
 #pragma once
 
-#include <glm/glm/glm.hpp>
-#include <glm/glm/gtc/type_ptr.hpp>
-#include <glm/glm/gtc/matrix_transform.hpp>
-
 #include <vk_mesh.h>
 
 // Define the type of light available
@@ -11,12 +7,6 @@ enum lightType{
 	DIRECTIONAL_LIGHT,
 	POINT_LIGHT,
 	SPOT_LIGHT
-};
-
-struct Material {
-	VkDescriptorSet		textureSet;
-	VkPipeline			pipeline;
-	VkPipelineLayout	pipelineLayout;
 };
 
 struct MTLMaterial {
@@ -58,6 +48,7 @@ public:
 	void update() {};
 	void setColor(glm::vec3 color) {};
 	void draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4 model);
+
 };
 
 class Light : public Entity

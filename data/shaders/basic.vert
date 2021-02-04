@@ -19,8 +19,6 @@ layout(location = 0) out vec3 outPosition;
 layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec3 outColor;
 layout(location = 3) out vec2 outUV;
-layout(location = 4) out float outMat;
-layout(location = 5) out mat4 outMatrix;
 
 struct ObjectData{
 	mat4 model;
@@ -47,6 +45,4 @@ void main()
     outColor  	= inColor;
 	outNormal 	= vec3(vec4(inNormal, 1.0) * pushC.matrix).xyz;
     outUV 		= inUV;
-	outMat 		= 0; //float(pushC.matIdx) / 10;
-	outMatrix = pushC.matrix;
 }

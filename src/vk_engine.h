@@ -7,8 +7,8 @@
 #include <imgui/imgui_impl_sdl.h>
 #include <imgui/imgui_impl_vulkan.h>
 
-#include "camera.h"
 #include "renderer.h"
+#include "scene.h"
 
 class Window;
 
@@ -110,6 +110,7 @@ public:
 	bool _skyboxFollow{ true };
 
 	Window *_window;
+	Scene* _scene;
 
 	DeletionQueue _mainDeletionQueue;
 
@@ -151,15 +152,10 @@ public:
 	// Allocator
 	VmaAllocator						_allocator;
 
-	std::vector<Object*>				_renderables;
-	std::vector<Light*>					_lights;
-
-	std::unordered_map<std::string, Material>		_materials;
 	std::unordered_map<std::string, Texture>		_textures;
 	std::unordered_map<std::string, MTLMaterial>	_MtlMaterials;
 	Texture _skyboxTexture;
 
-	Camera* _camera;
 	bool mouse_locked;
 
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT		enabledIndexingFeatures{};
@@ -187,13 +183,6 @@ public:
 	void run();
 
 	void update(const float dt);
-
-	Material* create_material(
-		VkPipeline pipeline, 
-		VkPipelineLayout layout, 
-		const std::string& name);
-
-	Material* get_material(const std::string& name);
 
 	Texture* get_texture(const std::string& name);
 
@@ -241,8 +230,6 @@ private:
 	void init_upload_commands();
 
 	void load_images();
-
-	void init_scene();
 
 	void init_imgui();
 

@@ -7,6 +7,13 @@
 #include "raycommon.glsl"
 #include "helpers.glsl"
 
+struct GPUMaterial
+{
+	vec4 diffuse;
+	vec4 textures;
+	vec4 shadingMetallicRoughness;
+};
+
 layout (set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout (set = 0, binding = 1, rgba8) uniform image2D image;
 layout (set = 0, binding = 2) uniform CameraProperties 
@@ -17,8 +24,8 @@ layout (set = 0, binding = 2) uniform CameraProperties
 layout (set = 0, binding = 3) uniform sampler2D positionTexture;
 layout (set = 0, binding = 4) uniform sampler2D normalTexture;
 layout (set = 0, binding = 5) uniform sampler2D albedoTexture;
-layout (std140, set = 0, binding = 6) uniform Lights { Light lights[3]; } lightsBuffer;
-layout (set = 0, binding = 11) uniform MaterialBuffer { Material mat[10]; } materials;
+layout (std140, set = 0, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
+layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 layout(location = 1) rayPayloadEXT bool isShadowed;
@@ -36,8 +43,11 @@ void main()
 	const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
 	vec2 d 					= inUV * 2.0 - 1.0;
 
+	float matIdx 			= round(texture(positionTexture, inUV).w * 100);
+	Material mat 			= materials.mat[int(matIdx)];
+	int shadingMode 		= int(mat.shadingMetallicRoughness.x);
+
     vec3 position 			= texture(positionTexture, inUV).xyz;
-	float matIdx 			= round(texture(positionTexture, inUV).w * 10);
 	vec3 normal 			= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 			= texture(albedoTexture, inUV).xyz;
 	bool background 		= texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
@@ -51,11 +61,9 @@ void main()
 	float tmin 				= 0.001;
 	float tmax 				= 10000.0;
 
-	Material mat = materials.mat[int(matIdx)];
-
-	vec3 color 		= vec3(0);
-	vec3 origin 	= vec3(0);
-	vec3 direction 	= vec3(0);
+	vec3 color 				= vec3(0);
+	vec3 origin 			= vec3(0);
+	vec3 direction 			= vec3(0);
 
 	for(int i = 0; i < lightsBuffer.lights.length(); i++)
 	{
@@ -89,18 +97,19 @@ void main()
 
 		// Calculate illumination
 		// In case material is diffuse, no need to ray trace at the moment
-		if(mat.illum == 0)
+		if( shadingMode == 0)
 		{
 			vec3 difColor = computeDiffuse(mat, N, L);
 			vec3 specular = isShadowed ? vec3(0) : computeSpecular(mat, N, L, V);
-			color += (difColor + specular) * light.color.xyz * attenuation * light_intensity;
+			color += (difColor ) * light.color.xyz * attenuation * light_intensity;
 		}
-		else if(mat.illum == 3)
+		else if(shadingMode == 3)
 		{
 			direction 			= reflect(-V, N);
 			origin 				= position;
 			vec3 difColor 		= computeDiffuse(mat, N, L);
 			vec3 specular 		= computeSpecular(mat, N, L, V);
+			
 			for(;depth < MAX_RECURSION; depth++)
 			{
 				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
@@ -108,6 +117,7 @@ void main()
 				if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
 				{
 					color += (prd.colorAndDist.xyz * (difColor + specular)) * light.color.xyz * light_intensity * attenuation;
+					color = prd.colorAndDist.xyz;
 					break;
 				}
 				color += prd.colorAndDist.xyz * 0.1;
@@ -116,16 +126,17 @@ void main()
 				prd.direction.w = 1;
 			}
 		}
-		else if(mat.illum == 4)
+		else if(shadingMode == 4)
 		{
+			float ior = mat.diffuse.w;
 			origin 					= position;
 			float NdotD 			= dot( N, -V );
 			vec3 refrNormal 		= NdotD > 0.0 ? -N : N;
-			float refrEta 			= NdotD > 0.0 ? 1 / mat.ior : mat.ior;
-			float cosine 			= NdotD > 0.0 ? mat.ior * NdotD : -NdotD;
+			float refrEta 			= NdotD > 0.0 ? 1 / ior : ior;
+			float cosine 			= NdotD > 0.0 ? ior * NdotD : -NdotD;
 
 			vec3 refracted 			= refract( -V, refrNormal, refrEta );
-			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, mat.ior ) : 1;
+			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, ior ) : 1;
 			prd.direction.w 		= 1;
 			
 			direction = rnd(prd.seed) < reflectProb ? reflect(-V, N) : refracted;
@@ -145,11 +156,13 @@ void main()
 				prd.direction.w = 1;
 			}
 		}
+		
 	}
-
+	
 	if(!background)
 		color *= albedo;
 	else
 		color = albedo;
+
     imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
 }
