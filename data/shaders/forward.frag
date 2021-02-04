@@ -10,21 +10,6 @@ layout (location = 5) in mat4 inMatrix;
 
 layout (location = 0) out vec4 outColor;
 
-
-//layout(set = 0, binding = 1) uniform sceneData
-//{
-//    vec4 fogColor;
-//	vec4 fogDistances;
-//	vec4 ambientColor;
-//	vec4 sunlightDirection;
-//	vec4 sunlightColor;
-//}scene;
-
-//layout(push_constant) uniform constants
-//{
-//	int id;
-//}pushC;
-
 layout(set = 0, binding = 1) uniform sampler2D[] textures;
 
 void main()

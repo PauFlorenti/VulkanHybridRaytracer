@@ -1,6 +1,8 @@
 
 #include "entity.h"
 
+#include "vk_engine.h"
+
 Object::Object(glm::vec3 position, Mesh* mesh, Material* material) :
 	material(material)
 {

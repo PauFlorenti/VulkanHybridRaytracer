@@ -5,8 +5,6 @@ layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec2 inUV;
-layout (location = 4) in float inMat;
-layout (location = 5) in mat4 inMatrix;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
@@ -30,7 +28,7 @@ void main()
     vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);
     color += emissive;
 
-    float materialIdx = float(inMat);
+    float materialIdx = pushC.shadingMetallicRoughness.w / 100;
 
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );

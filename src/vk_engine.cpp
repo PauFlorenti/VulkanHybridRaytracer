@@ -45,12 +45,13 @@ void VulkanEngine::init()
 	// Load images and meshes for the engine
 	load_images();
 
-	init_scene();
+	_scene = new Scene();
+	_scene->create_scene();
 
 	// Add necessary features to the engine
 	init_ray_tracing();
 
-	renderer = new Renderer();
+	renderer = new Renderer(_scene);
 
 	init_imgui();
 
@@ -111,9 +112,6 @@ void VulkanEngine::run()
 		renderer->render_gui();
 		switch (_mode)
 		{
-		case FORWARD_RENDER:
-			renderer->rasterize();
-			break;
 		case DEFERRED:
 			renderer->render();
 			break;
@@ -135,7 +133,7 @@ void VulkanEngine::update(const float dt)
 {
 	_window->input_update();
 
-	glm::mat4 view			= _camera->getView();
+	glm::mat4 view			= _scene->_camera->getView();
 	glm::mat4 projection	= glm::perspective(glm::radians(60.0f), (float)_window->getWidth() / (float)_window->getHeight(), 0.1f, 1000.0f);
 	projection[1][1] *= -1;
 
@@ -146,7 +144,7 @@ void VulkanEngine::update(const float dt)
 
 	// Skybox Matrix followin the camera
 	if (_skyboxFollow) {
-		glm::mat4 skyMatrix = glm::translate(glm::mat4(1), _camera->_position);
+		glm::mat4 skyMatrix = glm::translate(glm::mat4(1), _scene->_camera->_position);
 		void* skyMatData;
 		vmaMapMemory(_allocator, renderer->_skyboxBuffer._allocation, &skyMatData);
 		memcpy(skyMatData, &skyMatrix, sizeof(glm::mat4));
@@ -173,10 +171,10 @@ void VulkanEngine::update(const float dt)
 	void* rtLightData;
 	vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &rtLightData);
 	uboLight* rtLightUBO = (uboLight*)rtLightData;
-	for (int i = 0; i < _lights.size(); i++)
+	for (int i = 0; i < _scene->_lights.size(); i++)
 	{
-		_lights[i]->update();
-		Light* l = _lights[i];
+		_scene->_lights[i]->update();
+		Light* l = _scene->_lights[i];
 		if (l->type == DIRECTIONAL_LIGHT) {
 			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
 			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, -1);
@@ -188,17 +186,6 @@ void VulkanEngine::update(const float dt)
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
-	
-	std::vector<MTLMaterial> materials;
-	for (auto it : _MtlMaterials)
-	{
-		materials.push_back(it.second);
-	}
-	
-	void* matData;
-	vmaMapMemory(_allocator, renderer->_matBuffer._allocation, &matData);
-	memcpy(matData, materials.data(), sizeof(MTLMaterial) * materials.size());
-	vmaUnmapMemory(_allocator, renderer->_matBuffer._allocation);
 
 	//for (int i = 0; i < renderer->_tlas.size(); i++)
 	//{
@@ -207,26 +194,6 @@ void VulkanEngine::update(const float dt)
 	//}
 	//renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);
 	
-}
-
-Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
-{
-	Material mat = {};
-	mat.pipeline		= pipeline;
-	mat.pipelineLayout	= layout;
-	_materials[name]	= mat;
-
-	return &_materials[name];
-}
-
-Material* VulkanEngine::get_material(const std::string& name)
-{
-	// Search for the material, return null if not found
-	auto it = _materials.find(name);
-	if (it == _materials.end())
-		return nullptr;
-	else
-		return &(*it).second;
 }
 
 Texture* VulkanEngine::get_texture(const std::string& name)
@@ -566,165 +533,6 @@ void VulkanEngine::init_upload_commands()
 		vkDestroyFence(_device, _uploadContext._uploadFence, nullptr);
 		vkDestroyCommandPool(_device, _uploadContext._commandPool, nullptr);
 	});
-}
-
-void VulkanEngine::init_scene()
-{
-	_camera = new Camera(glm::vec3(0, 5, 10));
-
-	Light *light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, -10));
-	light->intensity = 100.0f;
-
-	Light* light2 = new Light();
-	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 30, 0));
-	light2->intensity = 250.0f;
-	light2->color = glm::vec3(1, 0, 0);
-
-	Light* light3 = new Light();
-	light3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 30, 0));
-	light3->intensity = 250.0f;
-	light3->color = glm::vec3(0, 0, 1);
-
-	Light* directional = new Light(DIRECTIONAL_LIGHT);
-	directional->m_matrix = glm::translate(glm::mat4(1), glm::vec3(20, 100, 20));
-
-	//_lights.push_back(directional);
-	_lights.push_back(light);
-	//_lights.push_back(light2);
-	//_lights.push_back(light3);
-
-	// Diffuse Material
-	MTLMaterial simple;
-	simple.illum		= 0;
-	simple.diffuse		= { 1, 1, 1, 1 };
-	//simple.specular = {0,0,0,0};
-	simple.specular		= { 1, 1, 1, 1 };
-	simple.ior			= 0.0f;
-	simple.glossiness	= 32.0f;
-
-	MTLMaterial redSimple = simple;
-	redSimple.diffuse = { 0.982f, 0.17f, 0.1f, 1.0f };
-
-	// Metallic material
-	MTLMaterial gold;
-	gold.illum			= 3;
-	gold.diffuse		= { 0.982f, 0.857f, 0.4f, 1.0f };
-	gold.ior			= 1.0f;
-	gold.glossiness		= 5.0f;
-
-	MTLMaterial metal;
-	metal.illum			= 3;
-	metal.diffuse		= { 1, 1, 1, 1 };
-	metal.ior			= 1.0f;
-	metal.glossiness	= 5.0f;
-
-	MTLMaterial glass;
-	glass.illum			= 4;
-	glass.diffuse		= {0, 0, 0, 1};
-	glass.ior			= 1.31f;
-	glass.glossiness	= 1.0f;
-	
-	_MtlMaterials["simple"]		= simple;
-	_MtlMaterials["gold"]		= gold;
-	_MtlMaterials["metal"]		= metal;
-	_MtlMaterials["glass"]		= glass;
-	_MtlMaterials["redSimple"]	= redSimple;
-	
-	Prefab* p_duck		= Prefab::GET("duck.gltf");
-	Prefab* p_sphere	= Prefab::GET("sphere.obj");
-	Prefab* p_quad		= new Prefab();
-	p_quad->_materials.push_back(GltfMaterial());
-	p_quad->_materials[0].diffuseTexture = Texture::get_id("asphalt.png");
-	p_quad->_mesh		= Mesh::get_quad();
-	Prefab* p_cube		= new Prefab();
-	p_cube->_mesh		= Mesh::get_cube();
-	Prefab* p_car		= Prefab::GET("scene.gltf", true);
-
-	Object* monkey = new Object();
-	monkey->material		= get_material("offscreen");
-	glm::mat4 translation	= glm::translate(glm::mat4(1.f), glm::vec3(2.5, 5, -8));
-	glm::mat4 scale			= glm::scale(glm::mat4(1.f), glm::vec3(0.8));
-	monkey->m_matrix		= translation * scale;
-	monkey->materialIdx		= get_materialId("simple");
-	
-	Object* quad = new Object();
-	quad->prefab			= p_quad;
-	quad->material			= get_material("offscreen");
-	quad->m_matrix			= glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(50));
-	quad->materialIdx		= get_materialId("simple");
-	quad->id				= get_textureId("asphalt");
-
-	Object* cube = new Object();
-	cube->prefab			= p_cube;
-	cube->material			= get_material("offscreen");
-	cube->m_matrix			= glm::translate(glm::mat4(1), glm::vec3(10, 5, -8));
-	cube->materialIdx		= get_materialId("redSimple");
-
-	Object* sphere = new Object();
-	sphere->prefab			= p_sphere;
-	sphere->material		= get_material("offscreen");
-	sphere->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
-	sphere->materialIdx		= get_materialId("gold");
-
-	Object* sphere2 = new Object();
-	sphere2->prefab			= p_sphere;
-	sphere2->material		= get_material("offscreen");
-	sphere2->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(-2.5, 5, -15));
-	sphere2->materialIdx	= get_materialId("glass");
-
-	Object* sphere3 = new Object();
-	sphere3->prefab			= p_sphere;
-	sphere3->material		= get_material("offscreen");
-	sphere3->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(5, 5, -15));
-	sphere3->materialIdx	= get_materialId("simple");
-	//sphere3->id = get_textureId("asphalt");
-
-	Object* mirror = new Object();
-	mirror->prefab			= p_cube;
-	mirror->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(0, 0, -20)) *
-		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
-	mirror->materialIdx		= get_materialId("metal");
-
-	Object* mirror2 = new Object();
-	mirror2->prefab			= p_cube;
-	mirror2->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(0, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(10, 10, 1));
-	mirror2->materialIdx	= get_materialId("metal");
-
-	//Object* car = new Object();
-	//car->prefab = p_car;
-	//car->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -30))
-	//	* glm::scale(glm::mat4(1), glm::vec3(0.1));
-
-	//Object* helmet = new Object();
-	//helmet->prefab = Prefab::GET("FlightHelmet.gltf");
-	//helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-30, 10, -30))
-	//	* glm::scale(glm::mat4(1), glm::vec3(5));;
-
-	Object* duck = new Object();
-	duck->prefab = p_duck;
-	duck->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 0, -20));
-
-	Object* cornell = new Object();
-	cornell->prefab = Prefab::GET("cornellBox.gltf");
-	cornell->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -30));		
-
-	//_renderables.push_back(empire);
-	_renderables.push_back(sphere);
-	//_renderables.push_back(sphere2);
-	//_renderables.push_back(sphere3);
-	//_renderables.push_back(monkey);
-	//_renderables.push_back(cube);
-	_renderables.push_back(quad);
-	_renderables.push_back(duck);
-	//_renderables.push_back(mirror);
-	//_renderables.push_back(mirror2);
-	//_renderables.push_back(car);
-	//_renderables.push_back(helmet);
-	//_renderables.push_back(cornell);
 }
 
 void VulkanEngine::init_imgui()

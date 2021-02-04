@@ -2,7 +2,8 @@
 #include <vk_types.h>
 #include <glm/glm/glm.hpp>
 
-#include "entity.h"
+//#include "entity.h"
+#include "scene.h"
 #include "vk_textures.h"
 
 struct FrameData
@@ -38,13 +39,14 @@ class Renderer {
 
 public:
 
-	Renderer();
+	Renderer(Scene* scene);
 
 	// Auxiliar pointer to engine variables
 	VkDevice*		device;
 	VkSwapchainKHR* swapchain;
 	int*			frameNumber;
 	Entity*			gizmoEntity;
+	Scene*			_scene;
 
 	FrameData		_frames[FRAME_OVERLAP];
 	pushConstants	_constants;

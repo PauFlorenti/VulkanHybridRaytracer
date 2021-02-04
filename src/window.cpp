@@ -52,22 +52,22 @@ void Window::handleEvent(SDL_Event& e, const float dt)
 	else if (e.type == SDL_KEYDOWN)
 	{
 		if (e.key.keysym.sym == SDLK_w) {
-			VulkanEngine::engine->_camera->processKeyboard(FORWARD, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(FORWARD, dt);
 		}
 		if (e.key.keysym.sym == SDLK_a) {
-			VulkanEngine::engine->_camera->processKeyboard(LEFT, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(LEFT, dt);
 		}
 		if (e.key.keysym.sym == SDLK_s) {
-			VulkanEngine::engine->_camera->processKeyboard(BACKWARD, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(BACKWARD, dt);
 		}
 		if (e.key.keysym.sym == SDLK_d) {
-			VulkanEngine::engine->_camera->processKeyboard(RIGHT, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(RIGHT, dt);
 		}
 		if (e.key.keysym.sym == SDLK_LSHIFT) {
-			VulkanEngine::engine->_camera->processKeyboard(DOWN, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(DOWN, dt);
 		}
 		if (e.key.keysym.sym == SDLK_SPACE) {
-			VulkanEngine::engine->_camera->processKeyboard(UP, dt);
+			VulkanEngine::engine->_scene->_camera->processKeyboard(UP, dt);
 		}
 		if (e.key.keysym.sym == SDLK_1) {
 			VulkanEngine::engine->_mode = FORWARD_RENDER;
@@ -93,7 +93,7 @@ void Window::handleEvent(SDL_Event& e, const float dt)
 	}
 	if (e.type == SDL_MOUSEMOTION) {
 		if (_mouse_locked)
-			VulkanEngine::engine->_camera->rotate(_mouse_delta.x, _mouse_delta.y);
+			VulkanEngine::engine->_scene->_camera->rotate(_mouse_delta.x, _mouse_delta.y);
 	}
 }
 
