@@ -799,7 +799,6 @@ void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode
 			prim.materialIndex	= loadMaterial(tmodel, tprimitive.material);
 			loadTextures(tmodel, prim.materialIndex);
 			node->_primitives.push_back(prim);
-			//_primitives.push_back(&prim);
 		}
 	}
 

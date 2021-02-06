@@ -184,6 +184,8 @@ void VulkanEngine::update(const float dt)
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 
+	// TODO: ALVAR CARRY MY WITH MEMORY LEAK
+	/*
 	int instanceIndex = 0;
 	renderer->_tlas.clear();
 	for (Object* obj : _scene->_entities)
@@ -198,6 +200,7 @@ void VulkanEngine::update(const float dt)
 		}
 	}
 	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);	
+	*/
 }
 
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
