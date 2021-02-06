@@ -20,7 +20,6 @@ template <typename T>
 bool vkutil::existsInVector(std::vector<T> v, T k)
 {
 	auto it = std::find(v.begin(), v.end(), k);
-	//auto it = std::find_if(v.begin(), v.end(), k.() != v.end())
 
 	if (it != v.end())
 		return true;

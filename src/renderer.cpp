@@ -1469,7 +1469,7 @@ void Renderer::create_bottom_acceleration_structure()
 	for (Object* obj : _scene->_entities)
 	{
 		Prefab* p = obj->prefab;
-		if (p->_root)
+		if (!p->_root.empty())
 		{
 			VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress{};
 			VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress{};
@@ -1477,8 +1477,11 @@ void Renderer::create_bottom_acceleration_structure()
 			vertexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(obj->prefab->_mesh->_vertexBuffer._buffer);
 			indexBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(obj->prefab->_mesh->_indexBuffer._buffer);
 
-			std::vector<BlasInput> nodeGeo = p->_root->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
-			allBlas.insert(allBlas.end(), nodeGeo.begin(), nodeGeo.end());
+			for (Node* root : p->_root)
+			{
+				std::vector<BlasInput> nodeGeo = root->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
+				allBlas.insert(allBlas.end(), nodeGeo.begin(), nodeGeo.end());
+			}
 		}
 	}
 
@@ -1496,10 +1499,13 @@ void Renderer::create_top_acceleration_structure()
 	{
 		Prefab* p = entity->prefab;
 		// obj instance
-		if (p->_root)
+		if (!p->_root.empty())
 		{
-			std::vector<TlasInstance> instances = p->_root->node_to_instance(instanceIndex, entity->m_matrix);
-			_tlas.insert(_tlas.end(), instances.begin(), instances.end());
+			for (Node* root : p->_root)
+			{
+				std::vector<TlasInstance> instances = root->node_to_instance(instanceIndex, entity->m_matrix);
+				_tlas.insert(_tlas.end(), instances.begin(), instances.end());
+			}
 		}
 	}
 
@@ -1853,9 +1859,11 @@ void Renderer::create_rt_descriptors()
 		indexBufferDescriptor.range		= indexBufferSize;
 		indexDescInfo.push_back(indexBufferDescriptor);
 
-		obj->prefab->_root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
-
-		obj->prefab->_root->fill_index_buffer(sceneIdxDescInfo);
+		for (Node* root : obj->prefab->_root)
+		{
+			root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
+			root->fill_index_buffer(sceneIdxDescInfo);
+		}
 	}
 
 	VkDescriptorBufferInfo lightBufferInfo;
@@ -2558,8 +2566,11 @@ void Renderer::create_hybrid_descriptors()
 		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->prefab->_mesh->_indices.size();
 		indexDescInfo.push_back(indexBufferDescriptor);
 
-		obj->prefab->_root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
-		obj->prefab->_root->fill_index_buffer(sceneIdxDescInfo);
+		for (Node* root : obj->prefab->_root)
+		{
+			root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
+			root->fill_index_buffer(sceneIdxDescInfo);
+		}
 
 	}
 

@@ -607,21 +607,23 @@ BlasInput Prefab::primitive_to_geometry(const Primitive& p)
 
 void Prefab::fill_matrix_descriptor_buffer(std::vector<VkDescriptorBufferInfo>& buffer, const glm::mat4 model)
 {
-	if (_root)
+	if (!_root.empty())
 	{
-		_root->fill_matrix_buffer(buffer, model);
+		for(Node* root : _root)
+			root->fill_matrix_buffer(buffer, model);
 	}
 }
 
 void Prefab::fill_index_buffer(std::vector<VkDescriptorBufferInfo>& buffer)
 {
-	if (_root)
+	if (!_root.empty())
 	{
-		_root->fill_index_buffer(buffer);
+		for(Node* root : _root)
+			root->fill_index_buffer(buffer);
 	}
 }
 
-void Prefab::drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node node, glm::mat4& model)
+void Prefab::drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node& node, glm::mat4& model)
 {
 	if (node._primitives.size() > 0)
 	{
@@ -674,9 +676,10 @@ void Prefab::draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::ma
 	VkDeviceSize offset{ 0 };
 	vkCmdBindVertexBuffers(cmd, 0, 1, &_mesh->_vertexBuffer._buffer, &offset);
 	vkCmdBindIndexBuffer(cmd, _mesh->_indexBuffer._buffer, offset, VK_INDEX_TYPE_UINT32);
-	if (_root)
+	if (!_root.empty())
 	{
-		drawNode(cmd, pipelineLayout, *_root, model);
+		for(auto& root : _root)
+			drawNode(cmd, pipelineLayout, *root, model);
 	}
 }
 
@@ -808,8 +811,7 @@ void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode
 	}
 	else
 	{
-		_root = node;
-		//_nodes.push_back(node);
+		_root.push_back(node);
 	}
 }
 
@@ -867,14 +869,14 @@ void Prefab::loadTextures(const tinygltf::Model& tmodel, const int index)
 
 void Prefab::createOBJprefab(Mesh* mesh)
 {
-	_root = new Node();
+	Node* node = new Node();
 	_mesh = mesh;
 	Primitive p{};
 	p.indexCount = _mesh ? _mesh->_indices.size() : 0;
 	p.vertexCount = _mesh ? _mesh->_vertices.size() : 0;
 	p.materialIndex = Material::setDefaultMaterial();
-	_root->_primitives.push_back(p);
-
+	node->_primitives.push_back(p);
+	_root.push_back(node);
 }
 
 Prefab* Prefab::GET(const std::string filename, bool invertNormals)
