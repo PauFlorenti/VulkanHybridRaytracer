@@ -152,8 +152,6 @@ public:
 	// Allocator
 	VmaAllocator						_allocator;
 
-	std::unordered_map<std::string, Texture>		_textures;
-	std::unordered_map<std::string, MTLMaterial>	_MtlMaterials;
 	Texture _skyboxTexture;
 
 	bool mouse_locked;
@@ -183,14 +181,6 @@ public:
 	void run();
 
 	void update(const float dt);
-
-	Texture* get_texture(const std::string& name);
-
-	int get_textureId(const std::string& name);
-
-	int get_materialId(const std::string& name);
-
-	MTLMaterial get_MtlMaterial(const int id);
 
 	void immediate_submit(std::function<void(VkCommandBuffer)>&& function);
 
@@ -228,8 +218,6 @@ private:
 	void init_ray_tracing();
 
 	void init_upload_commands();
-
-	void load_images();
 
 	void init_imgui();
 

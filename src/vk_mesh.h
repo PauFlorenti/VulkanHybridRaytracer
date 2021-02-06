@@ -123,9 +123,9 @@ class Prefab
 public:
 	static std::unordered_map<std::string, Prefab*> _prefabsMap;
 
-	std::string		_name;
-	Node*			_root;
-	Mesh*			_mesh = NULL;
+	std::string			_name;
+	std::vector<Node*>	_root;
+	Mesh*				_mesh = NULL;
 
 	static Prefab* GET(std::string filename, const bool invertNormals = false);
 	static Prefab* GET(std::string name, Mesh* mesh);
@@ -139,7 +139,7 @@ private:
 	void loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode, Node* parent, const bool invertNormals = false);
 	int loadMaterial(const tinygltf::Model& tmodel, const int index);
 	void loadTextures(const tinygltf::Model&, const int index);
-	void drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node node, glm::mat4& model);
+	void drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node& node, glm::mat4& model);
 	void createOBJprefab(Mesh* mesh = NULL);
 	glm::mat4 get_local_matrix(const tinygltf::Node& tnode);
 };

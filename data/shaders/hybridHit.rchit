@@ -11,17 +11,13 @@ layout (location = 0) rayPayloadInEXT hitPayload prd;
 layout (location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
-struct entityIndices{
-  int matIdx;
-};
-
 layout (set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout (set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
 layout (set = 0, binding = 7, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout (set = 0, binding = 8) buffer Indices { int i[]; } indices[];
 layout (set = 0, binding = 9) uniform sampler2D[] textures;
 layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
-layout (set = 0, binding = 12) buffer sceneBuffer { entityIndices matIdx; } matIndices[];
+layout (set = 0, binding = 12) buffer sceneBuffer { int matIdx; } matIndices[];
 layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m; } matrices[];
 
 void main()
@@ -42,12 +38,12 @@ void main()
   // Calculate worldPos by using ray information
   vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  vec3 N        = normalize(vec4(vec4(normal, 1) * matrices[gl_InstanceCustomIndexEXT].m).xyz);
+  vec3 N        = normalize(vec4(vec4(normal, 0) * matrices[gl_InstanceCustomIndexEXT].m).xyz);
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
-  int matIdx = matIndices[gl_InstanceCustomIndexEXT].matIdx.matIdx;
+  int materialIdx = matIndices[gl_InstanceCustomIndexEXT].matIdx;
 
-  Material mat = materials.mat[matIdx];
+  Material mat = materials.mat[materialIdx];
   vec3 albedo = texture(textures[int(mat.textures.x)], uv).xyz;
 
   // Init values used for lightning
@@ -102,7 +98,7 @@ void main()
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      specular  = computeSpecular(mat, N, L, -rayDir);
+      specular  = vec3(0); //computeSpecular(mat, N, L, -rayDir);
       color    += (difColor + specular) * light_intensity * light.color.xyz * attenuation;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
@@ -112,7 +108,7 @@ void main()
       vec3 reflected    = reflect(rayDir, N);
       bool isScattered  = dot(reflected, N) > 0;
       difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      specular          = computeSpecular(mat, N, L, -rayDir);
+      specular          = vec3(0); //computeSpecular(mat, N, L, -rayDir);
 
       color += light_intensity * light.color.xyz * (difColor + specular) * attenuation;
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);

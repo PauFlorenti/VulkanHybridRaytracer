@@ -42,9 +42,6 @@ void VulkanEngine::init()
 
 	init_upload_commands();
 
-	// Load images and meshes for the engine
-	load_images();
-
 	_scene = new Scene();
 	_scene->create_scene();
 
@@ -187,56 +184,23 @@ void VulkanEngine::update(const float dt)
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 
-	//for (int i = 0; i < renderer->_tlas.size(); i++)
-	//{
-	//	TlasInstance& tinst = renderer->_tlas[i];
-	//	tinst.transform = _renderables[i]->m_matrix;
-	//}
-	//renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);
-	
-}
-
-Texture* VulkanEngine::get_texture(const std::string& name)
-{
-	auto it = _textures.find(name);
-	if (it == _textures.end()) {
-		return nullptr;
+	// TODO: ALVAR CARRY MY WITH MEMORY LEAK
+	/*
+	int instanceIndex = 0;
+	renderer->_tlas.clear();
+	for (Object* obj : _scene->_entities)
+	{
+		if (!obj->prefab->_root.empty())
+		{
+			for (Node* root : obj->prefab->_root)
+			{
+				std::vector<TlasInstance> instances = root->node_to_instance(instanceIndex, obj->m_matrix);
+				renderer->_tlas.insert(renderer->_tlas.end(), instances.begin(), instances.end());
+			}
+		}
 	}
-	else
-		return &(*it).second;
-}
-
-int VulkanEngine::get_textureId(const std::string& name)
-{
-	int i = 0;
-	for (auto it : _textures) {
-		if (it.first == name)
-			break;
-		i++;
-	}
-	return i;
-}
-
-int VulkanEngine::get_materialId(const std::string& name)
-{
-	int i = 0;
-	for (auto it : _MtlMaterials) {
-		if (it.first == name)
-			break;
-		i++;
-	}
-	return i;
-}
-
-MTLMaterial VulkanEngine::get_MtlMaterial(const int id)
-{
-	int counter = 0;
-	for (const auto& m : _MtlMaterials) {
-		if (counter == id)
-			return m.second;
-		counter++;
-	}
-
+	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);	
+	*/
 }
 
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
@@ -591,14 +555,6 @@ void VulkanEngine::init_imgui()
 	});
 }
 
-void VulkanEngine::load_images()
-{
-	//Texture::GET("whiteTexture.png");
-	//Texture::GET("blackTexture.png");
-	//Texture::GET("asphalt.png");
-	//Texture::GET("woods.jpg");
-}
-
 void VulkanEngine::create_attachment(VkFormat format, VkImageUsageFlagBits usage, Texture* texture)
 {
 	VkImageAspectFlags aspectMask = 0;
@@ -760,7 +716,6 @@ bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outS
 	// Find up the size by looking up the location of the cursor
 	// Since it is at the end, it gives the number of bytes
 	size_t fileSize = (size_t)file.tellg();
-	//std::vector<char> buffer(fileSize);
 
 	// spirv expects the buffer to be on uint32, make sure to reserve a int vector big enough for the entire file
 	std::vector<uint32_t> buffer((fileSize / sizeof(uint32_t)));

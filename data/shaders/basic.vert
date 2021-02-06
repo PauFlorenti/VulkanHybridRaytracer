@@ -43,6 +43,6 @@ void main()
 
 	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
-	outNormal 	= vec3(vec4(inNormal, 1.0) * pushC.matrix).xyz;
+	outNormal 	= vec3(pushC.matrix * vec4(inNormal, 0.0)).xyz;
     outUV 		= inUV;
 }
