@@ -81,13 +81,6 @@ struct UploadContext {
 	VkCommandPool	_commandPool;
 };
 
-struct ScratchBuffer {
-	//AllocatedBuffer buffer;
-	uint64_t deviceAddress = 0;
-	VkBuffer buffer = VK_NULL_HANDLE;
-	VkDeviceMemory memory = VK_NULL_HANDLE;
-};
-
 //TODO solve problem when creating the commands. We may want 2 FRAME_OVERLAP but it has to take
 //into account the number of swapchain images
 //constexpr unsigned int FRAME_OVERLAP = 2;
@@ -184,7 +177,7 @@ public:
 
 	void immediate_submit(std::function<void(VkCommandBuffer)>&& function);
 
-	void create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer);
+	void create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer, bool destroy = true);
 
 	size_t pad_uniform_buffer_size(size_t originalSize);
 
@@ -199,13 +192,7 @@ public:
 
 	uint32_t getBufferDeviceAddress(VkBuffer buffer);
 
-	ScratchBuffer createScratchBuffer(VkDeviceSize size);
-
-	uint32_t get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags flags, VkBool32* memTypeFound = nullptr);
-
 	void recreate_swapchain();
-
-	std::string findFile(const std::string& filename, const std::vector<std::string>& directories, bool warn = false);
 
 private:
 

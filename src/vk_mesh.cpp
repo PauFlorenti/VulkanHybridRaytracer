@@ -2,7 +2,7 @@
 #include "vk_mesh.h"
 #include "vk_initializers.h"
 #include "vk_engine.h"
-#include "vk_utils.cpp"
+#include "vk_utils.h"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -79,7 +79,7 @@ Mesh* Mesh::GET(const char* filename)
 {
 	Mesh* mesh = new Mesh();
 	std::string s = filename;
-	std::string name = VulkanEngine::engine->findFile(s, searchPaths, true);
+	std::string name = vkutil::findFile(s, searchPaths, true);
 	
 	if(!_loadedMeshes[name])
 	{
@@ -421,15 +421,14 @@ glm::mat4 Node::getGlobalMatrix(bool fast)
 	return _global_matrix;
 }
 
-std::vector<BlasInput> Node::node_to_geometry(
+void Node::node_to_geometry(
+	std::vector<BlasInput>& blasVector,
 	const VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress,
 	const VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress)
 {
-	std::vector<BlasInput> blasVector;
-	//blasVector.reserve(_primitives.size());
-	for (Primitive& p : _primitives)
+	for (Primitive* p : _primitives)
 	{
-		const uint32_t nTriangles = p.indexCount / 3;
+		const uint32_t nTriangles = p->indexCount / 3;
 
 		// Set the triangles geometry
 		VkAccelerationStructureGeometryTrianglesDataKHR triangles{};
@@ -438,7 +437,7 @@ std::vector<BlasInput> Node::node_to_geometry(
 		triangles.vertexFormat				= VK_FORMAT_R32G32B32_SFLOAT;
 		triangles.vertexData				= vertexBufferDeviceAddress;
 		triangles.vertexStride				= sizeof(Vertex);
-		triangles.maxVertex					= static_cast<uint32_t>(p.vertexCount);
+		triangles.maxVertex					= static_cast<uint32_t>(p->vertexCount);
 		triangles.indexData					= indexBufferDeviceAddress;
 		triangles.indexType					= VK_INDEX_TYPE_UINT32;
 
@@ -448,9 +447,9 @@ std::vector<BlasInput> Node::node_to_geometry(
 		asGeometry.geometry.triangles		= triangles;
 
 		VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
-		asBuildRangeInfo.firstVertex		= p.firstVertex;
+		asBuildRangeInfo.firstVertex		= 0;// p->firstVertex;
 		asBuildRangeInfo.primitiveCount		= nTriangles;
-		asBuildRangeInfo.primitiveOffset	= p.firstIndex * sizeof(uint32_t);
+		asBuildRangeInfo.primitiveOffset	= p->firstIndex * sizeof(uint32_t);
 		asBuildRangeInfo.transformOffset	= 0;
 
 		// Store all info in the BlasInput structure to be returned
@@ -465,32 +464,31 @@ std::vector<BlasInput> Node::node_to_geometry(
 	{
 		for (Node* child : _children)
 		{
-			std::vector<BlasInput> childBlas = child->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
-			blasVector.insert(blasVector.end(), childBlas.begin(), childBlas.end());
+			child->node_to_geometry(blasVector, vertexBufferDeviceAddress, indexBufferDeviceAddress);
 		}
 	}
-	return blasVector;
 }
 
-std::vector<TlasInstance> Node::node_to_instance(int& index, glm::mat4 model)
+void Node::node_to_instance(std::vector<TlasInstance>& instances, int& index, glm::mat4 model)
 {
-	std::vector<TlasInstance> instances;
-	glm::mat4 matrix = model * getGlobalMatrix(false);
 	if (!_primitives.empty())
 	{
-		TlasInstance instance{};
-		instance.transform	= matrix;
-		instance.instanceId = index;
-		instance.blasId		= index;
-		instances.emplace_back(instance);
-		index++;
+		glm::mat4 matrix = model * getGlobalMatrix(false);
+		for (auto& prim : _primitives)
+		{
+			TlasInstance instance{};
+			instance.transform	= matrix;
+			instance.instanceId	= index;
+			instance.blasId		= index;
+			instances.emplace_back(instance);
+			prim->instanceID	= index;
+			index++;
+		}
 	}
 	for (Node* child : _children)
 	{
-		std::vector<TlasInstance> childInstances = child->node_to_instance(index, model);
-		instances.insert(instances.begin(), childInstances.begin(), childInstances.end());
+		child->node_to_instance(instances, index, model);
 	}
-	return instances;
 }
 
 unsigned int Node::get_number_nodes()
@@ -505,47 +503,30 @@ unsigned int Node::get_number_nodes()
 	return count;
 }
 
-void Node::fill_matrix_buffer(std::vector<VkDescriptorBufferInfo>& buffer, const glm::mat4 model)
+void Node::fill_matrix_buffer(std::vector<glm::mat4>& buffer, const glm::mat4 model)
 {
 	if (!_primitives.empty())
 	{
 		glm::mat4 matrix = model * getGlobalMatrix();
-
-		AllocatedBuffer matrixBuffer;
-		VulkanEngine::engine->create_buffer(sizeof(glm::mat4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, matrixBuffer);
-		void* data;
-		vmaMapMemory(VulkanEngine::engine->_allocator, matrixBuffer._allocation, &data);
-		memcpy(data, &matrix, sizeof(glm::mat4));
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, matrixBuffer._allocation);
-
-		VkDescriptorBufferInfo matrixBufferDescriptor{};
-		matrixBufferDescriptor.buffer = matrixBuffer._buffer;
-		matrixBufferDescriptor.offset = 0;
-		matrixBufferDescriptor.range = sizeof(glm::mat4);
-
-		buffer.push_back(matrixBufferDescriptor);
+		for (auto& prim : _primitives)
+		{
+			prim->transformID = buffer.size();
+		}
+		buffer.push_back(matrix);
 	}
 	for (Node* n : _children)
 		n->fill_matrix_buffer(buffer, model);
 }
 
-void Node::fill_index_buffer(std::vector<VkDescriptorBufferInfo>& buffer)
+void Node::fill_index_buffer(std::vector<glm::vec4>& buffer)
 {
 	if (!_primitives.empty())
 	{
-		AllocatedBuffer indexbuffer;
-		VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, indexbuffer);
-		void* data;
-		vmaMapMemory(VulkanEngine::engine->_allocator, indexbuffer._allocation, &data);
-		memcpy(data, &_primitives[0].materialIndex, sizeof(int));
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, indexbuffer._allocation);
-
-		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer = indexbuffer._buffer;
-		indexBufferDescriptor.offset = 0;
-		indexBufferDescriptor.range = sizeof(int);
-
-		buffer.push_back(indexBufferDescriptor);
+		for (const auto& prim : _primitives)
+		{
+			glm::vec4 aux = glm::vec4(prim->instanceID, prim->materialID, prim->transformID, prim->firstIndex);
+			buffer.push_back(aux);
+		}
 	}
 	for (Node* n : _children)
 		n->fill_index_buffer(buffer);
@@ -555,12 +536,12 @@ void Node::addMaterial(Material* mat)
 {
 	if (Material::exists(mat))
 	{
-		_primitives[0].materialIndex = Material::getIndex(mat);
+		_primitives[0]->materialID = Material::getIndex(mat);
 	}
 	else
 	{
 		Material::_materials.push_back(mat);
-		_primitives[0].materialIndex = Material::_materials.size() - 1;
+		_primitives[0]->materialID = Material::_materials.size() - 1;
 	}
 }
 
@@ -605,43 +586,21 @@ BlasInput Prefab::primitive_to_geometry(const Primitive& p)
 	return input;
 }
 
-void Prefab::fill_matrix_descriptor_buffer(std::vector<VkDescriptorBufferInfo>& buffer, const glm::mat4 model)
-{
-	if (!_root.empty())
-	{
-		for(Node* root : _root)
-			root->fill_matrix_buffer(buffer, model);
-	}
-}
-
-void Prefab::fill_index_buffer(std::vector<VkDescriptorBufferInfo>& buffer)
-{
-	if (!_root.empty())
-	{
-		for(Node* root : _root)
-			root->fill_index_buffer(buffer);
-	}
-}
-
 void Prefab::drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Node& node, glm::mat4& model)
 {
 	if (node._primitives.size() > 0)
 	{
 		glm::mat4 node_matrix = model * node.getGlobalMatrix(false);
 
-		for (Primitive& prim : node._primitives)
+		for (Primitive* prim : node._primitives)
 		{
-			//GPUMaterial mat = Material::_materials[prim.materialIndex]->materialToShader();
-			GPUMaterial mat;
-			mat.diffuseColor = glm::vec4(Material::_materials[prim.materialIndex]->diffuseColor[0], Material::_materials[prim.materialIndex]->diffuseColor[1], Material::_materials[prim.materialIndex]->diffuseColor[2], Material::_materials[prim.materialIndex]->ior);
-			mat.textures = glm::vec4(Material::_materials[prim.materialIndex]->diffuseTexture, Material::_materials[prim.materialIndex]->normalTexture, Material::_materials[prim.materialIndex]->emissiveTexture, Material::_materials[prim.materialIndex]->metallicRoughnessTexture);
-			mat.shadingMetallicRoughness = glm::vec4(Material::_materials[prim.materialIndex]->shadingModel, Material::_materials[prim.materialIndex]->metallicFactor, Material::_materials[prim.materialIndex]->roughnessFactor, vkutil::getIndex(Material::_materials, Material::_materials[prim.materialIndex]));
+			GPUMaterial mat = Material::_materials[prim->materialID]->materialToShader();
 
-			if (prim.indexCount > 0) 
+			if (prim->indexCount > 0) 
 			{
 				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &node_matrix);
 				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(GPUMaterial), &mat);
-				vkCmdDrawIndexed(cmd, prim.indexCount, 1, prim.firstIndex, 0, 0);
+				vkCmdDrawIndexed(cmd, prim->indexCount, 1, prim->firstIndex, 0, 0);
 			}
 		}
 	}
@@ -791,13 +750,13 @@ void Prefab::loadNode(const tinygltf::Model& tmodel, const tinygltf::Node& tnode
 			}
 
 			// Load the primitive information
-			Primitive prim{};
-			prim.firstIndex		= firstIndex;
-			prim.indexCount		= indexCount;
-			prim.firstVertex	= firstVertex;
-			prim.vertexCount	= vertexCount;
-			prim.materialIndex	= loadMaterial(tmodel, tprimitive.material);
-			loadTextures(tmodel, prim.materialIndex);
+			Primitive* prim = new Primitive();
+			prim->firstIndex	= firstIndex;
+			prim->indexCount	= indexCount;
+			prim->firstVertex	= firstVertex;
+			prim->vertexCount	= vertexCount;
+			prim->materialID	= loadMaterial(tmodel, tprimitive.material);
+			loadTextures(tmodel, prim->materialID);
 			node->_primitives.push_back(prim);
 		}
 	}
@@ -870,29 +829,39 @@ void Prefab::createOBJprefab(Mesh* mesh)
 {
 	Node* node = new Node();
 	_mesh = mesh;
-	Primitive p{};
-	p.indexCount = _mesh ? _mesh->_indices.size() : 0;
-	p.vertexCount = _mesh ? _mesh->_vertices.size() : 0;
-	p.materialIndex = Material::setDefaultMaterial();
+	Primitive* p = new Primitive();
+	p->indexCount		= _mesh ? _mesh->_indices.size() : 0;
+	p->vertexCount		= _mesh ? _mesh->_vertices.size() : 0;
+	p->materialID	= Material::setDefaultMaterial();
 	node->_primitives.push_back(p);
 	_root.push_back(node);
 }
 
 Prefab* Prefab::GET(const std::string filename, bool invertNormals)
 {
-	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
+	std::string name = vkutil::findFile(filename, searchPaths, true);
 	if (!_prefabsMap[name])
 	{
 		Prefab* prefab = new Prefab();
-		if (filename.find("obj") != std::string::npos) 
+		if (filename.find(".obj") != std::string::npos) 
 		{
 			prefab->createOBJprefab(Mesh::GET(name.c_str()));
 			_prefabsMap[name] = prefab;
 
 			return prefab;
 		}
-		else if (filename.find(".gltf") != std::string::npos)
+		else
 		{
+			bool binary;
+			if (filename.find(".gltf") != std::string::npos)
+				binary = false;
+			else if (filename.find(".glb") != std::string::npos)
+				binary = true;
+			else {
+				std::cout << "No valid filename" << std::endl;
+				return nullptr;
+			}
+
 			std::cout << "Loading gltf... " << filename << std::endl;
 
 			tinygltf::Model		gltfModel;
@@ -900,7 +869,8 @@ Prefab* Prefab::GET(const std::string filename, bool invertNormals)
 			std::string			warn, err;
 			bool				fileLoaded{ false };
 
-			fileLoaded = gltfContext.LoadASCIIFromFile(&gltfModel, &err, &warn, VulkanEngine::engine->findFile(filename, searchPaths, true));
+			fileLoaded = binary ? gltfContext.LoadBinaryFromFile(&gltfModel, &err, &warn, vkutil::findFile(filename, searchPaths, true))
+				: gltfContext.LoadASCIIFromFile(&gltfModel, &err, &warn, vkutil::findFile(filename, searchPaths, true));
 
 			if (!err.empty())
 				throw std::runtime_error(err.c_str());

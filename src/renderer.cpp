@@ -51,8 +51,8 @@ Renderer::Renderer(Scene* scene)
 	// VKRay
 	create_bottom_acceleration_structure();
 	create_top_acceleration_structure();
-	create_hybrid_descriptors();
 	create_rt_descriptors();
+	create_hybrid_descriptors();
 	init_raytracing_pipeline();
 	create_shader_binding_table();
 	build_raytracing_command_buffers();
@@ -998,11 +998,11 @@ void Renderer::init_forward_pipeline()
 {
 	VulkanEngine* engine = VulkanEngine::engine;
 	VkShaderModule vertexShader;
-	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str() , &vertexShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("basic.vert.spv", searchPaths, true).c_str() , &vertexShader)) {
 		std::cout << "Could not load forward vertex shader!" << std::endl;
 	}
 	VkShaderModule fragmentShader;
-	if (!engine->load_shader_module(engine->findFile("forward.frag.spv", searchPaths, true).c_str(), &fragmentShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("forward.frag.spv", searchPaths, true).c_str(), &fragmentShader)) {
 		std::cout << "Could not load fragment vertex shader!" << std::endl;
 	}
 
@@ -1079,27 +1079,27 @@ void Renderer::init_deferred_pipelines()
 	VulkanEngine* engine = VulkanEngine::engine;
 
 	VkShaderModule offscreenVertexShader;
-	if (!engine->load_shader_module(engine->findFile("basic.vert.spv", searchPaths, true).c_str(), &offscreenVertexShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("basic.vert.spv", searchPaths, true).c_str(), &offscreenVertexShader)) {
 		std::cout << "Could not load geometry vertex shader!" << std::endl;
 	}
 	VkShaderModule offscreenFragmentShader;
-	if (!engine->load_shader_module(engine->findFile("geometry_shader.frag.spv", searchPaths, true).c_str(), &offscreenFragmentShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("geometry_shader.frag.spv", searchPaths, true).c_str(), &offscreenFragmentShader)) {
 		std::cout << "Could not load geometry fragment shader!" << std::endl;
 	}
 	VkShaderModule deferredVertexShader;
-	if (!engine->load_shader_module(engine->findFile("quad.vert.spv", searchPaths, true).c_str(), &deferredVertexShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("quad.vert.spv", searchPaths, true).c_str(), &deferredVertexShader)) {
 		std::cout << "Could not load deferred vertex shader!" << std::endl;
 	}
 	VkShaderModule deferredFragmentShader;
-	if (!engine->load_shader_module(engine->findFile("deferred.frag.spv", searchPaths, true).c_str(), &deferredFragmentShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("deferred.frag.spv", searchPaths, true).c_str(), &deferredFragmentShader)) {
 		std::cout << "Could not load deferred fragment shader!" << std::endl;
 	}
 	VkShaderModule skyboxVertexShader;
-	if (!engine->load_shader_module(engine->findFile("skybox.vert.spv", searchPaths, true).c_str(), &skyboxVertexShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("skybox.vert.spv", searchPaths, true).c_str(), &skyboxVertexShader)) {
 		std::cout << "Could not load skybox vertex shader!" << std::endl;
 	}
 	VkShaderModule skyboxFragmentShader;
-	if (!engine->load_shader_module(engine->findFile("/skybox.frag.spv", searchPaths, true).c_str(), &skyboxFragmentShader)) {
+	if (!engine->load_shader_module(vkutil::findFile("/skybox.frag.spv", searchPaths, true).c_str(), &skyboxFragmentShader)) {
 		std::cout << "Could not load skybox fragment shader!" << std::endl;
 	}
 
@@ -1465,7 +1465,7 @@ void Renderer::recreate_renderer()
 void Renderer::create_bottom_acceleration_structure()
 {
 	std::vector<BlasInput> allBlas;
-
+	allBlas.reserve(_scene->get_drawable_nodes_size());
 	for (Object* obj : _scene->_entities)
 	{
 		Prefab* p = obj->prefab;
@@ -1479,8 +1479,7 @@ void Renderer::create_bottom_acceleration_structure()
 
 			for (Node* root : p->_root)
 			{
-				std::vector<BlasInput> nodeGeo = root->node_to_geometry(vertexBufferDeviceAddress, indexBufferDeviceAddress);
-				allBlas.insert(allBlas.end(), nodeGeo.begin(), nodeGeo.end());
+				root->node_to_geometry(allBlas, vertexBufferDeviceAddress, indexBufferDeviceAddress);
 			}
 		}
 	}
@@ -1498,13 +1497,11 @@ void Renderer::create_top_acceleration_structure()
 	for (auto& entity : _scene->_entities)
 	{
 		Prefab* p = entity->prefab;
-		// obj instance
 		if (!p->_root.empty())
 		{
 			for (Node* root : p->_root)
 			{
-				std::vector<TlasInstance> instances = root->node_to_instance(instanceIndex, entity->m_matrix);
-				_tlas.insert(_tlas.end(), instances.begin(), instances.end());
+				root->node_to_instance(_tlas, instanceIndex, entity->m_matrix);
 			}
 		}
 	}
@@ -1556,12 +1553,15 @@ void Renderer::buildBlas(const std::vector<BlasInput>& input, VkBuildAcceleratio
 		maxScratch = std::max(maxScratch, asBuildSizesInfo.buildScratchSize);
 	}
 
-	ScratchBuffer scratchBuffer = VulkanEngine::engine->createScratchBuffer(maxScratch);
+	AllocatedBuffer scratchBuffer;
+	VulkanEngine::engine->create_buffer(maxScratch, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY, scratchBuffer, false);
+	VkDeviceOrHostAddressConstKHR scratchBufferDeviceAddress{};
+	scratchBufferDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(scratchBuffer._buffer);
 
 	// Once the scratch buffer is created we finally end inflating the asBuildGeosInfo struct and can proceed to submit the creation command
 	for (uint32_t i = 0; i < blasSize; i++) {
 
-		asBuildGeoInfos[i].scratchData.deviceAddress = scratchBuffer.deviceAddress;
+		asBuildGeoInfos[i].scratchData.deviceAddress = scratchBufferDeviceAddress.deviceAddress;
 
 		std::vector<VkAccelerationStructureBuildRangeInfoKHR*> asBuildStructureRangeInfo = { &_blas[i].asBuildRangeInfo };
 
@@ -1571,8 +1571,7 @@ void Renderer::buildBlas(const std::vector<BlasInput>& input, VkBuildAcceleratio
 	}
 
 	// Finally we can free the scratch buffer
-	vkFreeMemory(*device, scratchBuffer.memory, nullptr);
-	vkDestroyBuffer(*device, scratchBuffer.buffer, nullptr);
+	vmaDestroyBuffer(VulkanEngine::engine->_allocator, scratchBuffer._buffer, scratchBuffer._allocation);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1592,18 +1591,22 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 
 	VkDeviceSize instancesSize = geometryInstances.size() * sizeof(VkAccelerationStructureInstanceKHR);
 
-	AllocatedBuffer instanceBuffer;
-	VulkanEngine::engine->create_buffer(instancesSize,
-		VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-		VMA_MEMORY_USAGE_CPU_TO_GPU, instanceBuffer);
+	//vmaDestroyBuffer(VulkanEngine::engine->_allocator, _instanceBuffer._buffer, _instanceBuffer._allocation);
+	// Create buffer if not already created 
+	if (!update)
+	{
+		VulkanEngine::engine->create_buffer(instancesSize,
+			VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+			VMA_MEMORY_USAGE_CPU_TO_GPU, _instanceBuffer);
+	}
 
 	void* instanceData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, instanceBuffer._allocation, &instanceData);
+	vmaMapMemory(VulkanEngine::engine->_allocator, _instanceBuffer._allocation, &instanceData);
 	memcpy(instanceData, geometryInstances.data(), instancesSize);
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, instanceBuffer._allocation);
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, _instanceBuffer._allocation);
 
 	VkDeviceOrHostAddressConstKHR instanceDataDeviceAddress{};
-	instanceDataDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(instanceBuffer._buffer);
+	instanceDataDeviceAddress.deviceAddress = VulkanEngine::engine->getBufferDeviceAddress(_instanceBuffer._buffer);
 
 	// Create a stucture that holds a device pointer to the uploaded instances.
 	VkAccelerationStructureGeometryInstancesDataKHR instancesData{};
@@ -1636,13 +1639,18 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 		&asBuildSizesInfo
 	);
 
-	if(!update)
+	if (!update)
+	{
 		create_acceleration_structure(_topLevelAS, VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, asBuildSizesInfo);
+	}
 
-	ScratchBuffer scratchBuffer = VulkanEngine::engine->createScratchBuffer(asBuildSizesInfo.buildScratchSize);
-
+	AllocatedBuffer scratchBuffer;
+	VulkanEngine::engine->create_buffer(asBuildSizesInfo.buildScratchSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
+		VMA_MEMORY_USAGE_GPU_ONLY, scratchBuffer, false);
+	VkDeviceOrHostAddressConstKHR scratchBufferDeviceAddress{};
+	scratchBufferDeviceAddress.deviceAddress		= VulkanEngine::engine->getBufferDeviceAddress(scratchBuffer._buffer);
 	asBuildGeometryInfo.dstAccelerationStructure	= _topLevelAS.handle;
-	asBuildGeometryInfo.scratchData.deviceAddress	= scratchBuffer.deviceAddress;
+	asBuildGeometryInfo.scratchData.deviceAddress	= scratchBufferDeviceAddress.deviceAddress;
 
 	VkAccelerationStructureBuildRangeInfoKHR asBuildRangeInfo{};
 	asBuildRangeInfo.primitiveCount		= static_cast<uint32_t>(instances.size());
@@ -1656,36 +1664,18 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 		vkCmdBuildAccelerationStructuresKHR(cmd, 1, &asBuildGeometryInfo, asBuildStructureRangeInfos.data());
 		});
 
-	vkFreeMemory(*device, scratchBuffer.memory, nullptr);
-	vkDestroyBuffer(*device, scratchBuffer.buffer, nullptr);
+	vmaDestroyBuffer(VulkanEngine::engine->_allocator, scratchBuffer._buffer, scratchBuffer._allocation);
 }
 
 void Renderer::create_acceleration_structure(AccelerationStructure& accelerationStructure, VkAccelerationStructureTypeKHR type, VkAccelerationStructureBuildSizesInfoKHR buildSizeInfo)
 {
 
-	VkBufferCreateInfo bufferCreateInfo{};
-	bufferCreateInfo.sType			= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size			= buildSizeInfo.accelerationStructureSize;
-	bufferCreateInfo.usage			= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-	VK_CHECK(vkCreateBuffer(*device, &bufferCreateInfo, nullptr, &accelerationStructure.buffer));
+	VulkanEngine::engine->create_buffer(buildSizeInfo.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 
+		VMA_MEMORY_USAGE_GPU_ONLY, accelerationStructure.buffer, false);
 
-	VkMemoryRequirements memRequirements{};
-	vkGetBufferMemoryRequirements(*device, accelerationStructure.buffer, &memRequirements);
-	VkMemoryAllocateFlagsInfo memAllocateFlagsInfo{};
-	memAllocateFlagsInfo.sType		= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-	memAllocateFlagsInfo.flags		= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
-
-	VkMemoryAllocateInfo memAllocateInfo{};
-	memAllocateInfo.sType			= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memAllocateInfo.pNext			= &memAllocateFlagsInfo;
-	memAllocateInfo.allocationSize	= memRequirements.size;
-	memAllocateInfo.memoryTypeIndex = VulkanEngine::engine->get_memory_type(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	VK_CHECK(vkAllocateMemory(*device, &memAllocateInfo, nullptr, &accelerationStructure.memory));
-	VK_CHECK(vkBindBufferMemory(*device, accelerationStructure.buffer, accelerationStructure.memory, 0));
-	
 	VkAccelerationStructureCreateInfoKHR asCreateInfo{};
 	asCreateInfo.sType				= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-	asCreateInfo.buffer				= accelerationStructure.buffer;
+	asCreateInfo.buffer				= accelerationStructure.buffer._buffer;
 	asCreateInfo.size				= buildSizeInfo.accelerationStructureSize;
 	asCreateInfo.type				= type;
 
@@ -1699,8 +1689,7 @@ void Renderer::create_acceleration_structure(AccelerationStructure& acceleration
 	accelerationStructure.deviceAddress = vkGetAccelerationStructureDeviceAddressKHR(*device, &asDeviceAddressInfo);
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
-		vkFreeMemory(*device, accelerationStructure.memory, nullptr);
-		vkDestroyBuffer(*device, accelerationStructure.buffer, nullptr);
+		vmaDestroyBuffer(VulkanEngine::engine->_allocator, accelerationStructure.buffer._buffer, accelerationStructure.buffer._allocation);
 		vkDestroyAccelerationStructureKHR(VulkanEngine::engine->_device, accelerationStructure.handle, nullptr);
 		});
 }
@@ -1757,7 +1746,6 @@ void Renderer::create_rt_descriptors()
 
 	const unsigned int nInstances	= _scene->_entities.size();
 	const unsigned int nLights		= _scene->_lights.size();
-	const unsigned int nDrawables	= _scene->get_drawable_nodes_size();
 	const unsigned int nMaterials	= Material::_materials.size();
 	const unsigned int nTextures	= Texture::_textures.size();
 
@@ -1771,10 +1759,10 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding uniformBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
 	VkDescriptorSetLayoutBinding vertexBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
 	VkDescriptorSetLayoutBinding indexBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
-	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5, nDrawables);
+	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
 	VkDescriptorSetLayoutBinding materialBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
-	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nDrawables);
+	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);
 	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
 	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
 
@@ -1792,6 +1780,7 @@ void Renderer::create_rt_descriptors()
 		skyboxBufferBinding
 		});
 
+	// Allocate Descriptor
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
 	descriptorSetLayoutCreateInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	descriptorSetLayoutCreateInfo.bindingCount	= static_cast<uint32_t>(bindings.size());
@@ -1801,6 +1790,7 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_rtDescriptorSetLayout, 1);
 	VK_CHECK(vkAllocateDescriptorSets(*device, &descriptorSetAllocateInfo, &_rtDescriptorSet));
 
+	// Binding = 0 AS
 	VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{};
 	descriptorAccelerationStructureInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 	descriptorAccelerationStructureInfo.accelerationStructureCount	= 1;
@@ -1814,21 +1804,25 @@ void Renderer::create_rt_descriptors()
 	accelerationStructureWrite.descriptorCount	= 1;
 	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
+	// Binding = 1 Storage Image
 	VkDescriptorImageInfo storageImageDescriptor{};
 	storageImageDescriptor.imageView			= _rtImage.imageView;
 	storageImageDescriptor.imageLayout			= VK_IMAGE_LAYOUT_GENERAL;
 
+	// Binding = 2 Camera 
 	VkDescriptorBufferInfo _rtDescriptorBufferInfo{};
 	_rtDescriptorBufferInfo.buffer				= VulkanEngine::engine->rtCameraBuffer._buffer;
 	_rtDescriptorBufferInfo.offset				= 0;
 	_rtDescriptorBufferInfo.range				= sizeof(RTCameraData);
 
+
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
-	std::vector<VkDescriptorBufferInfo> matrixDescInfo;
-	std::vector<VkDescriptorBufferInfo> sceneIdxDescInfo;
+	std::vector<glm::mat4> matricesVector;
+	std::vector<glm::vec4> idVector;
 	for (Object* obj : _scene->_entities)
 	{
+		// Binding = 3 Vertex buffer
 		std::vector<Vertex> vertices	= obj->prefab->_mesh->_vertices;
 		std::vector<uint32_t> indices	= obj->prefab->_mesh->_indices;
 		size_t vertexBufferSize			= sizeof(rtVertexAttribute) * vertices.size();
@@ -1853,6 +1847,7 @@ void Renderer::create_rt_descriptors()
 		vertexBufferDescriptor.range	= vertexBufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
+		// Binding = 4 Index buffer
 		VkDescriptorBufferInfo indexBufferDescriptor{};
 		indexBufferDescriptor.buffer	= obj->prefab->_mesh->_indexBuffer._buffer;
 		indexBufferDescriptor.offset	= 0;
@@ -1861,16 +1856,46 @@ void Renderer::create_rt_descriptors()
 
 		for (Node* root : obj->prefab->_root)
 		{
-			root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
-			root->fill_index_buffer(sceneIdxDescInfo);
+			root->fill_matrix_buffer(matricesVector, obj->m_matrix);
+			root->fill_index_buffer(idVector);
 		}
 	}
 
+	// Binding = 5 Matrix buffer
+	AllocatedBuffer matricesBuffer;
+	VulkanEngine::engine->create_buffer(sizeof(glm::mat4) * matricesVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, matricesBuffer);
+
+	void* matricesData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation, &matricesData);
+	memcpy(matricesData, matricesVector.data(), sizeof(glm::mat4) * matricesVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation);
+	
+	VkDescriptorBufferInfo matrixDescInfo;
+	matrixDescInfo.buffer	= matricesBuffer._buffer;
+	matrixDescInfo.offset	= 0;
+	matrixDescInfo.range	= sizeof(glm::mat4) * matricesVector.size();
+
+	// Binding = 6 lights
 	VkDescriptorBufferInfo lightBufferInfo;
 	lightBufferInfo.buffer		= lightBuffer._buffer;
 	lightBufferInfo.offset		= 0;
 	lightBufferInfo.range		= sizeof(uboLight) * nLights;
 
+	// Binding = 7 ID buffer
+	AllocatedBuffer idBuffer;
+	VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, idBuffer);
+
+	void* idData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation, &idData);
+	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation);
+
+	VkDescriptorBufferInfo idDescInfo;
+	idDescInfo.buffer	= idBuffer._buffer;
+	idDescInfo.offset	= 0;
+	idDescInfo.range	= sizeof(glm::vec4) * idVector.size();
+
+	// Binding = 8 Materials
 	std::vector<GPUMaterial> materials;
 	for (Material* it : Material::_materials)
 	{
@@ -1887,7 +1912,8 @@ void Renderer::create_rt_descriptors()
 	materialBufferInfo.buffer	= _matBuffer._buffer;
 	materialBufferInfo.offset	= 0;
 	materialBufferInfo.range	= sizeof(GPUMaterial) * nMaterials;
-
+	
+	// Binding = 9 Textures
 	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
 	VkSampler sampler;
 	vkCreateSampler(*device, &samplerInfo, nullptr, &sampler);
@@ -1913,10 +1939,10 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet uniformBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &_rtDescriptorBufferInfo, 2);
 	VkWriteDescriptorSet vertexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, vertexDescInfo.data(), 3, nInstances);
 	VkWriteDescriptorSet indexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, indexDescInfo.data(), 4, nInstances);
-	VkWriteDescriptorSet matrixBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, matrixDescInfo.data(), 5, nDrawables);
+	VkWriteDescriptorSet matrixBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &matrixDescInfo, 5);
 	VkWriteDescriptorSet lightsBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &lightBufferInfo, 6);
 	VkWriteDescriptorSet matBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &materialBufferInfo, 7);
-	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, sceneIdxDescInfo.data(), 8, nDrawables);
+	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &idDescInfo, 8);
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
 
@@ -1954,8 +1980,8 @@ void Renderer::init_raytracing_pipeline()
 	// Ray generation group
 	VkShaderModule rayGenModule, hraygenModule;
 	{
-		shaderStages.push_back(engine->load_shader_stage(engine->findFile("raygen.rgen.spv", searchPaths, true).c_str(), &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
-		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridRaygen.rgen.spv", searchPaths, true).c_str(), &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("raygen.rgen.spv", searchPaths, true).c_str(), &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("hybridRaygen.rgen.spv", searchPaths, true).c_str(), &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -1971,8 +1997,8 @@ void Renderer::init_raytracing_pipeline()
 	// Miss group
 	VkShaderModule missModule, hmissModule;
 	{
-		shaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("miss.rmiss.spv", searchPaths, true).c_str(), &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("miss.rmiss.spv", searchPaths, true).c_str(), &missModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("miss.rmiss.spv", searchPaths, true).c_str(), &hmissModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -1988,8 +2014,8 @@ void Renderer::init_raytracing_pipeline()
 	// Shadow miss
 	VkShaderModule shadowModule, hshadowModule;
 	{
-		shaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
-		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2006,8 +2032,8 @@ void Renderer::init_raytracing_pipeline()
 	// Hit group
 	VkShaderModule hitModule, hhitModule;
 	{
-		shaderStages.push_back(engine->load_shader_stage(engine->findFile("closesthit.rchit.spv", searchPaths, true).c_str(), &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
-		hybridShaderStages.push_back(engine->load_shader_stage(engine->findFile("hybridHit.rchit.spv", searchPaths, true).c_str(), &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("closesthit.rchit.spv", searchPaths, true).c_str(), &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("hybridHit.rchit.spv", searchPaths, true).c_str(), &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2268,10 +2294,10 @@ void Renderer::create_post_pipeline()
 {
 	// First of all load the shader modules and store them in the builder
 	VkShaderModule postVertexShader, postFragmentShader;
-	if (!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postVertex.vert.spv", searchPaths, true).c_str(), &postVertexShader)) {
+	if (!VulkanEngine::engine->load_shader_module(vkutil::findFile("postVertex.vert.spv", searchPaths, true).c_str(), &postVertexShader)) {
 		std::cout << "Post vertex failed to load" << std::endl;
 	}
-	if(!VulkanEngine::engine->load_shader_module(VulkanEngine::engine->findFile("postFragment.frag.spv", searchPaths, true).c_str(), &postFragmentShader)){
+	if(!VulkanEngine::engine->load_shader_module(vkutil::findFile("postFragment.frag.spv", searchPaths, true).c_str(), &postFragmentShader)){
 		std::cout << "Post fragment failed to load" << std::endl;
 	}
 
@@ -2451,8 +2477,8 @@ void Renderer::create_hybrid_descriptors()
 	VkDescriptorSetLayoutBinding texturesBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures); // Textures buffer
 	VkDescriptorSetLayoutBinding skyboxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
 	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
-	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12, nDrawables); // Scene indices
-	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13, nDrawables);	// Matrices
+	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12); // Scene indices
+	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13);	// Matrices
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
@@ -2534,8 +2560,8 @@ void Renderer::create_hybrid_descriptors()
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
-	std::vector<VkDescriptorBufferInfo> matrixDescInfo;
-	std::vector<VkDescriptorBufferInfo> sceneIdxDescInfo;
+	std::vector<glm::mat4> matricesVector;
+	std::vector<glm::vec4> idVector;
 	for (Object* obj : _scene->_entities)
 	{
 		AllocatedBuffer vBuffer;
@@ -2568,11 +2594,37 @@ void Renderer::create_hybrid_descriptors()
 
 		for (Node* root : obj->prefab->_root)
 		{
-			root->fill_matrix_buffer(matrixDescInfo, obj->m_matrix);
-			root->fill_index_buffer(sceneIdxDescInfo);
+			root->fill_matrix_buffer(matricesVector, obj->m_matrix);
+			root->fill_index_buffer(idVector);
 		}
-
 	}
+
+	// Binding = 5 Matrix buffer
+	AllocatedBuffer matricesBuffer;
+	VulkanEngine::engine->create_buffer(sizeof(glm::mat4) * matricesVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, matricesBuffer);
+
+	void* matricesData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation, &matricesData);
+	memcpy(matricesData, matricesVector.data(), sizeof(glm::mat4) * matricesVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation);
+
+	VkDescriptorBufferInfo matrixDescInfo;
+	matrixDescInfo.buffer = matricesBuffer._buffer;
+	matrixDescInfo.offset = 0;
+	matrixDescInfo.range = sizeof(glm::mat4) * matricesVector.size();
+
+	AllocatedBuffer idBuffer;
+	VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, idBuffer);
+
+	void* idData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation, &idData);
+	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation);
+
+	VkDescriptorBufferInfo idDescInfo;
+	idDescInfo.buffer = idBuffer._buffer;
+	idDescInfo.offset = 0;
+	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
 
 	if (!_matBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
@@ -2635,8 +2687,8 @@ void Renderer::create_hybrid_descriptors()
 	VkWriteDescriptorSet texturesBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet skyboxBufferWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &skyboxBufferInfo, 10);
 	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &materialBufferInfo, 11);
-	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, sceneIdxDescInfo.data(), 12, nDrawables);
-	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, matrixDescInfo.data(), 13, nDrawables);
+	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 12);
+	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 13);
 
 	std::vector<VkWriteDescriptorSet> writes = {
 		accelerationStructureWrite,	// 0 TLAS

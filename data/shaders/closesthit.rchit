@@ -14,10 +14,10 @@ hitAttributeEXT vec3 attribs;
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
-layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m; } matrices[];
+layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
 layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
 layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
-layout(set = 0, binding = 8) buffer sceneBuffer { int idx; } matIndices[];
+layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
 void main()
@@ -25,28 +25,35 @@ void main()
   // Do all vertices, indices and barycentrics calculations
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
-  ivec3 ind     = ivec3(indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 0], 
-                        indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 1], 
-                        indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 2]);
+  vec4 objIdx = objIndices.idx[gl_InstanceCustomIndexEXT];
 
-  Vertex v0     = vertices[gl_InstanceCustomIndexEXT].v[ind.x];
-  Vertex v1     = vertices[gl_InstanceCustomIndexEXT].v[ind.y];
-  Vertex v2     = vertices[gl_InstanceCustomIndexEXT].v[ind.z];
+  int instanceID        = int(objIdx.x);
+  int materialID        = int(objIdx.y);
+  int transformationID  = int(objIdx.z);
+  int firstIndex        = int(objIdx.w);
+
+  ivec3 ind     = ivec3(indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 0], 
+                        indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 1], 
+                        indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 2]);
+
+  Vertex v0     = vertices[instanceID].v[ind.x];
+  Vertex v1     = vertices[instanceID].v[ind.y];
+  Vertex v2     = vertices[instanceID].v[ind.z];
+
+  mat4 model = matrices.m[transformationID];
 
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
   vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  vec3 N        = normalize(matrices[gl_InstanceCustomIndexEXT].m * vec4(normal, 0)).xyz;
+  vec3 N        = normalize(model * vec4(normal, 0)).xyz;
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
 	vec3 color = vec3(0), light_color = vec3(0), specular = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
 
-  int matIdx  = matIndices[gl_InstanceCustomIndexEXT].idx;
-
-  Material mat  = materials.mat[matIdx];
+  Material mat  = materials.mat[materialID];
   vec3 albedo   = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
 
   // Calculate light influence for each light
@@ -132,4 +139,5 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
     }
   }
+  //prd.colorAndDist.xyz = N;
 }
