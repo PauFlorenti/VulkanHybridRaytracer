@@ -1,9 +1,9 @@
-#include <vk_textures.h>
+#include "vk_textures.h"
 
-#include <vk_initializers.h>
+#include "vk_initializers.h"
 #include "vk_engine.h"
-
 #include "stb_image.h"
+#include "vk_utils.h"
 
 extern std::vector<std::string> searchPaths;
 std::vector<std::pair<std::string, Texture*>> Texture::_textures;
@@ -98,8 +98,6 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, Al
 		vmaDestroyImage(engine._allocator, newImage._image, newImage._allocation);
 	});
 
-	//vmaDestroyBuffer(engine._allocator, stagingBuffer._buffer, stagingBuffer._allocation);
-
 	std::cout << "Texture loaded successfully " << filename << std::endl;
 
 	outImage = newImage;
@@ -113,7 +111,7 @@ bool isInVector(const std::string name, const std::pair<std::string, Texture*> t
 
 Texture* Texture::GET(const char* filename)
 {
-	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
+	std::string name = vkutil::findFile(filename, searchPaths, true);
 
 	// Return if it already exists
 	for (auto& tex : Texture::_textures)
@@ -142,7 +140,7 @@ Texture* Texture::GET(const char* filename)
 
 int Texture::get_id(const char* filename)
 {
-	std::string name = VulkanEngine::engine->findFile(filename, searchPaths, true);
+	std::string name = vkutil::findFile(filename, searchPaths, true);
 
 	for (int i = 0; i < Texture::_textures.size(); i++)
 	{

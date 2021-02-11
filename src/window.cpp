@@ -70,18 +70,15 @@ void Window::handleEvent(SDL_Event& e, const float dt)
 			VulkanEngine::engine->_scene->_camera->processKeyboard(UP, dt);
 		}
 		if (e.key.keysym.sym == SDLK_1) {
-			VulkanEngine::engine->_mode = FORWARD_RENDER;
-		}
-		if (e.key.keysym.sym == SDLK_2) {
 			VulkanEngine::engine->_mode = DEFERRED;
 		}
-		if (e.key.keysym.sym == SDLK_3) {
+		if (e.key.keysym.sym == SDLK_2) {
 			VulkanEngine::engine->_mode = RAYTRACING;
 		}
-		if (e.key.keysym.sym == SDLK_4) {
+		if (e.key.keysym.sym == SDLK_3) {
 			VulkanEngine::engine->_mode = HYBRID;
 		}
-		if (e.key.keysym.sym == SDLK_5) {
+		if (e.key.keysym.sym == SDLK_4) {
 			VulkanEngine::engine->_skyboxFollow = !VulkanEngine::engine->_skyboxFollow;
 			std::cout << VulkanEngine::engine->_skyboxFollow << std::endl;
 		}

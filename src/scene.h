@@ -9,6 +9,7 @@ class Scene
 public:
 	std::vector<Object*>		_entities;
 	std::vector<Light*>			_lights;
+
 	Camera* _camera;
 
 	unsigned int get_drawable_nodes_size();

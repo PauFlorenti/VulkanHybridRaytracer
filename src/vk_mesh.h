@@ -58,7 +58,9 @@ struct Primitive
 	uint32_t indexCount{ 0 };
 	uint32_t firstVertex{ 0 };
 	uint32_t vertexCount{ 0 };
-	int32_t materialIndex;
+	int32_t	materialID;
+	int32_t	instanceID;
+	int32_t	transformID;
 
 };
 
@@ -67,7 +69,6 @@ struct Mesh
 	static std::unordered_map<std::string, Mesh*> _loadedMeshes;
 	std::vector<Vertex>		_vertices;
 	std::vector<uint32_t>	_indices;
-	//std::vector<Primitive>	_primitives;
 	
 	AllocatedBuffer			_vertexBuffer;
 	AllocatedBuffer			_indexBuffer;
@@ -95,7 +96,7 @@ public:
 	Node*					_parent;
 	std::vector<Node*>		_children;
 
-	std::vector<Primitive>	_primitives;
+	std::vector<Primitive*>	_primitives;
 	glm::mat4				_matrix;
 	glm::mat4				_global_matrix;
 
@@ -103,13 +104,19 @@ public:
 
 	void addChild(Node* child);
 	glm::mat4 getGlobalMatrix(bool fast = false);
-	std::vector<BlasInput> node_to_geometry(
+
+	void node_to_geometry(
+		std::vector<BlasInput>& blasVector,
 		const VkDeviceOrHostAddressConstKHR vertexBufferDeviceAddress, 
 		const VkDeviceOrHostAddressConstKHR indexBufferDeviceAddress);
-	std::vector<TlasInstance> node_to_instance(int& index, glm::mat4 model);
+	void node_to_instance(
+		std::vector<TlasInstance>& instances, 
+		int& index, 
+		glm::mat4 model);
+
 	unsigned int get_number_nodes();
-	void fill_matrix_buffer(std::vector<VkDescriptorBufferInfo>& buffer, const glm::mat4 model);
-	void fill_index_buffer(std::vector<VkDescriptorBufferInfo>& index_buffer);
+	void fill_matrix_buffer(std::vector<glm::mat4>& buffer, const glm::mat4 model);
+	void fill_index_buffer(std::vector<glm::vec4>& index_buffer);
 	void addMaterial(Material* mat);
 };
 
@@ -131,8 +138,6 @@ public:
 	static Prefab* GET(std::string name, Mesh* mesh);
 	void draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::mat4& model);
 	BlasInput primitive_to_geometry(const Primitive& prim);
-	void fill_matrix_descriptor_buffer(std::vector<VkDescriptorBufferInfo>& buffer, const glm::mat4 model);
-	void fill_index_buffer(std::vector<VkDescriptorBufferInfo>& index_buffer);
 
 private:
 

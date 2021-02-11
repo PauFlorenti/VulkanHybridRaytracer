@@ -45,7 +45,7 @@ void main()
 		for( int i = 0; i < MAX_RECURSION; i++ )
 		{
 			// Call the function to start tracing rays.
-			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz, tmin, direction.xyz, tmax, 0);
+			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
 
 			const vec3 color 		= prd.colorAndDist.xyz;
 			const float hitDistance = prd.colorAndDist.w;

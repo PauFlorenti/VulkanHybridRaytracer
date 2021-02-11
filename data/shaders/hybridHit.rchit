@@ -17,8 +17,8 @@ layout (set = 0, binding = 7, scalar) buffer Vertices { Vertex v[]; } vertices[]
 layout (set = 0, binding = 8) buffer Indices { int i[]; } indices[];
 layout (set = 0, binding = 9) uniform sampler2D[] textures;
 layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
-layout (set = 0, binding = 12) buffer sceneBuffer { int matIdx; } matIndices[];
-layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m; } matrices[];
+layout (set = 0, binding = 12) buffer sceneBuffer { vec4 idx[]; } objIndices;
+layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m[]; } matrices;
 
 void main()
 {
@@ -26,24 +26,31 @@ void main()
   
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
   
-  ivec3 ind     = ivec3(indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 0], 
-                    indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 1], 
-                    indices[gl_InstanceCustomIndexEXT].i[3 * gl_PrimitiveID + 2]);
+  vec4 objIdx = objIndices.idx[gl_InstanceCustomIndexEXT];
 
-  Vertex v0     = vertices[gl_InstanceCustomIndexEXT].v[ind.x];
-  Vertex v1     = vertices[gl_InstanceCustomIndexEXT].v[ind.y];
-  Vertex v2     = vertices[gl_InstanceCustomIndexEXT].v[ind.z];
+  int instanceID        = int(objIdx.x);
+  int materialID        = int(objIdx.y);
+  int transformationID  = int(objIdx.z);
+  int firstIndex        = int(objIdx.w);
+
+  ivec3 ind     = ivec3(indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 0], 
+                        indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 1], 
+                        indices[instanceID].i[3 * gl_PrimitiveID + firstIndex + 2]);
+
+  Vertex v0     = vertices[instanceID].v[ind.x];
+  Vertex v1     = vertices[instanceID].v[ind.y];
+  Vertex v2     = vertices[instanceID].v[ind.z];
+
+  mat4 model = matrices.m[transformationID];
 
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
   vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  vec3 N        = normalize(vec4(vec4(normal, 0) * matrices[gl_InstanceCustomIndexEXT].m).xyz);
+  vec3 N        = normalize(model * vec4(normal, 0)).xyz;
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
-  int materialIdx = matIndices[gl_InstanceCustomIndexEXT].matIdx;
-
-  Material mat = materials.mat[materialIdx];
+  Material mat = materials.mat[materialID];
   vec3 albedo = texture(textures[int(mat.textures.x)], uv).xyz;
 
   // Init values used for lightning

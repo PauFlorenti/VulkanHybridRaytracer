@@ -1,8 +1,7 @@
 
 #include "vk_engine.h"
 
-#include <VkBootstrap.h>
-
+#include "VkBootstrap.h"
 #include "vk_initializers.h"
 #include "vk_textures.h"
 #include "window.h"
@@ -184,7 +183,7 @@ void VulkanEngine::update(const float dt)
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 
-	// TODO: ALVAR CARRY MY WITH MEMORY LEAK
+	// TODO: MEMORY LEAK
 	/*
 	int instanceIndex = 0;
 	renderer->_tlas.clear();
@@ -199,6 +198,7 @@ void VulkanEngine::update(const float dt)
 			}
 		}
 	}
+	
 	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);	
 	*/
 }
@@ -227,7 +227,7 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 	vkResetCommandPool(_device, _uploadContext._commandPool, 0);
 }
 
-void VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer)
+void VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, AllocatedBuffer &buffer, const bool destroy)
 {
 	VkBufferCreateInfo bufferInfo = vkinit::buffer_create_info(allocSize, usage);
 	
@@ -239,40 +239,12 @@ void VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, Vma
 		&buffer._allocation, 
 		nullptr));
 
-	_mainDeletionQueue.push_function([=]() {
-		vmaDestroyBuffer(_allocator, buffer._buffer, buffer._allocation);
-		});
-
-}
-
-std::string VulkanEngine::findFile(const std::string& filename, const std::vector<std::string>& directories, bool warn)
-{
-	std::ifstream stream;
-
+	if (destroy)
 	{
-		stream.open(filename.c_str());
-		if (stream.is_open())
-			return filename;
+		_mainDeletionQueue.push_function([=]() {
+			vmaDestroyBuffer(_allocator, buffer._buffer, buffer._allocation);
+			});
 	}
-
-	for (const auto& directory : directories) 
-	{
-		std::string file = directory + "/" + filename;
-		stream.open(file.c_str());
-		if (stream.is_open())
-			return file;
-	}
-
-	if (warn)
-	{
-		std::printf("File not found %s\n", filename.c_str());
-		std::cout << "In directories: \n";
-		for (const auto& dir : directories)
-		{
-			std::cout << dir.c_str() << std::endl;
-		}
-	}
-	return {};
 }
 
 // PRIVATE ----------------------------------------
@@ -609,69 +581,6 @@ VkCommandBuffer VulkanEngine::create_command_buffer(VkCommandBufferLevel level, 
 	}
 
 	return commandBuffer;
-}
-
-ScratchBuffer VulkanEngine::createScratchBuffer(VkDeviceSize size)
-{
-	ScratchBuffer scratchBuffer{};
-	
-	VkBufferCreateInfo bufferCreateInfo{};
-	bufferCreateInfo.sType				= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size				= size;
-	bufferCreateInfo.usage				= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-	VK_CHECK(vkCreateBuffer(_device, &bufferCreateInfo, nullptr, &scratchBuffer.buffer));
-
-	VkMemoryRequirements memoryRequirements{};
-	vkGetBufferMemoryRequirements(_device, scratchBuffer.buffer, &memoryRequirements);
-
-	VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo{};
-	memoryAllocateFlagsInfo.sType		= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
-	memoryAllocateFlagsInfo.flags		= VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
-
-	VkMemoryAllocateInfo memoryAllocateInfo = {};
-	memoryAllocateInfo.sType			= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memoryAllocateInfo.pNext			= &memoryAllocateFlagsInfo;
-	memoryAllocateInfo.allocationSize	= memoryRequirements.size;
-	memoryAllocateInfo.memoryTypeIndex	= get_memory_type(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	VK_CHECK(vkAllocateMemory(_device, &memoryAllocateInfo, nullptr, &scratchBuffer.memory));
-	VK_CHECK(vkBindBufferMemory(_device, scratchBuffer.buffer, scratchBuffer.memory, 0));
-
-	VkBufferDeviceAddressInfoKHR bufferDeviceAddressInfo{};
-	bufferDeviceAddressInfo.sType		= VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	bufferDeviceAddressInfo.buffer		= scratchBuffer.buffer;
-	scratchBuffer.deviceAddress			= vkGetBufferDeviceAddressKHR(_device, &bufferDeviceAddressInfo);
-
-	return scratchBuffer;
-}
-
-uint32_t VulkanEngine::get_memory_type(uint32_t typeBits, VkMemoryPropertyFlags properties, VkBool32* memTypeFound)
-{
-	for (uint32_t i = 0; i < _memoryProperties.memoryTypeCount; i++)
-	{
-		if ((typeBits & 1) == 1)
-		{
-			if ((_memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-			{
-				if (memTypeFound)
-				{
-					*memTypeFound = true;
-				}
-				return i;
-			}
-		}
-		typeBits >>= 1;
-	}
-
-	if (memTypeFound)
-	{
-		*memTypeFound = false;
-		return 0;
-	}
-	else
-	{
-		throw std::runtime_error("Could not find a matching memory type");
-	}
 }
 
 uint32_t VulkanEngine::getBufferDeviceAddress(VkBuffer buffer)

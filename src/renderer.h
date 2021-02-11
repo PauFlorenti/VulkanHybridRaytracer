@@ -2,7 +2,6 @@
 #include <vk_types.h>
 #include <glm/glm/glm.hpp>
 
-//#include "entity.h"
 #include "scene.h"
 #include "vk_textures.h"
 
@@ -29,8 +28,9 @@ struct pushConstants {
 struct AccelerationStructure {
 	VkAccelerationStructureKHR	handle;
 	uint64_t					deviceAddress = 0;
-	VkBuffer					buffer;
-	VkDeviceMemory				memory;
+	AllocatedBuffer	buffer;
+	//VkBuffer					buffer;
+	//VkDeviceMemory				memory;
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
@@ -111,6 +111,7 @@ public:
 	std::vector<TlasInstance>	_tlas;
 	AllocatedBuffer				lightBuffer;
 	AllocatedBuffer				_matBuffer;
+	AllocatedBuffer				_instanceBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;

@@ -32,9 +32,5 @@ public:
 	static int getIndex(Material* material);
 	GPUMaterial materialToShader();
 	
-	bool operator== (const Material& m);// { return shadingModel == m.shadingModel; }
-	//bool operator== (const Material* m) { return shadingModel == m->shadingModel; }
-	//bool operator()(const Material* m) { return m->shadingModel == shadingModel; }
+	bool operator== (const Material& m);
 };
-
-//bool operator==(const Material* left, const Material* right) { return left->shadingModel == right->shadingModel; }
