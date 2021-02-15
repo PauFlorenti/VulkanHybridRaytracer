@@ -184,7 +184,6 @@ void VulkanEngine::update(const float dt)
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 
 	// TODO: MEMORY LEAK
-	/*
 	int instanceIndex = 0;
 	renderer->_tlas.clear();
 	for (Object* obj : _scene->_entities)
@@ -193,14 +192,12 @@ void VulkanEngine::update(const float dt)
 		{
 			for (Node* root : obj->prefab->_root)
 			{
-				std::vector<TlasInstance> instances = root->node_to_instance(instanceIndex, obj->m_matrix);
-				renderer->_tlas.insert(renderer->_tlas.end(), instances.begin(), instances.end());
+				root->node_to_instance(renderer->_tlas, instanceIndex, obj->m_matrix);
 			}
 		}
 	}
 	
 	renderer->buildTlas(renderer->_tlas, VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR, true);	
-	*/
 }
 
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)

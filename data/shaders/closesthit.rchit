@@ -50,11 +50,13 @@ void main()
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-	vec3 color = vec3(0), light_color = vec3(0), specular = vec3(0);
-	float attenuation = 1.0, light_intensity = 1.0;
+	vec3 color = vec3(0);
+	float attenuation = 1.0;
+  float light_intensity = 1.0;
 
-  Material mat  = materials.mat[materialID];
-  vec3 albedo   = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  Material mat    = materials.mat[materialID];
+  int shadingMode = int(mat.shadingMetallicRoughness.x);
+  vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -69,18 +71,12 @@ void main()
     L                         = normalize(L);
 		float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		light_intensity           = isDirectional ? 1.0 : light.color.w / (light_distance * light_distance);
-    light_color               = light.color.xyz;
 
     // Check if light has impact
     if( NdotL > 0 )
     {
       // init as shadowed
       shadowed = true;
-      mat3 dirMatrix = makeDirectionMatrix(L);
-
-      float r1 = rnd(prd.seed);
-      float r2 = rnd(prd.seed);
-      vec3 dir = normalize(uniformSampleCone(r1, r2, cos(10.0)));
 
       // Shadow ray cast
       float tmin = 0.001, tmax = light_distance + 1;
@@ -104,40 +100,41 @@ void main()
     }
 
     vec3 difColor = vec3(0);
-    int shadingMode = int(mat.shadingMetallicRoughness.x);
+
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      specular  = vec3(0);//computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
-      color    += (difColor + specular) * light_intensity * light.color.xyz * attenuation;
+      color    += (difColor) * light_intensity * light.color.xyz * attenuation;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
     {
-      
-      vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
-      bool isScattered  = dot(reflected, N) > 0;
-      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      specular = vec3(0);//computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
+      const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
+      const bool isScattered  = dot(reflected, N) > 0;
 
-      color += light_intensity * light.color.xyz * (difColor + specular) * attenuation * 0.1;
+      difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+      //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
+      color += difColor * light_intensity * light.color.xyz * attenuation;
+
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
     else if(shadingMode == 4) // VIDRE
     {
-      float ior = mat.diffuse.w;
-      float NdotD     = dot( N, normalize(gl_WorldRayDirectionEXT) );
-			vec3 refrNormal = NdotD > 0.0 ? -N : N;
-			float refrEta   = NdotD > 0.0 ? 1 / ior : ior;
-			float cosine    = NdotD > 0.0 ? ior * NdotD : -NdotD;
+      const float ior       = mat.diffuse.w;
+      const float NdotD     = dot( N, normalize(gl_WorldRayDirectionEXT) );
+			const vec3 refrNormal = NdotD > 0.0 ? -N : N;
+			const float refrEta   = NdotD > 0.0 ? 1 / ior : ior;
+			const float cosine    = NdotD > 0.0 ? ior * NdotD : -NdotD;
 
-			vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
+			const vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
 			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, ior ) : 1;
+      color += mat.diffuse.xyz;
 			
-			vec4 direction = rnd(prd.seed) < reflectProb ? vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : vec4(refracted, 1);
-      color += computeDiffuse(mat, N, L);
+			vec4 direction = rnd(prd.seed) < reflectProb ? 
+                        vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
+                        vec4(refracted, 1);
+
       prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
     }
   }
-  //prd.colorAndDist.xyz = N;
 }

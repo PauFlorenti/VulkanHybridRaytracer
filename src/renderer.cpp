@@ -1591,7 +1591,6 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 
 	VkDeviceSize instancesSize = geometryInstances.size() * sizeof(VkAccelerationStructureInstanceKHR);
 
-	//vmaDestroyBuffer(VulkanEngine::engine->_allocator, _instanceBuffer._buffer, _instanceBuffer._allocation);
 	// Create buffer if not already created 
 	if (!update)
 	{

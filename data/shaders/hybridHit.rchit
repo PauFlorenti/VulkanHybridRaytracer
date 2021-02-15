@@ -105,19 +105,18 @@ void main()
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      specular  = vec3(0); //computeSpecular(mat, N, L, -rayDir);
       color    += (difColor + specular) * light_intensity * light.color.xyz * attenuation;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
     {
-      
-      vec3 reflected    = reflect(rayDir, N);
-      bool isScattered  = dot(reflected, N) > 0;
-      difColor          = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      specular          = vec3(0); //computeSpecular(mat, N, L, -rayDir);
+      const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
+      const bool isScattered  = dot(reflected, N) > 0;
 
+      difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+      //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
       color += light_intensity * light.color.xyz * (difColor + specular) * attenuation;
+
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
     else if(shadingMode == 4) // VIDRE
@@ -132,7 +131,7 @@ void main()
 			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, ior ) : 1;
 			
 			vec4 direction = rnd(prd.seed) < reflectProb ? vec4(reflect(rayDir, N), 1) : vec4(refracted, 1);
-      color += computeDiffuse(mat, N, L);
+      color += mat.diffuse.xyz;
       prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
     }
   }
