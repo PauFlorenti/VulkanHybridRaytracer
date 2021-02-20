@@ -77,20 +77,21 @@ namespace std {
 
 Mesh* Mesh::GET(const char* filename)
 {
-	Mesh* mesh = new Mesh();
 	std::string s = filename;
 	std::string name = vkutil::findFile(s, searchPaths, true);
 	
 	if(!_loadedMeshes[name])
 	{
+		Mesh* mesh = new Mesh();
 		mesh->load_from_obj(name.c_str());
 		_loadedMeshes[name] = mesh;
+		return mesh;
 	}
 	else
 	{
-		mesh = _loadedMeshes[name];
+		return _loadedMeshes[name];
 	}
-	return mesh;
+	//return mesh;
 }
 
 bool Mesh::load_from_obj(const char* filename)

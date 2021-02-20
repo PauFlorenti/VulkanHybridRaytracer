@@ -215,7 +215,7 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
 	VkSubmitInfo submit = vkinit::submit_info(&cmd);
-	
+
 	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit, _uploadContext._uploadFence));
 
 	vkWaitForFences(_device, 1, &_uploadContext._uploadFence, VK_TRUE, 1000000000);

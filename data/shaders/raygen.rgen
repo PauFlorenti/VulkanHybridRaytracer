@@ -16,7 +16,7 @@ layout(binding = 2, set = 0) uniform CameraProperties
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
 const int MAX_RECURSION = 10;
-const int NSAMPLES = 10;
+const int NSAMPLES = 1;
 
 void main() 
 {
@@ -48,11 +48,9 @@ void main()
 			// Call the function to start tracing rays.
 			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
 
-			const vec3 color 		= prd.colorAndDist.xyz;
+			rayColor 				*= prd.colorAndDist.xyz;
 			const float hitDistance = prd.colorAndDist.w;
 			const bool isScattered 	= prd.direction.w > 0;
-
-			rayColor *= color;
 
 			if( hitDistance < 0 || !isScattered){
 				break;

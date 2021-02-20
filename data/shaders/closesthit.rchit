@@ -104,7 +104,7 @@ void main()
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += (difColor) * light_intensity * light.color.xyz * attenuation;
+      color    += difColor * light_intensity * light.color.xyz * attenuation;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -121,20 +121,18 @@ void main()
     else if(shadingMode == 4) // VIDRE
     {
       const float ior       = mat.diffuse.w;
-      const float NdotD     = dot( N, normalize(gl_WorldRayDirectionEXT) );
-			const vec3 refrNormal = NdotD > 0.0 ? -N : N;
-			const float refrEta   = NdotD > 0.0 ? 1 / ior : ior;
-			const float cosine    = NdotD > 0.0 ? ior * NdotD : -NdotD;
+      const float NdotV     = dot( N, normalize(gl_WorldRayDirectionEXT) );
+			const vec3 refrNormal = NdotV > 0.0 ? -N : N;
+			const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-			const vec3 refracted = refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
-			const float reflectProb = refracted != vec3(0) ? Schlick( cosine, ior ) : 1;
-      color += mat.diffuse.xyz;
-			
-			vec4 direction = rnd(prd.seed) < reflectProb ? 
-                        vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
-                        vec4(refracted, 1);
+      color += mat.diffuse.xyz * light_intensity * light.color.xyz;
 
-      prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+      float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
+			const vec3 direction = radicand < 0.0 ? 
+                  reflect(gl_WorldRayDirectionEXT, N) : 
+                  refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
+
+      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
     }
   }
 }
