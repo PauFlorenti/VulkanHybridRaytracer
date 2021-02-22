@@ -1201,7 +1201,11 @@ void Renderer::init_deferred_pipelines()
 
 	VK_CHECK(vkCreatePipelineLayout(*device, &deferredPipelineLayoutInfo, nullptr, &_finalPipelineLayout));
 
-	pipBuilder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
+	VkPipelineColorBlendAttachmentState att = vkinit::color_blend_attachment_state(0xf, VK_FALSE);
+
+	pipBuilder._colorBlendStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	pipBuilder._colorBlendStateInfo.attachmentCount = 1;
+	pipBuilder._colorBlendStateInfo.pAttachments = &att; //vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
 
 	pipBuilder._shaderStages.clear();
 	pipBuilder._shaderStages.push_back(
@@ -2354,7 +2358,12 @@ void Renderer::create_post_pipeline()
 	builder._scissor.offset = { 0, 0 };
 	builder._scissor.extent = extent;
 
-	builder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
+	VkPipelineColorBlendAttachmentState att = vkinit::color_blend_attachment_state(0xf, VK_FALSE);
+
+	builder._colorBlendStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	builder._colorBlendStateInfo.attachmentCount = 1;
+	builder._colorBlendStateInfo.pAttachments = &att;
+	//builder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
 	builder._multisampling = vkinit::multisample_state_create_info();
 
 	_postPipeline = builder.build_pipeline(*device, _forwardRenderPass);

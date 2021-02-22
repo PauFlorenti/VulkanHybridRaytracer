@@ -135,4 +135,5 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
     }
   }
+  prd.colorAndDist.xyz = N;
 }

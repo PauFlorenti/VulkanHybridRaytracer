@@ -50,9 +50,9 @@ void Scene::create_scene()
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
-	//Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
-	//Prefab* p_lantern	= Prefab::GET("Lantern.glb");
+	Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
+	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
+	Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
 	//Prefab* p_car		= Prefab::GET("scene.gltf");
 	//Prefab* p_box		= Prefab::GET("Box.glb");
 	Prefab* p_lucy		= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
@@ -85,11 +85,11 @@ void Scene::create_scene()
 	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -10)) * 
 		glm::scale(glm::mat4(1), glm::vec3(5, 5, 1));
 	
-	//Object* lantern = new Object();
-	//lantern->prefab = p_lantern;
-	//lantern->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
-	//	glm::scale(glm::mat4(1), glm::vec3(0.5));
-	/*
+	Object* lantern = new Object();
+	lantern->prefab = p_lantern;
+	lantern->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
+		glm::scale(glm::mat4(1), glm::vec3(0.5));
+	
 	Object* cornell = new Object();
 	cornell->prefab = p_cornell;
 	cornell->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -10)) *
@@ -97,19 +97,29 @@ void Scene::create_scene()
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
-	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(15, 5, -5));
-	*/
+	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-15, 5, -5));
+
+	Object* helmet2 = new Object();
+	helmet2->prefab = p_helmet;
+	helmet2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -5));
+	
+	Object* helmet3 = new Object();
+	helmet3->prefab = p_helmet;
+	helmet3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(15, 5, -5));
+
 	Object* lucy = new Object();
 	lucy->prefab = p_lucy;
 	lucy->m_matrix = glm::scale(glm::mat4(1), glm::vec3(0.01));
 	
-	_entities.push_back(floor);
-	_entities.push_back(sphere);
+	//_entities.push_back(floor);
+	//_entities.push_back(sphere);
 	//_entities.push_back(duck);
-	_entities.push_back(mirror);
+	_entities.push_back(cornell);
+	//_entities.push_back(mirror);
 	//_entities.push_back(helmet);
+	//_entities.push_back(helmet2);
+	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
+	//_entities.push_back(lucy);
 	//_entities.push_back(lantern);
-	//_entities.push_back(cornell);
-	_entities.push_back(lucy);
 }
