@@ -1201,7 +1201,11 @@ void Renderer::init_deferred_pipelines()
 
 	VK_CHECK(vkCreatePipelineLayout(*device, &deferredPipelineLayoutInfo, nullptr, &_finalPipelineLayout));
 
-	pipBuilder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
+	VkPipelineColorBlendAttachmentState att = vkinit::color_blend_attachment_state(0xf, VK_FALSE);
+
+	pipBuilder._colorBlendStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	pipBuilder._colorBlendStateInfo.attachmentCount = 1;
+	pipBuilder._colorBlendStateInfo.pAttachments = &att; //vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
 
 	pipBuilder._shaderStages.clear();
 	pipBuilder._shaderStages.push_back(
@@ -1582,7 +1586,7 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 	assert(_topLevelAS.handle == VK_NULL_HANDLE || update);
 
 	std::vector<VkAccelerationStructureInstanceKHR> geometryInstances;
-	geometryInstances.reserve(instances.size());
+	//geometryInstances.reserve(instances.size());
 
 	for (const TlasInstance& instance : instances)
 	{
@@ -1591,7 +1595,6 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 
 	VkDeviceSize instancesSize = geometryInstances.size() * sizeof(VkAccelerationStructureInstanceKHR);
 
-	//vmaDestroyBuffer(VulkanEngine::engine->_allocator, _instanceBuffer._buffer, _instanceBuffer._allocation);
 	// Create buffer if not already created 
 	if (!update)
 	{
@@ -1658,12 +1661,32 @@ void Renderer::buildTlas(const std::vector<TlasInstance>& instances, VkBuildAcce
 	asBuildRangeInfo.firstVertex		= 0;
 	asBuildRangeInfo.transformOffset	= 0;
 
-	const std::vector<VkAccelerationStructureBuildRangeInfoKHR*> asBuildStructureRangeInfos = { &asBuildRangeInfo };
+	const VkAccelerationStructureBuildRangeInfoKHR* pAsBuildRangeInfo = &asBuildRangeInfo;
+	
+	VkCommandPoolCreateInfo poolInfo = vkinit::command_pool_create_info(VulkanEngine::engine->_graphicsQueueFamily);
 
-	VulkanEngine::engine->immediate_submit([=](VkCommandBuffer cmd) {
-		vkCmdBuildAccelerationStructuresKHR(cmd, 1, &asBuildGeometryInfo, asBuildStructureRangeInfos.data());
-		});
+	VkCommandPool pool;
+	vkCreateCommandPool(VulkanEngine::engine->_device, &poolInfo, nullptr, &pool);
+	VkCommandBufferAllocateInfo alloc = vkinit::command_buffer_allocate_info(pool, 1);
 
+	VkCommandBuffer cmd;
+	vkAllocateCommandBuffers(VulkanEngine::engine->_device, &alloc, &cmd);
+
+	VkCommandBufferBeginInfo beginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	vkBeginCommandBuffer(cmd, &beginInfo);
+
+	vkCmdBuildAccelerationStructuresKHR(cmd, 1, &asBuildGeometryInfo, &pAsBuildRangeInfo);
+
+	vkEndCommandBuffer(cmd);
+
+	VkSubmitInfo submit = vkinit::submit_info(&cmd);
+	vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, nullptr);
+
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+
+	vkDestroyCommandPool(VulkanEngine::engine->_device, pool, nullptr);
+	
 	vmaDestroyBuffer(VulkanEngine::engine->_allocator, scratchBuffer._buffer, scratchBuffer._allocation);
 }
 
@@ -2335,7 +2358,12 @@ void Renderer::create_post_pipeline()
 	builder._scissor.offset = { 0, 0 };
 	builder._scissor.extent = extent;
 
-	builder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
+	VkPipelineColorBlendAttachmentState att = vkinit::color_blend_attachment_state(0xf, VK_FALSE);
+
+	builder._colorBlendStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	builder._colorBlendStateInfo.attachmentCount = 1;
+	builder._colorBlendStateInfo.pAttachments = &att;
+	//builder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
 	builder._multisampling = vkinit::multisample_state_create_info();
 
 	_postPipeline = builder.build_pipeline(*device, _forwardRenderPass);
@@ -2566,7 +2594,7 @@ void Renderer::create_hybrid_descriptors()
 	{
 		AllocatedBuffer vBuffer;
 		size_t bufferSize = sizeof(rtVertexAttribute) * obj->prefab->_mesh->_vertices.size();
-		VulkanEngine::engine->create_buffer(sizeof(rtVertexAttribute) * bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
+		VulkanEngine::engine->create_buffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
 		std::vector<rtVertexAttribute> vAttr;
 		std::vector<Vertex> vertices = obj->prefab->_mesh->_vertices;

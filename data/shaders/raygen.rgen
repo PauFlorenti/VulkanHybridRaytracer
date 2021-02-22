@@ -42,25 +42,25 @@ void main()
 		float tmin 		= 0.001;
 		float tmax 		= 10000.0;
 
+		vec3 rayColor = vec3(1);
 		for( int i = 0; i < MAX_RECURSION; i++ )
 		{
 			// Call the function to start tracing rays.
 			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
 
-			const vec3 color 		= prd.colorAndDist.xyz;
+			rayColor 				*= prd.colorAndDist.xyz;
 			const float hitDistance = prd.colorAndDist.w;
 			const bool isScattered 	= prd.direction.w > 0;
 
 			if( hitDistance < 0 || !isScattered){
-				finalColor += color;
 				break;
 			}
 			else{
 				origin.xyz 		= prd.origin;
 				direction.xyz 	= prd.direction.xyz;
 			}
-			finalColor += color;
 		}
+		finalColor += rayColor;
 	}
 
 	finalColor /= NSAMPLES;
