@@ -16,7 +16,7 @@ layout(binding = 2, set = 0) uniform CameraProperties
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
 const int MAX_RECURSION = 10;
-const int NSAMPLES = 1;
+const int NSAMPLES = 10;
 
 void main() 
 {

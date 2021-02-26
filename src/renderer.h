@@ -110,6 +110,7 @@ public:
 	std::vector<BlasInput>		_blas;
 	std::vector<TlasInstance>	_tlas;
 	AllocatedBuffer				lightBuffer;
+	AllocatedBuffer				_debugBuffer;
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
 

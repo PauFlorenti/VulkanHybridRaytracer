@@ -54,6 +54,8 @@ void VulkanEngine::init()
 	mouse_locked = false;
 	SDL_ShowCursor(!mouse_locked);
 
+	debugTarget = 0;
+
 	// Everything went fine
 	_isInitialized = true;
 }

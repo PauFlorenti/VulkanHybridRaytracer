@@ -148,6 +148,7 @@ public:
 	Texture _skyboxTexture;
 
 	bool mouse_locked;
+	uint32_t debugTarget = 0;
 
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT		enabledIndexingFeatures{};
 

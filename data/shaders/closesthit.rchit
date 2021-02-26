@@ -52,11 +52,13 @@ void main()
   // Init values used for lightning
 	vec3 color = vec3(0);
 	float attenuation = 1.0;
+  float shadowFactor = 0.0;
   float light_intensity = 1.0;
 
   Material mat    = materials.mat[materialID];
   int shadingMode = int(mat.shadingMetallicRoughness.x);
   vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  vec3 emissive   = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -72,11 +74,39 @@ void main()
 		float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		light_intensity           = isDirectional ? 1.0 : light.color.w / (light_distance * light_distance);
 
-    // Check if light has impact
+    // Check if light has impact, then calculate shadow
     if( NdotL > 0 )
     {
       // init as shadowed
       shadowed = true;
+      
+      //L = vec3(0, 1, 0);
+      //vec3 perpL = normalize(cross(L, vec3(0, 1, 0)));
+      //if(perpL == vec3(0.0))
+      //  perpL = vec3(1.0, 0.0, 0.0);
+      
+      // We get a vector from origin to the edge of the light
+      //const vec3 toLightEdge = normalize((light.pos.xyz + perpL * 5.0) - worldPos);
+      const float phi = rnd(prd.seed) * 2 * PI;
+      const float cosTheta = (rnd(prd.seed) - 0.5) * 2;
+      const float u = rnd(prd.seed);
+
+      const float theta = acos(cosTheta);
+      const float r = 2 * pow(u, 1/3);
+
+      const float x = r * sin(theta) * cos(phi);
+      const float y = r * sin(theta) * sin(phi);
+      const float z = r * cos(theta);
+
+      //calculate the angle betwee L and toLightEdge and multiply by 2
+      //const float angle = acos(dot(L, toLightEdge)) * 2.0;
+
+      //vec3 dir = uniformSampleCone(rnd(prd.seed), rnd(prd.seed), angle);
+      //mat3 R = AngleAxis3x3(angle, L);//makeDirectionMatrix(L);
+      //dir = R * dir;
+      vec3 dir = L;
+      //const vec3 dir = getConeSample(prd.seed, L, angle);
+      //const vec3 dir = normalize(vec3(x, y, z) - worldPos);
 
       // Shadow ray cast
       float tmin = 0.001, tmax = light_distance + 1;
@@ -84,9 +114,14 @@ void main()
         gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
         0xFF, 
         1, 0, 1, 
-        worldPos, tmin, 
-        L, tmax, 
+        worldPos + dir * 1e-2, tmin, 
+        dir, tmax, 
         1);
+
+        if(!shadowed)
+        {
+          shadowFactor++;
+        }
     }
 
     // Calculate attenuation factor
@@ -95,16 +130,13 @@ void main()
 		attenuation = max(attenuation, 0.0);
 		attenuation = attenuation * attenuation;
 
-    if(shadowed){
-      attenuation = 0;
-    }
-
     vec3 difColor = vec3(0);
 
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += difColor * light_intensity * light.color.xyz * attenuation;
+      color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      color    += emissive;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -114,7 +146,7 @@ void main()
 
       difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
       //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
-      color += difColor * light_intensity * light.color.xyz * attenuation;
+      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
 
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
@@ -135,5 +167,5 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
     }
   }
-  prd.colorAndDist.xyz = N;
+  //prd.colorAndDist.xyz = N;
 }
