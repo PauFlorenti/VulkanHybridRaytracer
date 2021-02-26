@@ -53,6 +53,7 @@ void main()
 	vec3 color = vec3(0);
 	float attenuation = 1.0;
   float light_intensity = 1.0;
+  float shadowFactor = 0.0;
 
   Material mat    = materials.mat[materialID];
   int shadingMode = int(mat.shadingMetallicRoughness.x);
@@ -78,6 +79,15 @@ void main()
       // init as shadowed
       shadowed = true;
 
+      vec3 perpL = cross(L, vec3(0, 1, 0));
+      if(perpL == vec3(0))
+        perpL = vec3(1, 0, 0);
+
+      const vec3 toEdge = normalize((light.pos.xyz + perpL) - worldPos);
+      const float angle = acos(dot(L, toEdge)) * 2.0;
+
+      vec3 dir = sampleCone(prd.seed, L, angle);
+
       // Shadow ray cast
       float tmin = 0.001, tmax = light_distance + 1;
       traceRayEXT(topLevelAS, 
@@ -85,8 +95,12 @@ void main()
         0xFF, 
         1, 0, 1, 
         worldPos, tmin, 
-        L, tmax, 
+        dir, tmax, 
         1);
+
+      if(!shadowed){
+        shadowFactor = 1;
+      }
     }
 
     // Calculate attenuation factor
@@ -95,16 +109,13 @@ void main()
 		attenuation = max(attenuation, 0.0);
 		attenuation = attenuation * attenuation;
 
-    if(shadowed){
-      attenuation = 0;
-    }
 
     vec3 difColor = vec3(0);
 
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += difColor * light_intensity * light.color.xyz * attenuation;
+      color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -114,7 +125,7 @@ void main()
 
       difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
       //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
-      color += difColor * light_intensity * light.color.xyz * attenuation;
+      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
 
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
@@ -135,5 +146,5 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
     }
   }
-  prd.colorAndDist.xyz = N;
+  //prd.colorAndDist.xyz = N;
 }

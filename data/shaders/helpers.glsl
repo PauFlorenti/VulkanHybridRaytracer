@@ -44,73 +44,38 @@ vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
     return vec3(1) * specular;
 };
 
-hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
+mat3 rotMat(const vec3 axis, const float angle)
 {
-    const vec3 diffuse = computeDiffuse(m, normal, L);
-    return hitPayload( vec4(diffuse, t), vec4(0), normal, 1);
-};
+    float c = cos(angle);
+    float s = sin(angle);
 
-hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
+    float t = 1 - c;
+    float x = axis.x;
+    float y = axis.y;
+    float z = axis.z;
+
+    return mat3(
+        t * x * x + c,      t * x * y - s * z,  t * x * z + s * y,
+        t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
+        t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
+    );
+}
+
+vec3 sampleCone(inout uint seed, const vec3 direction, const float angle)
 {
-    const vec3 reflected    = reflect(direction, normal);
-    const bool isScattered  = dot( reflected, normal ) > 0;
-    const vec4 diffuse      = isScattered ? vec4(computeDiffuse( m, normal, L), t) : vec4(1, 1, 1, -1);
+    float cosAngle = cos(angle);
 
-    return hitPayload( diffuse, vec4( reflected, isScattered ? 1 : 0), normal, 1);
-};
+    float z = rnd(seed) * (1.0 - cosAngle) + cosAngle;
+    float phi = rnd(seed) * 2.0 * PI;
 
-hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
-{
-    float ior = m.diffuse.w;
-    const float NdotD       = dot( normal, direction );
-    const vec3 refrNormal   = NdotD > 0.0 ? -normal : normal;
-    const float refrEta     = NdotD > 0.0 ? 1 / ior : ior;
-    const float cosine      = NdotD > 0.0 ? ior * NdotD : -NdotD;
+    float x = sqrt(1.0 - z * z) * cos(phi);
+    float y = sqrt(1.0 - z * z) * sin(phi);
+    vec3 north = vec3(0.0, 0.0, 1.0);
 
-    vec3 refracted          = refract( direction, refrNormal, refrEta );
-    const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, ior ) : 1;
+    vec3 axis = normalize(cross(north, normalize(direction)));
+    float rotAngle = acos(dot(normalize(direction), north));
 
-    //if( refracted == vec3( 0.0 ))
-	//    refracted = reflect( direction, normal );
-	//return hitPayload( vec4( 1, 1, 1, t ) , vec4( refracted, 1 ), normal, seed);
+    mat3 rot = rotMat(axis, rotAngle);
 
-    return rnd(seed) < reflectProb 
-        ? hitPayload(vec4(1, 1, 1, t), vec4( reflect(direction, normal), 1), normal, 1)
-        : hitPayload(vec4(1, 1, 1, t), vec4( refracted, 1), normal, 1);
-};
-
-hitPayload Scatter(const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
-{
-    const vec3 normDirection = normalize(direction);
-
-    switch(int(m.shadingMetallicRoughness.x))
-    {
-        case 0:
-            return Diffuse( m, normDirection, normal, L, t);
-        case 3:
-            return Metallic(m, normDirection, normal, L, t);
-        case 4:
-            return Dieletric( m, normDirection, normal, L, t, seed);
-    }
-};
-
-vec3 uniformSampleCone(float r1, float r2, float cosThetaMax)
-{
-    float cosTheta = (1.0 - r1) + r1 * cosThetaMax;
-    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-    float phi = r2 * 2 * PI;
-    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-};
-
-mat3 makeDirectionMatrix(vec3 dir)
-{
-    vec3 xAxis = normalize(cross(vec3(0, 1, 0), dir));
-    vec3 yAxis = normalize(cross(dir, xAxis));
-
-    mat3 matrix;
-    matrix[0] = vec3(xAxis.x, yAxis.x, dir.x);
-    matrix[1] = vec3(xAxis.y, yAxis.y, dir.y);
-    matrix[2] = vec3(xAxis.z, yAxis.z, dir.z);
-
-    return matrix;
-};
+    return rot * vec3(x, y, z);
+}

@@ -111,15 +111,15 @@ void Scene::create_scene()
 	lucy->prefab = p_lucy;
 	lucy->m_matrix = glm::scale(glm::mat4(1), glm::vec3(0.01));
 	
-	//_entities.push_back(floor);
-	//_entities.push_back(sphere);
+	_entities.push_back(floor);
+	_entities.push_back(sphere);
 	//_entities.push_back(duck);
-	_entities.push_back(cornell);
-	//_entities.push_back(mirror);
+	//_entities.push_back(cornell);
+	_entities.push_back(mirror);
 	//_entities.push_back(helmet);
-	//_entities.push_back(helmet2);
+	_entities.push_back(helmet2);
 	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
-	//_entities.push_back(lucy);
+	_entities.push_back(lucy);
 	//_entities.push_back(lantern);
 }
