@@ -11,6 +11,6 @@ layout(location = 2) out vec4 outFragColor;
 void main()
 {
     outPosition     = vec4(0);
-    outNormal       = vec4(0, 1, 0, 0);
+    outNormal       = vec4(0);
     outFragColor    = texture(sky, inUV);
 }
