@@ -44,56 +44,6 @@ vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
     return vec3(1) * specular;
 };
 
-hitPayload Diffuse( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
-{
-    const vec3 diffuse = computeDiffuse(m, normal, L);
-    return hitPayload( vec4(diffuse, t), vec4(0), normal, 1);
-};
-
-hitPayload Metallic( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t)
-{
-    const vec3 reflected    = reflect(direction, normal);
-    const bool isScattered  = dot( reflected, normal ) > 0;
-    const vec4 diffuse      = isScattered ? vec4(computeDiffuse( m, normal, L), t) : vec4(1, 1, 1, -1);
-
-    return hitPayload( diffuse, vec4( reflected, isScattered ? 1 : 0), normal, 1);
-};
-
-hitPayload Dieletric( const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
-{
-    float ior = m.diffuse.w;
-    const float NdotD       = dot( normal, direction );
-    const vec3 refrNormal   = NdotD > 0.0 ? -normal : normal;
-    const float refrEta     = NdotD > 0.0 ? 1 / ior : ior;
-    const float cosine      = NdotD > 0.0 ? ior * NdotD : -NdotD;
-
-    vec3 refracted          = refract( direction, refrNormal, refrEta );
-    const float reflectProb = refracted != vec3( 0 ) ? Schlick( cosine, ior ) : 1;
-
-    //if( refracted == vec3( 0.0 ))
-	//    refracted = reflect( direction, normal );
-	//return hitPayload( vec4( 1, 1, 1, t ) , vec4( refracted, 1 ), normal, seed);
-
-    return rnd(seed) < reflectProb 
-        ? hitPayload(vec4(1, 1, 1, t), vec4( reflect(direction, normal), 1), normal, 1)
-        : hitPayload(vec4(1, 1, 1, t), vec4( refracted, 1), normal, 1);
-};
-
-hitPayload Scatter(const Material m, const vec3 direction, const vec3 normal, const vec3 L, const float t, uint seed)
-{
-    const vec3 normDirection = normalize(direction);
-
-    switch(int(m.shadingMetallicRoughness.x))
-    {
-        case 0:
-            return Diffuse( m, normDirection, normal, L, t);
-        case 3:
-            return Metallic(m, normDirection, normal, L, t);
-        case 4:
-            return Dieletric( m, normDirection, normal, L, t, seed);
-    }
-};
-
 vec3 uniformSampleCone(float r1, float r2, float cosThetaMax)
 {
     float cosTheta = (1.0 - r1) + r1 * cosThetaMax;
@@ -101,6 +51,43 @@ vec3 uniformSampleCone(float r1, float r2, float cosThetaMax)
     float phi = r2 * 2 * PI;
     return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 };
+
+
+mat3 AngleAxis3x3(float angle, vec3 axis)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    float t = 1 - c;
+    float x = axis.x;
+    float y = axis.y;
+    float z = axis.z;
+
+    return mat3(
+        t * x * x + c,      t * x * y - s * z,  t * x * z + s * y,
+        t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
+        t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
+    );
+}
+
+// return a random direction vector inside a cone
+vec3 getConeSample(inout uint seed, vec3 direction, float angle)
+{
+    const float cosAngle = cos(angle);
+    const float z = rnd(seed) * (1.0 - cosAngle) + cosAngle;
+    const float phi = rnd(seed) * 2.0 * PI;
+
+    const float x = sqrt(1.0 - z * z) * cos(phi);
+    const float y = sqrt(1.0 - z * z) * sin(phi);
+    const vec3 north = vec3(0, 0, 1); 
+
+    // Find rotation axis and rotation angle
+    const vec3 axis = normalize(cross(north, normalize(direction)));
+    const float rotAngle = acos(dot(normalize(direction), north));
+
+    mat3 rot = AngleAxis3x3(rotAngle, axis);
+    return rot * vec3(x, y, z);
+}
 
 mat3 makeDirectionMatrix(vec3 dir)
 {
@@ -114,3 +101,4 @@ mat3 makeDirectionMatrix(vec3 dir)
 
     return matrix;
 };
+

@@ -54,6 +54,8 @@ void VulkanEngine::init()
 	mouse_locked = false;
 	SDL_ShowCursor(!mouse_locked);
 
+	debugTarget = 0;
+
 	// Everything went fine
 	_isInitialized = true;
 }
@@ -182,6 +184,13 @@ void VulkanEngine::update(const float dt)
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+
+	// Debug information to change the rastered deferred output
+	// TODO: verify if data has changed befor updating to gpu buffer
+	void* debugData;
+	vmaMapMemory(_allocator, renderer->_debugBuffer._allocation, &debugData);
+	memcpy(debugData, &debugTarget, sizeof(uint32_t));
+	vmaUnmapMemory(_allocator, renderer->_debugBuffer._allocation);
 
 	// TODO: MEMORY LEAK
 	int instanceIndex = 0;
