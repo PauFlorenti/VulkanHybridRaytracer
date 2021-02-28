@@ -61,21 +61,47 @@ mat3 rotMat(const vec3 axis, const float angle)
     );
 }
 
+mat4 rotationMatrix(vec3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                0.0,                                0.0,                                0.0,                                1.0);
+}
+
 vec3 sampleCone(inout uint seed, const vec3 direction, const float angle)
 {
-    float cosAngle = cos(angle);
+    float cosAngle = cos(angle); //1
 
-    float z = rnd(seed) * (1.0 - cosAngle) + cosAngle;
+    // This range to [cosTheta, 1]. In case rnd is 1, z will be 1, whereas if rnd is 0, z will be cosTheta.
+    float z = rnd(seed) * (1.0 - cosAngle) + cosAngle; // 1
+
     float phi = rnd(seed) * 2.0 * PI;
-
-    float x = sqrt(1.0 - z * z) * cos(phi);
-    float y = sqrt(1.0 - z * z) * sin(phi);
+    float x = sqrt(1.0 - z * z) * cos(phi); // 0
+    float y = sqrt(1.0 - z * z) * sin(phi); // 0
     vec3 north = vec3(0.0, 0.0, 1.0);
 
     vec3 axis = normalize(cross(north, normalize(direction)));
     float rotAngle = acos(dot(normalize(direction), north));
 
-    mat3 rot = rotMat(axis, rotAngle);
+    mat4 rot = rotationMatrix(axis, rotAngle);
 
-    return rot * vec3(x, y, z);
+    return vec3(rot * vec4(x, y, z, 1));//vec3(x, y, z);
+}
+
+vec3 sampleSphere(inout uint seed, const vec3 center, const float r)
+{
+    const float theta = 2 * PI * rnd(seed);
+    const float phi = acos(1 - 2 * rnd(seed));
+
+    const float x = sin(phi) * cos(theta);
+    const float y = sin(phi) * sin(theta);
+    const float z = cos(phi);
+
+    return center + (r * vec3(x, y, z));
 }

@@ -20,6 +20,8 @@ layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
+const float RADIUS = 1.0;
+
 void main()
 {
   // Do all vertices, indices and barycentrics calculations
@@ -50,10 +52,10 @@ void main()
   vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-	vec3 color = vec3(0);
-	float attenuation = 1.0;
+	vec3 color            = vec3(0);
+	float attenuation     = 1.0;
   float light_intensity = 1.0;
-  float shadowFactor = 0.0;
+  float shadowFactor    = 0.0;
 
   Material mat    = materials.mat[materialID];
   int shadingMode = int(mat.shadingMetallicRoughness.x);
@@ -76,31 +78,28 @@ void main()
     // Check if light has impact
     if( NdotL > 0 )
     {
-      // init as shadowed
-      shadowed = true;
+      for(int a = 0; a < 10; a++)
+      {
+        // Init as shadowed
+        shadowed = true;
 
-      vec3 perpL = cross(L, vec3(0, 1, 0));
-      if(perpL == vec3(0))
-        perpL = vec3(1, 0, 0);
+        const vec3 dir = normalize(sampleSphere(prd.seed, light.pos.xyz, RADIUS) - worldPos);
 
-      const vec3 toEdge = normalize((light.pos.xyz + perpL) - worldPos);
-      const float angle = acos(dot(L, toEdge)) * 2.0;
+        // Shadow ray cast
+        float tmin = 0.001, tmax = light_distance + 1;
+        traceRayEXT(topLevelAS, 
+          gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
+          0xFF, 
+          1, 0, 1, 
+          worldPos + dir * 1e-2, tmin, 
+          dir, tmax, 
+          1);
 
-      vec3 dir = sampleCone(prd.seed, L, angle);
-
-      // Shadow ray cast
-      float tmin = 0.001, tmax = light_distance + 1;
-      traceRayEXT(topLevelAS, 
-        gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
-        0xFF, 
-        1, 0, 1, 
-        worldPos, tmin, 
-        dir, tmax, 
-        1);
-
-      if(!shadowed){
-        shadowFactor = 1;
+        if(!shadowed){
+          shadowFactor++;
+        }
       }
+      shadowFactor /= 10;
     }
 
     // Calculate attenuation factor
@@ -108,7 +107,6 @@ void main()
 		attenuation /= light_max_distance;
 		attenuation = max(attenuation, 0.0);
 		attenuation = attenuation * attenuation;
-
 
     vec3 difColor = vec3(0);
 
@@ -124,7 +122,6 @@ void main()
       const bool isScattered  = dot(reflected, N) > 0;
 
       difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
       color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
 
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
@@ -146,5 +143,4 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
     }
   }
-  //prd.colorAndDist.xyz = N;
 }

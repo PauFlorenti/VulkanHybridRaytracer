@@ -20,6 +20,8 @@ layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materia
 layout (set = 0, binding = 12) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m[]; } matrices;
 
+const float RADIUS = 2.0;
+
 void main()
 {
   // Do all vertices, indices and barycentrics calculations
@@ -55,7 +57,7 @@ void main()
 
   // Init values used for lightning
 	vec3 color = vec3(0);
-	float attenuation = 1.0, light_intensity = 1.0;
+	float attenuation = 1.0, light_intensity = 1.0, shadowFactor = 0.0;
 
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
@@ -73,15 +75,21 @@ void main()
     // Check if light has impact
     if(NdotL > 0)
     {
-      // Shadow ray cast
-      float tmin = 0.001, tmax = light_distance;
-      traceRayEXT(topLevelAS, 
-        gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
-        0xFF, 
-        1, 0, 1, 
-        worldPos + N * 1e-4, tmin, 
-        L, tmax, 
-        1);
+			for(int a = 0; a < 10; a++)
+			{
+				shadowed 	  = true;
+
+				const vec3 dir = normalize(sampleSphere(prd.seed, light.pos.xyz, RADIUS) - worldPos);
+        // Shadow ray cast
+				float tmin = 0.001, tmax  = light_distance;
+				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
+                    0xff, 1, 0, 1, 
+                    worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+				if(!shadowed){
+					shadowFactor++;
+        }
+			}
+			shadowFactor /= 10;
     }
 
     // Calculate attenuation factor
@@ -90,7 +98,7 @@ void main()
 		attenuation = max(attenuation, 0.0);
 		attenuation = isDirectional ? 0.3 : attenuation * attenuation;
 
-    if(shadowed || light_intensity == 0)
+    if(light_intensity == 0)
     {
       attenuation = 0.0;
     }
@@ -102,7 +110,7 @@ void main()
     if(shadingMode == 0)  // DIFUS
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += difColor * light_intensity * light.color.xyz * attenuation;
+      color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -111,8 +119,7 @@ void main()
       const bool isScattered  = dot(reflected, N) > 0;
 
       difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      //specular = computeSpecular(mat, N, L, -gl_WorldRayDirectionEXT);
-      color += difColor * light_intensity * light.color.xyz * attenuation;
+      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
 
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
