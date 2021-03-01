@@ -58,7 +58,6 @@ void main()
 	vec3 color            = vec3(0);
 	float attenuation     = 1.0;
   float light_intensity = 1.0;
-  float shadowFactor    = 0.0;
 
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
@@ -71,6 +70,7 @@ void main()
     L                               = normalize(L);
 		const float NdotL 				      = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity 		= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
+    float shadowFactor    = 0.0;
 
     // Check if light has impact
     if(NdotL > 0)
