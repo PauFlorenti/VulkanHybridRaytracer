@@ -189,7 +189,7 @@ void VulkanEngine::update(const float dt)
 		else {
 			rtLightUBO[i].color		= glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
 			rtLightUBO[i].position	= glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
-			rtLightUBO[i].radius	= glm::vec4(l->radius);
+			rtLightUBO[i].radius	= l->radius;
 		}
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));

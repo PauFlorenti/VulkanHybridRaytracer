@@ -82,7 +82,7 @@ void main()
 			{
 				// Init as shadowed
 				isShadowed 			= true;
-				const vec3 dir 		= normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius.x) - position.xyz);
+				const vec3 dir 		= normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - position.xyz);
 				const uint flags 	= gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
 				tmax				= light_distance + 1;
 

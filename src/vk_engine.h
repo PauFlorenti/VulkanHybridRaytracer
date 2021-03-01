@@ -75,7 +75,7 @@ struct GPUObjectData {
 struct uboLight {
 	glm::vec4	position;	// w used for maxDistance
 	glm::vec4	color;		// w used for intensity;
-	glm::vec4	radius;		// the radius of sphere light for soft shadows purpose
+	alignas(16) float	radius;		// the radius of sphere light for soft shadows purpose
 };
 
 struct UploadContext {

@@ -53,7 +53,6 @@ void main()
 	vec3 color            = vec3(0);
 	float attenuation     = 1.0;
   float light_intensity = 1.0;
-  float shadowFactor    = 0.0;
 
   const Material mat    = materials.mat[materialID];
   const int shadingMode = int(mat.shadingMetallicRoughness.x);
@@ -71,6 +70,7 @@ void main()
     L                               = normalize(L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
+    float shadowFactor    = 0.0;
 
     // Check if light has impact
     if( NdotL > 0 )
@@ -79,7 +79,7 @@ void main()
       {
         // Init as shadowed
         shadowed          = true;
-        const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius.x) - worldPos);
+        const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
         const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
         float tmin = 0.001, tmax = light_distance + 1;
         

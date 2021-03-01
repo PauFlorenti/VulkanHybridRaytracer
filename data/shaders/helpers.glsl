@@ -18,7 +18,7 @@ struct Vertex
 struct Light{
   vec4  pos;
   vec4  color;
-  vec4 radius;
+  float radius;
 };
 
 struct Material{

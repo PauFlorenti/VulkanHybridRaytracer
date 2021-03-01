@@ -11,6 +11,7 @@ layout (set = 0, binding = 2) uniform sampler2D albedoTexture;
 struct Light{
 	vec4 pos;	// w used for max distance
 	vec4 color;	// w used for intensity
+	float radius;
 };
 
 layout (std140, set = 0, binding = 4) buffer LightBuffer

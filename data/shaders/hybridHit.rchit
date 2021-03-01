@@ -79,7 +79,7 @@ void main()
 			{
         // Init as shadowed
 				shadowed 	        = true;
-				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius.x) - worldPos);
+				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
         const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
         // Shadow ray cast
 				float tmin = 0.001, tmax  = light_distance + 1;
