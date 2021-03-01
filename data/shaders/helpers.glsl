@@ -1,6 +1,13 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "random.glsl"
 
+// CONSTS ----------------------
+const float PI = 3.14159265;
+const int NSAMPLES = 1;
+const int SHADOWSAMPLES = 1;
+const int MAX_RECURSION = 10;
+
+// STRUCTS --------------------
 struct Vertex
 {
   vec4 normal;
@@ -9,8 +16,9 @@ struct Vertex
 };
 
 struct Light{
-  vec4 pos;
-  vec4 color;
+  vec4  pos;
+  vec4  color;
+  float radius;
 };
 
 struct Material{
@@ -19,8 +27,7 @@ struct Material{
     vec4 shadingMetallicRoughness;
 };
 
-const float PI = 3.14159265;
-
+// FUNCTIONS --------------------------------------------------
 // Polynomial approximation by Christophe Schlick
 float Schlick(const float cosine, const float refractionIndex)
 {
@@ -44,16 +51,7 @@ vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
     return vec3(1) * specular;
 };
 
-vec3 uniformSampleCone(float r1, float r2, float cosThetaMax)
-{
-    float cosTheta = (1.0 - r1) + r1 * cosThetaMax;
-    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-    float phi = r2 * 2 * PI;
-    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-};
-
-
-mat3 AngleAxis3x3(float angle, vec3 axis)
+mat3 rotMat(const vec3 axis, const float angle)
 {
     float c = cos(angle);
     float s = sin(angle);
@@ -70,35 +68,47 @@ mat3 AngleAxis3x3(float angle, vec3 axis)
     );
 }
 
-// return a random direction vector inside a cone
-vec3 getConeSample(inout uint seed, vec3 direction, float angle)
+mat4 rotationMatrix(vec3 axis, float angle)
 {
-    const float cosAngle = cos(angle);
-    const float z = rnd(seed) * (1.0 - cosAngle) + cosAngle;
-    const float phi = rnd(seed) * 2.0 * PI;
-
-    const float x = sqrt(1.0 - z * z) * cos(phi);
-    const float y = sqrt(1.0 - z * z) * sin(phi);
-    const vec3 north = vec3(0, 0, 1); 
-
-    // Find rotation axis and rotation angle
-    const vec3 axis = normalize(cross(north, normalize(direction)));
-    const float rotAngle = acos(dot(normalize(direction), north));
-
-    mat3 rot = AngleAxis3x3(rotAngle, axis);
-    return rot * vec3(x, y, z);
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                0.0,                                0.0,                                0.0,                                1.0);
 }
 
-mat3 makeDirectionMatrix(vec3 dir)
+vec3 sampleCone(inout uint seed, const vec3 direction, const float angle)
 {
-    vec3 xAxis = normalize(cross(vec3(0, 1, 0), dir));
-    vec3 yAxis = normalize(cross(dir, xAxis));
+    float cosAngle = cos(angle); //1
 
-    mat3 matrix;
-    matrix[0] = vec3(xAxis.x, yAxis.x, dir.x);
-    matrix[1] = vec3(xAxis.y, yAxis.y, dir.y);
-    matrix[2] = vec3(xAxis.z, yAxis.z, dir.z);
+    // This range to [cosTheta, 1]. In case rnd is 1, z will be 1, whereas if rnd is 0, z will be cosTheta.
+    float z = rnd(seed) * (1.0 - cosAngle) + cosAngle; // 1
 
-    return matrix;
-};
+    float phi = rnd(seed) * 2.0 * PI;
+    float x = sqrt(1.0 - z * z) * cos(phi); // 0
+    float y = sqrt(1.0 - z * z) * sin(phi); // 0
+    vec3 north = vec3(0.0, 0.0, 1.0);
 
+    vec3 axis = normalize(cross(north, normalize(direction)));
+    float rotAngle = acos(dot(normalize(direction), north));
+
+    mat4 rot = rotationMatrix(axis, rotAngle);
+
+    return vec3(rot * vec4(x, y, z, 1));//vec3(x, y, z);
+}
+
+vec3 sampleSphere(inout uint seed, const vec3 center, const float r)
+{
+    const float theta = 2 * PI * rnd(seed);
+    const float phi = acos(1 - 2 * rnd(seed));
+
+    const float x = sin(phi) * cos(theta);
+    const float y = sin(phi) * sin(theta);
+    const float z = cos(phi);
+
+    return center + (r * vec3(x, y, z));
+}

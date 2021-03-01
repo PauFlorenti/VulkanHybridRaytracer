@@ -27,7 +27,12 @@ void Scene::create_scene()
 	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 15, 0));
 	light->intensity = 100.0f;
 
+	Light* light2 = new Light();
+	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 15, 0));
+	light2->intensity = 100.0f;
+
 	_lights.push_back(light);
+	_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------
@@ -82,13 +87,12 @@ void Scene::create_scene()
 	
 	Object* mirror = new Object();
 	mirror->prefab = p_mirror;
-	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -10)) * 
-		glm::scale(glm::mat4(1), glm::vec3(5, 5, 1));
+	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -10)) * 
+		glm::scale(glm::mat4(1), glm::vec3(8, 4, 1));
 	
-	Object* lantern = new Object();
-	lantern->prefab = p_lantern;
-	lantern->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
-		glm::scale(glm::mat4(1), glm::vec3(0.5));
+	Object* cube = new Object();
+	cube->prefab = p_mirror;
+	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
 	
 	Object* cornell = new Object();
 	cornell->prefab = p_cornell;
@@ -121,5 +125,6 @@ void Scene::create_scene()
 	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
 	_entities.push_back(lucy);
+	//_entities.push_back(cube);
 	//_entities.push_back(lantern);
 }

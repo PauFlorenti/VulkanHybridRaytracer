@@ -57,6 +57,7 @@ struct RTCameraData
 {
 	glm::mat4 invView;
 	glm::mat4 invProj;
+	alignas(16) float frame;
 };
 
 struct GPUSceneData {
@@ -72,8 +73,9 @@ struct GPUObjectData {
 };
 
 struct uboLight {
-	glm::vec4 position;	// w used for maxDistance
-	glm::vec4 color;	// w used for intensity;
+	glm::vec4	position;	// w used for maxDistance
+	glm::vec4	color;		// w used for intensity;
+	alignas(16) float	radius;		// the radius of sphere light for soft shadows purpose
 };
 
 struct UploadContext {
@@ -148,6 +150,8 @@ public:
 	Texture _skyboxTexture;
 
 	bool mouse_locked;
+	int  _denoise_frame{ 0 };
+	bool _denoise{ true };
 	uint32_t debugTarget = 0;
 
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT		enabledIndexingFeatures{};

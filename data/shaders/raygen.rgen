@@ -3,7 +3,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "raycommon.glsl"
-#include "random.glsl"
+#include "helpers.glsl"
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
@@ -11,18 +11,17 @@ layout(binding = 2, set = 0) uniform CameraProperties
 {
 	mat4 viewInverse;
 	mat4 projInverse;
+	int frame;
 } cam;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
-
-const int MAX_RECURSION = 10;
-const int NSAMPLES = 10;
 
 void main() 
 {
 	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, gl_LaunchIDEXT.x * gl_LaunchSizeEXT.y);
 
 	vec3 finalColor = vec3(0);
+	const int frame = cam.frame;
 
 	for(int nS = 0; nS < NSAMPLES; nS++)
 	{
@@ -65,6 +64,19 @@ void main()
 
 	finalColor /= NSAMPLES;
 
+	/*
 	// Finally we can write the result to the output image
+	if(frame > 0)
+	{
+		const float a = 1.0 / float(frame + 1);
+		const vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, finalColor, a), 1.0));
+		//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, finalColor, 0.5), 1.0));
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(old_color, 0.0));
+	}
+	else{
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
+	}
+	*/
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
 }
