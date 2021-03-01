@@ -581,6 +581,27 @@ void Renderer::render_gui()
 	ImGui::Begin("Debug window");
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::Checkbox("Denoise", &VulkanEngine::engine->_denoise);
+
+	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo" };
+	std::vector<const char*> charTargets;
+	charTargets.reserve(targets.size());
+	for (size_t i = 0; i < targets.size(); i++)
+	{
+		charTargets.push_back(targets[i].c_str());
+	}
+
+	const char* title = "Target";
+	int index = VulkanEngine::engine->debugTarget;
+
+	if (ImGui::Combo(title, &index, &charTargets[0], targets.size(), targets.size()))
+	{
+		VulkanEngine::engine->debugTarget = index;
+		void* debugData;
+		vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation, &debugData);
+		memcpy(debugData, &VulkanEngine::engine->debugTarget, sizeof(uint32_t));
+		vmaUnmapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation);
+	}
+
 	for (auto& light : _scene->_lights)
 	{
 		if (ImGui::TreeNode(&light, "Light")) {
@@ -932,13 +953,15 @@ void Renderer::init_deferred_descriptors()
 	VkDescriptorSetLayoutBinding normalBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);	// Normals
 	VkDescriptorSetLayoutBinding albedoBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2);	// Albedo
 	VkDescriptorSetLayoutBinding lightBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 4);	// Lights buffer
+	VkDescriptorSetLayoutBinding debugBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 5);	// Debug display
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
 		positionBinding,
 		normalBinding,
 		albedoBinding,
-		lightBinding
+		lightBinding,
+		debugBinding
 	};
 
 	VkDescriptorSetLayoutCreateInfo setInfo = {};
@@ -970,22 +993,31 @@ void Renderer::init_deferred_descriptors()
 		int nLights = _scene->_lights.size();
 		if (!lightBuffer._buffer)
 			VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
+		if (!_debugBuffer._buffer)
+			VulkanEngine::engine->create_buffer(sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _debugBuffer);
 
 		VkDescriptorBufferInfo lightBufferDesc;
 		lightBufferDesc.buffer = lightBuffer._buffer;
 		lightBufferDesc.offset = 0;
 		lightBufferDesc.range  = sizeof(uboLight) * nLights;
 
+		VkDescriptorBufferInfo debugDesc;
+		debugDesc.buffer = _debugBuffer._buffer;
+		debugDesc.offset = 0;
+		debugDesc.range = sizeof(uint32_t);
+
 		VkWriteDescriptorSet positionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorPosition, 0);
 		VkWriteDescriptorSet normalWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorNormal, 1);
 		VkWriteDescriptorSet albedoWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorAlbedo, 2);
 		VkWriteDescriptorSet lightBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _frames[i].deferredDescriptorSet, &lightBufferDesc, 4);
+		VkWriteDescriptorSet debugWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
 
 		std::vector<VkWriteDescriptorSet> writes = {
 			positionWrite,
 			normalWrite,
 			albedoWrite,
-			lightBufferWrite
+			lightBufferWrite,
+			debugWrite
 		};
 
 		vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
@@ -1245,7 +1277,7 @@ void Renderer::build_forward_command_buffer()
 	VkCommandBuffer *cmd = &get_current_frame()._mainCommandBuffer;
 
 	std::array<VkClearValue, 2> clearValues;
-	clearValues[0].color		= { 0.0f, 1.0f, 0.0f, 1.0f };
+	clearValues[0].color		= { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[1].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -1313,9 +1345,9 @@ void Renderer::build_previous_command_buffer()
 	VkDeviceSize offset = { 0 };
 
 	std::array<VkClearValue, 4> clearValues;
-	clearValues[0].color = { 0.f,  0.0f, 0.0f, 1.0f };
+	clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[1].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-	clearValues[2].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+	clearValues[2].color = { 1.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[3].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -1359,7 +1391,7 @@ void Renderer::build_deferred_command_buffer()
 	VkCommandBufferBeginInfo cmdBufInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 	std::array<VkClearValue, 2> clearValues;
-	clearValues[0].color = { 0.0f, 1.0f, 0.0f, 1.0f };
+	clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[1].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
@@ -2429,7 +2461,7 @@ void Renderer::build_post_command_buffers()
 	VkCommandBufferBeginInfo cmdBufInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 	std::array<VkClearValue, 2> clearValues;
-	clearValues[0].color = { 0.0f, 1.0f, 0.0f, 1.0f };
+	clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[1].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};

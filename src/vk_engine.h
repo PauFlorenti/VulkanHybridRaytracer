@@ -152,6 +152,7 @@ public:
 	bool mouse_locked;
 	int  _denoise_frame{ 0 };
 	bool _denoise{ true };
+	uint32_t debugTarget = 0;
 
 	VkPhysicalDeviceDescriptorIndexingFeaturesEXT		enabledIndexingFeatures{};
 

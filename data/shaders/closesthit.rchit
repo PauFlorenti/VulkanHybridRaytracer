@@ -50,13 +50,15 @@ void main()
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-	vec3 color            = vec3(0);
-	float attenuation     = 1.0;
+	vec3 color = vec3(0);
+	float attenuation = 1.0;
+  float shadowFactor = 0.0;
   float light_intensity = 1.0;
 
-  const Material mat    = materials.mat[materialID];
-  const int shadingMode = int(mat.shadingMetallicRoughness.x);
-  const vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  Material mat    = materials.mat[materialID];
+  int shadingMode = int(mat.shadingMetallicRoughness.x);
+  vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  vec3 emissive   = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -72,7 +74,7 @@ void main()
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
     float shadowFactor    = 0.0;
 
-    // Check if light has impact
+    // Check if light has impact, then calculate shadow
     if( NdotL > 0 )
     {
       for(int a = 0; a < SHADOWSAMPLES; a++)
@@ -111,6 +113,7 @@ void main()
     {
       difColor  = computeDiffuse(mat, N, L) * albedo;
       color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      color    += emissive;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL

@@ -19,6 +19,8 @@ layout (std140, set = 0, binding = 4) buffer LightBuffer
 	Light lights[];
 }lightBuffer;
 
+layout(set = 0, binding = 5) uniform debugInfo{int target;} debug;
+
 const vec3 ambient_light = vec3(0.0);
 
 void main() 
@@ -27,6 +29,22 @@ void main()
 	vec3 normal 	= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
 	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
+
+	if(debug.target > 0)
+	{
+		switch(debug.target){
+			case 1:
+				outFragColor = vec4(position, 1);
+				break;
+			case 2:
+				outFragColor = vec4(normal, 0);
+				break;
+			case 3:
+				outFragColor = vec4(albedo, 1);
+				break;
+		}
+		return;
+	}
 
 	vec3 color = vec3(0), light_color = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
@@ -65,8 +83,6 @@ void main()
 	
 	if(!background)
 		color *= light_color;
-	
-	//color = N;
 
 	outFragColor = vec4( color, 1.0f );
 }

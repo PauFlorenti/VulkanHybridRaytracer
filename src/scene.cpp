@@ -47,7 +47,7 @@ void Scene::create_scene()
 
 	// Create prefabs
 	// --------------
-	//Prefab* p_duck		= Prefab::GET("duck.gltf");
+	Prefab* p_duck		= Prefab::GET("duck.gltf");
 	//Prefab* p_sphere	= Prefab::GET("sphere.obj");
 	Prefab* p_quad		= Prefab::GET("quad", Mesh::get_quad());
 	p_quad->_root[0]->addMaterial(m_asphalt);
@@ -69,11 +69,11 @@ void Scene::create_scene()
 	Object* sphere = new Object();
 	sphere->prefab = p_glass_sphere;
 	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
-	/*
+	
 	Object* duck = new Object();
 	duck->prefab = p_duck;
 	duck->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -20));
-	*/
+	
 	Object* floor = new Object();
 	floor->prefab = p_quad;
 	floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
@@ -126,4 +126,5 @@ void Scene::create_scene()
 	//_entities.push_back(car);
 	_entities.push_back(lucy);
 	//_entities.push_back(cube);
+	//_entities.push_back(lantern);
 }
