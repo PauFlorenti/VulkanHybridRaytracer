@@ -19,12 +19,13 @@ void Object::draw(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, glm::ma
 	}
 }
 
-Light::Light(lightType type, glm::vec3 color /*white*/, glm::vec3 position/*0,0,0*/, float intensity/*1000*/, float maxDistance/*500*/) :
+Light::Light(lightType type, glm::vec3 color /*white*/, glm::vec3 position/*0,0,0*/, float intensity/*1000*/, float maxDistance/*500*/, float radius/*1.0*/) :
 	type{ type },
 	color{ color },
 	position{ position },
 	intensity{ intensity },
-	maxDistance{ maxDistance }
+	maxDistance{ maxDistance },
+	radius{radius}
 {
 	this->m_matrix		= glm::translate(glm::mat4(1), position);
 	this->m_selected	= false;

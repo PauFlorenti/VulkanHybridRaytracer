@@ -148,20 +148,31 @@ void VulkanEngine::update(const float dt)
 	}
 
 	// Copy camera info to the buffer
-	void* data;
-	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-	memcpy(data, &cameraData, sizeof(GPUCameraData));
-	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+	static glm::mat4 refCam;
+
+	if (memcmp(&refCam[0][0], &view[0][0], sizeof(glm::mat4)) != 0)
+	{
+		_denoise_frame = 0;
+		refCam = view;
+		void* data;
+		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+		memcpy(data, &cameraData, sizeof(GPUCameraData));
+		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+	}
 	
 	// copy ray tracing camera, it need the inverse
 	RTCameraData rtCamera;
-	rtCamera.invProj = glm::inverse(projection);
-	rtCamera.invView = glm::inverse(view);
+	rtCamera.invProj	= glm::inverse(projection);
+	rtCamera.invView	= glm::inverse(view);
+	rtCamera.frame		= _denoise_frame;
 
 	void* rtCameraData;
 	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
 	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
 	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
+
+	if(_denoise)
+		_denoise_frame++;
 
 	// TODO unify with the deferred update buffer
 	void* rtLightData;
@@ -172,12 +183,13 @@ void VulkanEngine::update(const float dt)
 		_scene->_lights[i]->update();
 		Light* l = _scene->_lights[i];
 		if (l->type == DIRECTIONAL_LIGHT) {
-			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, -1);
+			rtLightUBO[i].color		= glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position	= glm::vec4(l->position.x, l->position.y, l->position.z, -1);
 		}
 		else {
-			rtLightUBO[i].color = glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
-			rtLightUBO[i].position = glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+			rtLightUBO[i].color		= glm::vec4(l->color.x, l->color.y, l->color.z, l->intensity);
+			rtLightUBO[i].position	= glm::vec4(l->position.x, l->position.y, l->position.z, l->maxDistance);
+			rtLightUBO[i].radius	= glm::vec4(l->radius);
 		}
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));

@@ -63,7 +63,7 @@ void Camera::updateCameraVectors()
 	front.y = sin(glm::radians(_pitch));
 	front.z = sin(glm::radians(_yaw)) * cos(glm::radians(_pitch));
 
-	_direction = glm::normalize(front);
-	_right = glm::normalize(glm::cross(_direction, glm::vec3(0, 1, 0)));
-	_up = glm::normalize(glm::cross(_right, _direction));
+	_direction	= glm::normalize(front);
+	_right		= glm::normalize(glm::cross(_direction, glm::vec3(0, 1, 0)));
+	_up			= glm::normalize(glm::cross(_right, _direction));
 }

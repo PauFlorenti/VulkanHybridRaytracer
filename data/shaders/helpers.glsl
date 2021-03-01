@@ -1,6 +1,13 @@
 #extension GL_GOOGLE_include_directive : enable
 #include "random.glsl"
 
+// CONSTS ----------------------
+const float PI = 3.14159265;
+const int NSAMPLES = 1;
+const int SHADOWSAMPLES = 1;
+const int MAX_RECURSION = 10;
+
+// STRUCTS --------------------
 struct Vertex
 {
   vec4 normal;
@@ -9,8 +16,9 @@ struct Vertex
 };
 
 struct Light{
-  vec4 pos;
-  vec4 color;
+  vec4  pos;
+  vec4  color;
+  vec4 radius;
 };
 
 struct Material{
@@ -19,8 +27,7 @@ struct Material{
     vec4 shadingMetallicRoughness;
 };
 
-const float PI = 3.14159265;
-
+// FUNCTIONS --------------------------------------------------
 // Polynomial approximation by Christophe Schlick
 float Schlick(const float cosine, const float refractionIndex)
 {

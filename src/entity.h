@@ -59,8 +59,9 @@ public:
 	glm::vec3 position;
 	float intensity;
 	float maxDistance;
+	float radius;
 
-	Light(lightType type = POINT_LIGHT, glm::vec3 color = glm::vec3(1), glm::vec3 position = glm::vec3(0), float intensity = 1000.0f, float maxDistance = 500.0f);
+	Light(lightType type = POINT_LIGHT, glm::vec3 color = glm::vec3(1), glm::vec3 position = glm::vec3(0), float intensity = 1000.0f, float maxDistance = 500.0f, float radius = 1.0f);
 
 	void update();
 	void setColor(glm::vec3 color);

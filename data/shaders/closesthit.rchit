@@ -20,8 +20,6 @@ layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
-const float RADIUS = 1.0;
-
 void main()
 {
   // Do all vertices, indices and barycentrics calculations
@@ -42,14 +40,14 @@ void main()
   Vertex v1     = vertices[instanceID].v[ind.y];
   Vertex v2     = vertices[instanceID].v[ind.z];
 
-  mat4 model = matrices.m[transformationID];
+  const mat4 model = matrices.m[transformationID];
 
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
-  vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
-  vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  vec3 N        = normalize(model * vec4(normal, 0)).xyz;
-  vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+  const vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
+  const vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
+  const vec3 N        = normalize(model * vec4(normal, 0)).xyz;
+  const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
 	vec3 color            = vec3(0);
@@ -57,56 +55,55 @@ void main()
   float light_intensity = 1.0;
   float shadowFactor    = 0.0;
 
-  Material mat    = materials.mat[materialID];
-  int shadingMode = int(mat.shadingMetallicRoughness.x);
-  vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  const Material mat    = materials.mat[materialID];
+  const int shadingMode = int(mat.shadingMetallicRoughness.x);
+  const vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
     // Init basic light information
-    Light light = lightsBuffer.lights[i];
-    bool isDirectional = light.pos.w < 0;
-
-		vec3 L                    = isDirectional ? light.pos.xyz : light.pos.xyz - worldPos;
-		float light_max_distance  = light.pos.w;
-		float light_distance      = length(L);
-    L                         = normalize(L);
-		float NdotL               = clamp(dot(N, L), 0.0, 1.0);
-		light_intensity           = isDirectional ? 1.0 : light.color.w / (light_distance * light_distance);
+    Light light                     = lightsBuffer.lights[i];
+    const bool isDirectional        = light.pos.w < 0;
+		vec3 L                          = isDirectional ? light.pos.xyz : (light.pos.xyz - worldPos);
+		const float light_max_distance  = light.pos.w;
+		const float light_distance      = length(L);
+    L                               = normalize(L);
+		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
+		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
 
     // Check if light has impact
     if( NdotL > 0 )
     {
-      for(int a = 0; a < 10; a++)
+      for(int a = 0; a < SHADOWSAMPLES; a++)
       {
         // Init as shadowed
-        shadowed = true;
-
-        const vec3 dir = normalize(sampleSphere(prd.seed, light.pos.xyz, RADIUS) - worldPos);
-
-        // Shadow ray cast
+        shadowed          = true;
+        const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius.x) - worldPos);
+        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
         float tmin = 0.001, tmax = light_distance + 1;
-        traceRayEXT(topLevelAS, 
-          gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT, 
-          0xFF, 
-          1, 0, 1, 
-          worldPos + dir * 1e-2, tmin, 
-          dir, tmax, 
-          1);
+        
+        // Shadow ray cast
+        traceRayEXT(topLevelAS, flags, 0xFF, 1, 0, 1, 
+          worldPos + dir * 1e-2, tmin, dir, tmax, 1);
 
         if(!shadowed){
           shadowFactor++;
         }
       }
-      shadowFactor /= 10;
+      shadowFactor /= SHADOWSAMPLES;
     }
 
     // Calculate attenuation factor
-		attenuation = light_max_distance - light_distance;
-		attenuation /= light_max_distance;
-		attenuation = max(attenuation, 0.0);
-		attenuation = attenuation * attenuation;
+    if(light_intensity == 0){
+      attenuation = 0.1;
+    }
+    else{
+      attenuation = light_max_distance - light_distance;
+      attenuation /= light_max_distance;
+      attenuation = max(attenuation, 0.0);
+      attenuation = attenuation * attenuation;
+    }
 
     vec3 difColor = vec3(0);
 
@@ -136,11 +133,11 @@ void main()
       color += mat.diffuse.xyz * light_intensity * light.color.xyz;
 
       float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
-			const vec3 direction = radicand < 0.0 ? 
-                  reflect(gl_WorldRayDirectionEXT, N) : 
-                  refract( gl_WorldRayDirectionEXT, refrNormal, refrEta );
+			const vec4 direction = radicand < 0.0 ? 
+                  vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
+                  vec4(refract( gl_WorldRayDirectionEXT, refrNormal, refrEta ), 1);
 
-      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(direction, 1), worldPos, prd.seed);
+      prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
     }
   }
 }
