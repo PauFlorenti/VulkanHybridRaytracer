@@ -18,7 +18,7 @@ layout(location = 0) rayPayloadEXT hitPayload prd;
 
 void main() 
 {
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, gl_LaunchIDEXT.x * gl_LaunchSizeEXT.y);
+	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
 
 	vec3 finalColor = vec3(0);
 	const int frame = cam.frame;
