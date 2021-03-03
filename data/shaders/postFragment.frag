@@ -9,5 +9,16 @@ void main()
   vec2  uv    = outUV;
   float gamma = 1. / 2.2;
 
-  fragColor = texture(finalTexture, uv);
+  ivec2 texturePosition = ivec2(gl_FragCoord.x, gl_FragCoord.y);
+
+  vec4 color1 = texelFetch(finalTexture, texturePosition, 0);
+  vec4 color2 = texelFetch(finalTexture, ivec2(texturePosition.x - 1, texturePosition.y), 0);
+  vec4 color3 = texelFetch(finalTexture, ivec2(texturePosition.x + 1, texturePosition.y), 0);
+  vec4 color4 = texelFetch(finalTexture, ivec2(texturePosition.x, texturePosition.y - 1), 0);
+  vec4 color5 = texelFetch(finalTexture, ivec2(texturePosition.x, texturePosition.y + 1), 0);
+
+  vec4 color = color1;// + color2 + color3 + color4 + color5;
+  //color /= 5;
+
+  fragColor = color;//texture(finalTexture, uv);
 }

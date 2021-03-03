@@ -72,7 +72,7 @@ void main()
     L                               = normalize(L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
-    float shadowFactor    = 0.0;
+    float shadowFactor    = 0.1;
 
     // Check if light has impact, then calculate shadow
     if( NdotL > 0 )
@@ -98,7 +98,7 @@ void main()
 
     // Calculate attenuation factor
     if(light_intensity == 0){
-      attenuation = 0.1;
+      attenuation = 0.0;
     }
     else{
       attenuation = light_max_distance - light_distance;

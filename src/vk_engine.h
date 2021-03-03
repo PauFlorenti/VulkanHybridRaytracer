@@ -218,6 +218,9 @@ private:
 	// VKRay features passed to the logical device as a pNext pointer
 	void get_enabled_features();
 
+	void updateFrame();
+	void resetFrame();
+
 };
 
 class PipelineBuilder
