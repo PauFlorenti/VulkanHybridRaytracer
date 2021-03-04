@@ -18,10 +18,10 @@ layout(location = 0) rayPayloadEXT hitPayload prd;
 
 void main() 
 {
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
+	const int frame = cam.frame;
+	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
 
 	vec3 finalColor = vec3(0);
-	const int frame = cam.frame;
 
 	for(int nS = 0; nS < NSAMPLES; nS++)
 	{
@@ -63,20 +63,16 @@ void main()
 	}
 
 	finalColor /= NSAMPLES;
-
-	/*
+	
 	// Finally we can write the result to the output image
 	if(frame > 0)
 	{
-		const float a = 1.0 / float(frame + 1);
-		const vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-		//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, finalColor, a), 1.0));
-		//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(mix(old_color, finalColor, 0.5), 1.0));
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(old_color, 0.0));
+		float alpha = 0.3;// = 1.0 / (float(cam.frame) + 1);
+		vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		vec3 color = mix(old_color, finalColor, alpha);
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
 	}
 	else{
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
-	}
-	*/
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
+	}	
 }

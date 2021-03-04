@@ -1,12 +1,13 @@
 
 #include "camera.h"
 
-Camera::Camera(glm::vec3 position, glm::vec3 up, float yaw, float pitch) : _direction(glm::vec3(0, 0, -1)), _speed(SPEED), _sensitivity(SENSITIVITY)
+Camera::Camera(glm::vec3 position, glm::vec3 up, float fov, float yaw, float pitch) : _direction(glm::vec3(0, 0, -1)), _speed(SPEED), _sensitivity(SENSITIVITY)
 {
 	_position	= position;
 	_up			= up;
 	_yaw		= yaw;
 	_pitch		= pitch;
+	_fov		= fov;
 	updateCameraVectors();
 }
 
@@ -50,10 +51,10 @@ glm::mat4 Camera::getView()
 	return glm::lookAt(_position, _position + _direction, glm::vec3(0, 1, 0));
 }
 
-glm::mat4 Camera::getProjection()
+glm::mat4 Camera::getProjection(const float ratio)
 {
 	// TODO
-	return glm::mat4(1);
+	return glm::perspective(glm::radians(_fov), ratio, 0.1f, 1000.0f);
 }
 
 void Camera::updateCameraVectors()

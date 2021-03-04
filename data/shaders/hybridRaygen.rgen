@@ -7,19 +7,13 @@
 #include "raycommon.glsl"
 #include "helpers.glsl"
 
-struct GPUMaterial
-{
-	vec4 diffuse;
-	vec4 textures;
-	vec4 shadingMetallicRoughness;
-};
-
 layout (set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout (set = 0, binding = 1, rgba8) uniform image2D image;
 layout (set = 0, binding = 2) uniform CameraProperties 
 {
 	mat4 viewInverse;
 	mat4 projInverse;
+	int frame;
 } cam;
 layout (set = 0, binding = 3) uniform sampler2D positionTexture;
 layout (set = 0, binding = 4) uniform sampler2D normalTexture;
@@ -33,7 +27,7 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 void main()
 {
 
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, gl_LaunchIDEXT.x * gl_LaunchSizeEXT.y);
+	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
 
     const vec2 pixelCenter	= vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
 	const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
@@ -73,7 +67,7 @@ void main()
 		const float NdotL 				= clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity 	= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
 
-		float shadowFactor	= 0.0;
+		float shadowFactor	= 0.1;
 		int depth = 0;
 		
 		if(NdotL > 0)
@@ -173,5 +167,14 @@ void main()
 	else
 		finalColor = albedo;
 
-    imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
+	if(cam.frame > 0)
+	{
+		float a = 1.0 / float(cam.frame + 1);
+		vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		vec3 color = 0.3 * finalColor + (1 - 0.3) * old_color;
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
+	}
+	else{
+    	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
+	}
 }

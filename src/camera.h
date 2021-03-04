@@ -22,7 +22,7 @@ class Camera
 {
 public:
 
-	Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH);
+	Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0, 1.0f, 0.0f), float fov = 60.0f, float yaw = YAW, float pitch = PITCH);
 
 	glm::vec3 _position;
 	glm::vec3 _direction;
@@ -33,12 +33,13 @@ public:
 	float _pitch;
 	float _speed;
 	float _sensitivity;
+	float _fov;
 
 	void processKeyboard(Camera_Movement direction, const float dt);
 	void rotate(float xoffset, float yoffset, bool constrainPitch = true);
 
 	glm::mat4 getView();
-	glm::mat4 getProjection();
+	glm::mat4 getProjection(const float ratio);
 
 private:
 	void updateCameraVectors();
