@@ -50,10 +50,10 @@ void main()
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-	vec3 color = vec3(0);
-	float attenuation = 1.0;
-  float shadowFactor = 0.0;
+	vec3 color            = vec3(0);
+	float attenuation     = 1.0;
   float light_intensity = 1.0;
+  float shadowFactor    = 0.0;
 
   Material mat    = materials.mat[materialID];
   int shadingMode = int(mat.shadingMetallicRoughness.x);

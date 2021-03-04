@@ -133,7 +133,7 @@ void VulkanEngine::update(const float dt)
 	updateFrame();
 
 	glm::mat4 view			= _scene->_camera->getView();
-	glm::mat4 projection	= glm::perspective(glm::radians(60.0f), (float)_window->getWidth() / (float)_window->getHeight(), 0.1f, 1000.0f);
+	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
 	projection[1][1] *= -1;
 
 	// Fill the GPU camera data struct
@@ -155,7 +155,7 @@ void VulkanEngine::update(const float dt)
 	memcpy(data, &cameraData, sizeof(GPUCameraData));
 	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
 	
-	// copy ray tracing camera, it need the inverse
+	// Copy ray tracing camera, it need the inverse
 	RTCameraData rtCamera;
 	rtCamera.invProj	= glm::inverse(projection);
 	rtCamera.invView	= glm::inverse(view);
@@ -189,7 +189,8 @@ void VulkanEngine::update(const float dt)
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
 
-	// TODO: MEMORY LEAK
+	// TODO: MEMORY LEAK and update only when instances changed
+	// Rebuild instances matrix for TLAS
 	int instanceIndex = 0;
 	renderer->_tlas.clear();
 	for (Object* obj : _scene->_entities)
@@ -688,7 +689,6 @@ size_t VulkanEngine::pad_uniform_buffer_size(size_t originalSize)
 void VulkanEngine::updateFrame()
 {
 	static glm::mat4 refMatrix;
-	//static float refFov{_scene->_camera.get}
 
 	const auto& m = _scene->_camera->getView();
 
@@ -703,6 +703,12 @@ void VulkanEngine::updateFrame()
 void VulkanEngine::resetFrame()
 {
 	_denoise_frame = -1;
+}
+
+void VulkanEngine::updateCameraMatrices()
+{
+	static glm::mat4 prevView;
+	static glm::mat4 prevProj;
 }
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)

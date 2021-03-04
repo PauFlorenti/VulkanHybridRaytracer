@@ -220,6 +220,7 @@ private:
 
 	void updateFrame();
 	void resetFrame();
+	void updateCameraMatrices();
 
 };
 
