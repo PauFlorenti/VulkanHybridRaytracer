@@ -131,15 +131,7 @@ void VulkanEngine::update(const float dt)
 {
 	_window->input_update();
 	updateFrame();
-
-	glm::mat4 view			= _scene->_camera->getView();
-	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
-	projection[1][1] *= -1;
-
-	// Fill the GPU camera data struct
-	GPUCameraData cameraData;
-	cameraData.view				= view;
-	cameraData.projection		= projection;
+	updateCameraMatrices();
 
 	// Skybox Matrix followin the camera
 	if (_skyboxFollow) {
@@ -149,24 +141,6 @@ void VulkanEngine::update(const float dt)
 		memcpy(skyMatData, &skyMatrix, sizeof(glm::mat4));
 		vmaUnmapMemory(_allocator, renderer->_skyboxBuffer._allocation);
 	}
-
-	void* data;
-	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-	memcpy(data, &cameraData, sizeof(GPUCameraData));
-	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
-	
-	// Copy ray tracing camera, it need the inverse
-	RTCameraData rtCamera;
-	rtCamera.invProj	= glm::inverse(projection);
-	rtCamera.invView	= glm::inverse(view);
-	rtCamera.frame		= !_denoise ? 0 : _denoise_frame;
-
-	std::cout << _denoise_frame << std::endl;
-
-	void* rtCameraData;
-	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
-	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
-	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
 
 	// TODO unify with the deferred update buffer
 	void* rtLightData;
@@ -709,6 +683,41 @@ void VulkanEngine::updateCameraMatrices()
 {
 	static glm::mat4 prevView;
 	static glm::mat4 prevProj;
+
+	glm::mat4 view			= _scene->_camera->getView();
+	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
+	projection[1][1] *= -1;
+
+	if (memcmp(&prevView[0][0], &view[0][0], sizeof(glm::mat4)) != 0 || memcmp(&prevProj[0][0], &projection[0][0], sizeof(glm::mat4)) != 0)
+	{
+		// Fill the GPU camera data struct
+		GPUCameraData cameraData;
+		cameraData.view			= view;
+		cameraData.projection	= projection;
+		cameraData.prevView		= prevView;
+		cameraData.prevProj		= prevProj;
+
+		prevView = view;
+		prevProj = projection;
+
+		void* data;
+		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+		memcpy(data, &cameraData, sizeof(GPUCameraData));
+		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+
+		// Copy ray tracing camera, it need the inverse
+		RTCameraData rtCamera;
+		rtCamera.invProj = glm::inverse(projection);
+		rtCamera.invView = glm::inverse(view);
+		rtCamera.frame = !_denoise ? 0 : _denoise_frame;
+
+		//std::cout << _denoise_frame << std::endl;
+
+		void* rtCameraData;
+		vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
+		memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
+		vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
+	}
 }
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)

@@ -5,10 +5,12 @@ layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec2 inUV;
+layout (location = 4) in vec3 inPrevPos;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
+layout (location = 3) out vec4 outMotion;
 
 // Set 1: texture array
 layout(set = 0, binding = 1) uniform sampler2D[] textures;
@@ -33,4 +35,5 @@ void main()
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );
     outAlbedo   = vec4( color, 1.0 );
+    outMotion   = vec4( inWorldPos - inPrevPos, 1 );
 }
