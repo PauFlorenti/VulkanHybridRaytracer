@@ -109,10 +109,14 @@ public:
 
 	std::vector<BlasInput>		_blas;
 	std::vector<TlasInstance>	_tlas;
-	AllocatedBuffer				lightBuffer;
+	AllocatedBuffer				_lightBuffer;
 	AllocatedBuffer				_debugBuffer;
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
+	AllocatedBuffer				_vBuffer;
+	AllocatedBuffer				_iBuffer;
+	AllocatedBuffer				_matricesBuffer;
+	AllocatedBuffer				_idBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
@@ -196,6 +200,8 @@ private:
 	void build_previous_command_buffer();
 	
 	void build_deferred_command_buffer();
+
+	void load_data_to_gpu();
 
 	// VKRay
 

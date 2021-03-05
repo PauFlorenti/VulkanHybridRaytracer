@@ -22,6 +22,8 @@ Renderer::Renderer(Scene* scene)
 	init_framebuffers();
 	init_offscreen_framebuffers();
 	init_sync_structures();
+
+	load_data_to_gpu();
 	
 	init_descriptors();
 	init_deferred_descriptors();
@@ -830,8 +832,8 @@ void Renderer::init_descriptors()
 
 	// Once the layouts have been created, we allocate the descriptor sets
 	// First create necessary buffers
-	VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
-	VulkanEngine::engine->create_buffer(sizeof(GPUMaterial), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
+	//VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	//VulkanEngine::engine->create_buffer(sizeof(GPUMaterial), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
 
 	// Allocate descriptor sets
 	// Camera descriptor set
@@ -972,6 +974,8 @@ void Renderer::init_deferred_descriptors()
 
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &setInfo, nullptr, &_deferredSetLayout));
 
+	const int nLights = _scene->_lights.size();
+
 	for (int i = 0; i < FRAME_OVERLAP; i++)
 	{
 		VkDescriptorSetAllocateInfo allocInfo = {};
@@ -990,27 +994,21 @@ void Renderer::init_deferred_descriptors()
 		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 
-		int nLights = _scene->_lights.size();
-		if (!lightBuffer._buffer)
-			VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
-		if (!_debugBuffer._buffer)
-			VulkanEngine::engine->create_buffer(sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _debugBuffer);
-
 		VkDescriptorBufferInfo lightBufferDesc;
-		lightBufferDesc.buffer = lightBuffer._buffer;
-		lightBufferDesc.offset = 0;
-		lightBufferDesc.range  = sizeof(uboLight) * nLights;
+		lightBufferDesc.buffer	= _lightBuffer._buffer;
+		lightBufferDesc.offset	= 0;
+		lightBufferDesc.range	= sizeof(uboLight) * nLights;
 
 		VkDescriptorBufferInfo debugDesc;
-		debugDesc.buffer = _debugBuffer._buffer;
-		debugDesc.offset = 0;
-		debugDesc.range = sizeof(uint32_t);
+		debugDesc.buffer		= _debugBuffer._buffer;
+		debugDesc.offset		= 0;
+		debugDesc.range			= sizeof(uint32_t);
 
 		VkWriteDescriptorSet positionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorPosition, 0);
 		VkWriteDescriptorSet normalWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorNormal, 1);
 		VkWriteDescriptorSet albedoWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorAlbedo, 2);
 		VkWriteDescriptorSet lightBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _frames[i].deferredDescriptorSet, &lightBufferDesc, 4);
-		VkWriteDescriptorSet debugWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
+		VkWriteDescriptorSet debugWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
 
 		std::vector<VkWriteDescriptorSet> writes = {
 			positionWrite,
@@ -1427,6 +1425,57 @@ void Renderer::build_deferred_command_buffer()
 	VK_CHECK(vkEndCommandBuffer(get_current_frame()._mainCommandBuffer));
 }
 
+void Renderer::load_data_to_gpu()
+{
+	// Raster data
+	if(!VulkanEngine::engine->_cameraBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
+	if(!VulkanEngine::engine->_objectBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
+	if (!_debugBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _debugBuffer);
+
+	// Raytracing data
+	const unsigned int nLights		= _scene->_lights.size();
+	const unsigned int nMaterials	= Material::_materials.size();
+
+	if (!_lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
+	if (!_matBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
+
+	// TODO: rethink how to update vertex and index for each entity
+	for (Object* obj : _scene->_entities)
+	{
+		for (Node* root : obj->prefab->_root)
+		{
+			root->fill_matrix_buffer(_scene->_matricesVector, obj->m_matrix);
+		}
+	}
+
+	if(!_matricesBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(glm::mat4) * _scene->_matricesVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matricesBuffer);
+
+	void* matricesData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, _matricesBuffer._allocation, &matricesData);
+	memcpy(matricesData, _scene->_matricesVector.data(), sizeof(glm::mat4) * _scene->_matricesVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, _matricesBuffer._allocation);
+
+	// Update material data
+	std::vector<GPUMaterial> materials;
+	for (Material* it : Material::_materials)
+	{
+		GPUMaterial mat = it->materialToShader();
+		materials.push_back(mat);
+	}
+
+	void* matData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation, &matData);
+	memcpy(matData, materials.data(), sizeof(GPUMaterial) * materials.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation);
+
+}
+
 void Renderer::create_storage_image()
 {
 	VkExtent3D extent			= { VulkanEngine::engine->_window->getWidth(), VulkanEngine::engine->_window->getHeight(), 1 };
@@ -1801,27 +1850,27 @@ void Renderer::create_rt_descriptors()
 	//  binding 9 = textures
 	//  binding 10 = skybox texture
 
-	const unsigned int nInstances	= _scene->_entities.size();
-	const unsigned int nLights		= _scene->_lights.size();
-	const unsigned int nMaterials	= Material::_materials.size();
-	const unsigned int nTextures	= Texture::_textures.size();
+	const unsigned int nInstances = _scene->_entities.size();
+	const unsigned int nLights = _scene->_lights.size();
+	const unsigned int nMaterials = Material::_materials.size();
+	const unsigned int nTextures = Texture::_textures.size();
 
-	if (!lightBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
-	if(!_matBuffer._buffer)
+	if (!_lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
+	if (!_matBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
 
 	VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);
-	VkDescriptorSetLayoutBinding resultImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
-	VkDescriptorSetLayoutBinding uniformBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
-	VkDescriptorSetLayoutBinding vertexBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
-	VkDescriptorSetLayoutBinding indexBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
-	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
-	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
-	VkDescriptorSetLayoutBinding materialBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
-	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);
-	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
-	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
+	VkDescriptorSetLayoutBinding resultImageLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
+	VkDescriptorSetLayoutBinding uniformBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
+	VkDescriptorSetLayoutBinding vertexBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
+	VkDescriptorSetLayoutBinding indexBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
+	VkDescriptorSetLayoutBinding matrixBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
+	VkDescriptorSetLayoutBinding lightBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
+	VkDescriptorSetLayoutBinding materialBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
+	VkDescriptorSetLayoutBinding matIdxBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);
+	VkDescriptorSetLayoutBinding texturesBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
+	VkDescriptorSetLayoutBinding skyboxBufferBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -1839,9 +1888,9 @@ void Renderer::create_rt_descriptors()
 
 	// Allocate Descriptor
 	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-	descriptorSetLayoutCreateInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descriptorSetLayoutCreateInfo.bindingCount	= static_cast<uint32_t>(bindings.size());
-	descriptorSetLayoutCreateInfo.pBindings		= bindings.data();
+	descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+	descriptorSetLayoutCreateInfo.pBindings = bindings.data();
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &descriptorSetLayoutCreateInfo, nullptr, &_rtDescriptorSetLayout));
 
 	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_rtDescriptorSetLayout, 1);
@@ -1849,41 +1898,40 @@ void Renderer::create_rt_descriptors()
 
 	// Binding = 0 AS
 	VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{};
-	descriptorAccelerationStructureInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-	descriptorAccelerationStructureInfo.accelerationStructureCount	= 1;
-	descriptorAccelerationStructureInfo.pAccelerationStructures		= &_topLevelAS.handle;
+	descriptorAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
+	descriptorAccelerationStructureInfo.pAccelerationStructures = &_topLevelAS.handle;
 
 	VkWriteDescriptorSet accelerationStructureWrite{};
-	accelerationStructureWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	accelerationStructureWrite.pNext			= &descriptorAccelerationStructureInfo;
-	accelerationStructureWrite.dstSet			= _rtDescriptorSet;
-	accelerationStructureWrite.dstBinding		= 0;
-	accelerationStructureWrite.descriptorCount	= 1;
-	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+	accelerationStructureWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	accelerationStructureWrite.pNext = &descriptorAccelerationStructureInfo;
+	accelerationStructureWrite.dstSet = _rtDescriptorSet;
+	accelerationStructureWrite.dstBinding = 0;
+	accelerationStructureWrite.descriptorCount = 1;
+	accelerationStructureWrite.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
 	// Binding = 1 Storage Image
 	VkDescriptorImageInfo storageImageDescriptor{};
-	storageImageDescriptor.imageView			= _rtImage.imageView;
-	storageImageDescriptor.imageLayout			= VK_IMAGE_LAYOUT_GENERAL;
+	storageImageDescriptor.imageView = _rtImage.imageView;
+	storageImageDescriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 	// Binding = 2 Camera 
 	VkDescriptorBufferInfo _rtDescriptorBufferInfo{};
-	_rtDescriptorBufferInfo.buffer				= VulkanEngine::engine->rtCameraBuffer._buffer;
-	_rtDescriptorBufferInfo.offset				= 0;
-	_rtDescriptorBufferInfo.range				= sizeof(RTCameraData);
+	_rtDescriptorBufferInfo.buffer = VulkanEngine::engine->rtCameraBuffer._buffer;
+	_rtDescriptorBufferInfo.offset = 0;
+	_rtDescriptorBufferInfo.range = sizeof(RTCameraData);
 
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
-	std::vector<glm::mat4> matricesVector;
 	std::vector<glm::vec4> idVector;
 	for (Object* obj : _scene->_entities)
 	{
 		// Binding = 3 Vertex buffer
-		std::vector<Vertex> vertices	= obj->prefab->_mesh->_vertices;
-		std::vector<uint32_t> indices	= obj->prefab->_mesh->_indices;
-		size_t vertexBufferSize			= sizeof(rtVertexAttribute) * vertices.size();
-		size_t indexBufferSize			= sizeof(uint32_t) * indices.size();
+		std::vector<Vertex> vertices = obj->prefab->_mesh->_vertices;
+		std::vector<uint32_t> indices = obj->prefab->_mesh->_indices;
+		size_t vertexBufferSize = sizeof(rtVertexAttribute) * vertices.size();
+		size_t indexBufferSize = sizeof(uint32_t) * indices.size();
 		AllocatedBuffer vBuffer;
 		VulkanEngine::engine->create_buffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, vBuffer);
 
@@ -1899,77 +1947,56 @@ void Renderer::create_rt_descriptors()
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
 		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer	= vBuffer._buffer;
-		vertexBufferDescriptor.offset	= 0;
-		vertexBufferDescriptor.range	= vertexBufferSize;
+		vertexBufferDescriptor.buffer = vBuffer._buffer;
+		vertexBufferDescriptor.offset = 0;
+		vertexBufferDescriptor.range = vertexBufferSize;
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		// Binding = 4 Index buffer
 		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer	= obj->prefab->_mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset	= 0;
-		indexBufferDescriptor.range		= indexBufferSize;
+		indexBufferDescriptor.buffer = obj->prefab->_mesh->_indexBuffer._buffer;
+		indexBufferDescriptor.offset = 0;
+		indexBufferDescriptor.range = indexBufferSize;
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		for (Node* root : obj->prefab->_root)
 		{
-			root->fill_matrix_buffer(matricesVector, obj->m_matrix);
 			root->fill_index_buffer(idVector);
 		}
 	}
 
 	// Binding = 5 Matrix buffer
-	AllocatedBuffer matricesBuffer;
-	VulkanEngine::engine->create_buffer(sizeof(glm::mat4) * matricesVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, matricesBuffer);
-
-	void* matricesData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation, &matricesData);
-	memcpy(matricesData, matricesVector.data(), sizeof(glm::mat4) * matricesVector.size());
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation);
-	
 	VkDescriptorBufferInfo matrixDescInfo;
-	matrixDescInfo.buffer	= matricesBuffer._buffer;
-	matrixDescInfo.offset	= 0;
-	matrixDescInfo.range	= sizeof(glm::mat4) * matricesVector.size();
+	matrixDescInfo.buffer = _matricesBuffer._buffer;
+	matrixDescInfo.offset = 0;
+	matrixDescInfo.range = sizeof(glm::mat4) * _scene->_matricesVector.size();
 
 	// Binding = 6 lights
 	VkDescriptorBufferInfo lightBufferInfo;
-	lightBufferInfo.buffer		= lightBuffer._buffer;
-	lightBufferInfo.offset		= 0;
-	lightBufferInfo.range		= sizeof(uboLight) * nLights;
+	lightBufferInfo.buffer = _lightBuffer._buffer;
+	lightBufferInfo.offset = 0;
+	lightBufferInfo.range = sizeof(uboLight) * nLights;
 
 	// Binding = 7 ID buffer
-	AllocatedBuffer idBuffer;
-	VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, idBuffer);
+	if (!_idBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _idBuffer);
 
 	void* idData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation, &idData);
-	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation);
+	vmaMapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation, &idData);
+	memcpy(idData,idVector.data(), sizeof(glm::vec4) * idVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation);
 
 	VkDescriptorBufferInfo idDescInfo;
-	idDescInfo.buffer	= idBuffer._buffer;
-	idDescInfo.offset	= 0;
-	idDescInfo.range	= sizeof(glm::vec4) * idVector.size();
+	idDescInfo.buffer = _idBuffer._buffer;
+	idDescInfo.offset = 0;
+	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
 
 	// Binding = 8 Materials
-	std::vector<GPUMaterial> materials;
-	for (Material* it : Material::_materials)
-	{
-		GPUMaterial mat = it->materialToShader();
-		materials.push_back(mat);
-	}
-
-	void* matData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation, &matData);
-	memcpy(matData, materials.data(), sizeof(GPUMaterial) * materials.size());
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation);
-
 	VkDescriptorBufferInfo materialBufferInfo;
-	materialBufferInfo.buffer	= _matBuffer._buffer;
-	materialBufferInfo.offset	= 0;
-	materialBufferInfo.range	= sizeof(GPUMaterial) * nMaterials;
-	
+	materialBufferInfo.buffer = _matBuffer._buffer;
+	materialBufferInfo.offset = 0;
+	materialBufferInfo.range = sizeof(GPUMaterial) * nMaterials;
+
 	// Binding = 9 Textures
 	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
 	VkSampler sampler;
@@ -1979,29 +2006,29 @@ void Renderer::create_rt_descriptors()
 	for (auto const& texture : Texture::_textures)
 	{
 		VkDescriptorImageInfo imageBufferInfo = {};
-		imageBufferInfo.sampler		= sampler;
-		imageBufferInfo.imageView	= texture.second->imageView;
+		imageBufferInfo.sampler = sampler;
+		imageBufferInfo.imageView = texture.second->imageView;
 		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 		imageInfos.push_back(imageBufferInfo);
 	}
 
 	VkDescriptorImageInfo skyboxBufferInfo = {};
-	skyboxBufferInfo.sampler		= sampler;
-	skyboxBufferInfo.imageView		= Texture::GET("woods.jpg")->imageView;
-	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	skyboxBufferInfo.sampler = sampler;
+	skyboxBufferInfo.imageView = Texture::GET("woods.jpg")->imageView;
+	skyboxBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	// WRITES ---
-	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
+	VkWriteDescriptorSet resultImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet uniformBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &_rtDescriptorBufferInfo, 2);
-	VkWriteDescriptorSet vertexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, vertexDescInfo.data(), 3, nInstances);
-	VkWriteDescriptorSet indexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, indexDescInfo.data(), 4, nInstances);
-	VkWriteDescriptorSet matrixBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &matrixDescInfo, 5);
-	VkWriteDescriptorSet lightsBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &lightBufferInfo, 6);
-	VkWriteDescriptorSet matBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &materialBufferInfo, 7);
-	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &idDescInfo, 8);
+	VkWriteDescriptorSet vertexBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, vertexDescInfo.data(), 3, nInstances);
+	VkWriteDescriptorSet indexBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, indexDescInfo.data(), 4, nInstances);
+	VkWriteDescriptorSet matrixBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &matrixDescInfo, 5);
+	VkWriteDescriptorSet lightsBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &lightBufferInfo, 6);
+	VkWriteDescriptorSet matBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &materialBufferInfo, 7);
+	VkWriteDescriptorSet matIdxBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &idDescInfo, 8);
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
-	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
+	VkWriteDescriptorSet skyboxBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2522,9 +2549,10 @@ void Renderer::create_hybrid_descriptors()
 	// binding = 7 Vertices buffer
 	// binding = 8 Indices buffer
 	// binding = 9 Textures buffer
-	// binding = 10 Matrices buffer
+	// binding = 10 Skybox buffer
 	// binding = 11 Materials buffer
 	// binding = 12 Scene indices
+	// binding = 13 Matrices buffer
 
 	VkDescriptorSetLayoutBinding TLASBinding			= 
 		vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);			// TLAS
@@ -2612,17 +2640,14 @@ void Renderer::create_hybrid_descriptors()
 
 	// lights write
 	int nLights = _scene->_lights.size();
-	if(!lightBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
 
 	VkDescriptorBufferInfo lightDescBuffer;
-	lightDescBuffer.buffer = lightBuffer._buffer;
+	lightDescBuffer.buffer = _lightBuffer._buffer;
 	lightDescBuffer.offset = 0;
 	lightDescBuffer.range  = sizeof(uboLight) * nLights;
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
-	std::vector<glm::mat4> matricesVector;
 	std::vector<glm::vec4> idVector;
 	for (Object* obj : _scene->_entities)
 	{
@@ -2656,52 +2681,19 @@ void Renderer::create_hybrid_descriptors()
 
 		for (Node* root : obj->prefab->_root)
 		{
-			root->fill_matrix_buffer(matricesVector, obj->m_matrix);
 			root->fill_index_buffer(idVector);
 		}
 	}
 
-	// Binding = 5 Matrix buffer
-	AllocatedBuffer matricesBuffer;
-	VulkanEngine::engine->create_buffer(sizeof(glm::mat4) * matricesVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, matricesBuffer);
-
-	void* matricesData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation, &matricesData);
-	memcpy(matricesData, matricesVector.data(), sizeof(glm::mat4) * matricesVector.size());
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, matricesBuffer._allocation);
-
 	VkDescriptorBufferInfo matrixDescInfo;
-	matrixDescInfo.buffer = matricesBuffer._buffer;
-	matrixDescInfo.offset = 0;
-	matrixDescInfo.range = sizeof(glm::mat4) * matricesVector.size();
-
-	AllocatedBuffer idBuffer;
-	VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, idBuffer);
-
-	void* idData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation, &idData);
-	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, idBuffer._allocation);
+	matrixDescInfo.buffer		= _matricesBuffer._buffer;
+	matrixDescInfo.offset		= 0;
+	matrixDescInfo.range		= sizeof(glm::mat4) * _scene->_matricesVector.size();
 
 	VkDescriptorBufferInfo idDescInfo;
-	idDescInfo.buffer = idBuffer._buffer;
-	idDescInfo.offset = 0;
-	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
-
-	if (!_matBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
-
-	std::vector<GPUMaterial> materials;
-	for (Material* it : Material::_materials)
-	{
-		GPUMaterial mat = it->materialToShader();
-		materials.push_back(mat);
-	}
-
-	void* matData;
-	vmaMapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation, &matData);
-	memcpy(matData, materials.data(), sizeof(GPUMaterial) * nMaterials);
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation);
+	idDescInfo.buffer			= _idBuffer._buffer;
+	idDescInfo.offset			= 0;
+	idDescInfo.range			= sizeof(glm::vec4) * idVector.size();
 
 	VkDescriptorBufferInfo materialBufferInfo;
 	materialBufferInfo.buffer	= _matBuffer._buffer;
