@@ -704,20 +704,20 @@ void VulkanEngine::updateCameraMatrices()
 		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
 		memcpy(data, &cameraData, sizeof(GPUCameraData));
 		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
-
-		// Copy ray tracing camera, it need the inverse
-		RTCameraData rtCamera;
-		rtCamera.invProj = glm::inverse(projection);
-		rtCamera.invView = glm::inverse(view);
-		rtCamera.frame = !_denoise ? 0 : _denoise_frame;
-
-		//std::cout << _denoise_frame << std::endl;
-
-		void* rtCameraData;
-		vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
-		memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
-		vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
 	}
+
+	// Copy ray tracing camera, it need the inverse
+	RTCameraData rtCamera;
+	rtCamera.invProj = glm::inverse(projection);
+	rtCamera.invView = glm::inverse(view);
+	rtCamera.frame = !_denoise ? 0 : _denoise_frame;
+
+	//std::cout << _denoise_frame << std::endl;
+
+	void* rtCameraData;
+	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
+	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
+	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
 }
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)

@@ -584,7 +584,7 @@ void Renderer::render_gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::Checkbox("Denoise", &VulkanEngine::engine->_denoise);
 
-	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo" };
+	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo", "Motion" };
 	std::vector<const char*> charTargets;
 	charTargets.reserve(targets.size());
 	for (size_t i = 0; i < targets.size(); i++)
@@ -598,6 +598,7 @@ void Renderer::render_gui()
 	if (ImGui::Combo(title, &index, &charTargets[0], targets.size(), targets.size()))
 	{
 		VulkanEngine::engine->debugTarget = index;
+		std::cout << index << std::endl;
 		void* debugData;
 		vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation, &debugData);
 		memcpy(debugData, &VulkanEngine::engine->debugTarget, sizeof(uint32_t));
@@ -994,7 +995,7 @@ void Renderer::init_deferred_descriptors()
 		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 		VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion
+			_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion
 
 		int nLights = _scene->_lights.size();
 		if (!lightBuffer._buffer)
@@ -1017,12 +1018,13 @@ void Renderer::init_deferred_descriptors()
 		VkWriteDescriptorSet albedoWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorAlbedo, 2);
 		VkWriteDescriptorSet motionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorMotion, 3);
 		VkWriteDescriptorSet lightBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _frames[i].deferredDescriptorSet, &lightBufferDesc, 4);
-		VkWriteDescriptorSet debugWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
+		VkWriteDescriptorSet debugWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
 
 		std::vector<VkWriteDescriptorSet> writes = {
 			positionWrite,
 			normalWrite,
 			albedoWrite,
+			motionWrite,
 			lightBufferWrite,
 			debugWrite
 		};

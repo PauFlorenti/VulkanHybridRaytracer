@@ -19,7 +19,8 @@ layout(location = 0) out vec3 outPosition;
 layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec3 outColor;
 layout(location = 3) out vec2 outUV;
-layout(location = 4) out vec3 outPrevPos;
+layout(location = 4) out vec4 outPrevPos;
+layout(location = 5) out vec4 outPos;
 
 struct ObjectData{
 	mat4 model;
@@ -44,11 +45,13 @@ void main()
 	mat4 transformationMatrix 	= cameraData.projection * cameraData.view * pushC.matrix;
 	mat4 previousTransformation = cameraData.pProj * cameraData.pView * pushC.matrix;
 	vec4 prevPos 				= previousTransformation * vec4(inPosition, 1.0);
+	vec4 actualPos				= transformationMatrix * vec4(inPosition, 1.0);
 	gl_Position 				= transformationMatrix * vec4(inPosition, 1.0);
 
 	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
 	outNormal 	= vec3(pushC.matrix * vec4(inNormal, 0.0)).xyz;
     outUV 		= inUV;
-	outPrevPos 	= vec3(prevPos);
+	outPrevPos 	= prevPos;
+	outPos 		= actualPos;
 }

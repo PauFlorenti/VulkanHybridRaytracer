@@ -67,9 +67,9 @@ void main()
 	// Finally we can write the result to the output image
 	if(frame > 0)
 	{
-		float alpha = 0.3;// = 1.0 / (float(cam.frame) + 1);
-		vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-		vec3 color = mix(old_color, finalColor, alpha);
+		float alpha 	= 0.3;// = 1.0 / (float(cam.frame) + 1);
+		vec3 old_color 	= imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		vec3 color 		= mix(old_color, finalColor, alpha);
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
 	}
 	else{

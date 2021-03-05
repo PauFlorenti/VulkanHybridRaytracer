@@ -5,7 +5,8 @@ layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec2 inUV;
-layout (location = 4) in vec3 inPrevPos;
+layout (location = 4) in vec4 inPrevPos;
+layout (location = 5) in vec4 inActualPos;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
@@ -35,5 +36,8 @@ void main()
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );
     outAlbedo   = vec4( color, 1.0 );
-    outMotion   = vec4( inWorldPos - inPrevPos, 1 );
+
+    vec2 position = inActualPos.xy / inActualPos.w * 0.5 + vec2(0.5);
+    vec2 posLastFrame = inPrevPos.xy / inPrevPos.w * 0.5 + vec2(0.5);
+    outMotion   = vec4((position - posLastFrame) * 0.5 + 0.5, 0, 1);
 }

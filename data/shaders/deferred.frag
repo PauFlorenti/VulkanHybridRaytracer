@@ -29,10 +29,10 @@ void main()
 	vec3 position 	= texture(positionTexture, inUV).xyz;
 	vec3 normal 	= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
-	vec3 motion		= texture(motionTexture, inUV).xyz;
+	vec3 motion		= texture(motionTexture, inUV).xyz * 2.0 - vec3(1);
 	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 
-	if(debug.target > 0)
+	if(debug.target > 0.001)
 	{
 		switch(debug.target){
 			case 1:
@@ -44,6 +44,8 @@ void main()
 			case 3:
 				outFragColor = vec4(albedo, 1);
 				break;
+			case 4:
+				outFragColor = vec4(motion, 1);
 		}
 		return;
 	}
@@ -85,8 +87,6 @@ void main()
 	
 	if(!background)
 		color *= light_color;
-
-	color = motion;
 
 	outFragColor = vec4( color, 1.0f );
 }
