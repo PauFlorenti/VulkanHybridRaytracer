@@ -1768,6 +1768,93 @@ VkAccelerationStructureInstanceKHR Renderer::object_to_instance(const TlasInstan
 	return vkInst;
 }
 
+void Renderer::create_shadow_descriptors()
+{
+	std::vector<VkDescriptorPoolSize> poolSize = {
+		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
+	};
+
+	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 1);
+	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_rtDescriptorPool));
+
+	// First set
+	// binding 0 = AS
+	// binding 1 = Storage image
+	// binding 2 = Camera data
+	// binding 3 = Vertex buffer
+	// binding 4 = Index buffer
+	// binding 5 = Model matrices buffer
+	// binding 6 = Lights buffer
+
+	const unsigned int nInstances	= _scene->_entities.size();
+	const unsigned int nLights		= _scene->_lights.size();
+
+	if (!_lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
+	if (!_rtCameraBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(RTCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _rtCameraBuffer);
+
+	VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);
+	VkDescriptorSetLayoutBinding resultImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
+	VkDescriptorSetLayoutBinding uniformBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
+	VkDescriptorSetLayoutBinding vertexBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
+	VkDescriptorSetLayoutBinding indexBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
+	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
+	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
+
+	std::vector<VkDescriptorSetLayoutBinding> bindings({
+		accelerationStructureLayoutBinding,
+		resultImageLayoutBinding,
+		uniformBufferBinding,
+		vertexBufferBinding,
+		indexBufferBinding,
+		matrixBufferBinding,
+		lightBufferBinding,
+	});
+
+	// Allocate Descriptor
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
+	descriptorSetLayoutCreateInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descriptorSetLayoutCreateInfo.bindingCount	= static_cast<uint32_t>(bindings.size());
+	descriptorSetLayoutCreateInfo.pBindings		= bindings.data();
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &descriptorSetLayoutCreateInfo, nullptr, &_shadowDescSetLayout));
+
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_shadowDescSetLayout, 1);
+	VK_CHECK(vkAllocateDescriptorSets(*device, &descriptorSetAllocateInfo, &_shadowDescSet));
+
+	// Binding = 0 AS
+	VkWriteDescriptorSetAccelerationStructureKHR descriptorSetAS{};
+	descriptorSetAS.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	descriptorSetAS.accelerationStructureCount	= 1;
+	descriptorSetAS.pAccelerationStructures		= &_topLevelAS.handle;
+
+	VkWriteDescriptorSet accelerationStructureWrite{};
+	accelerationStructureWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	accelerationStructureWrite.descriptorCount	= 1;
+	accelerationStructureWrite.dstSet			= _shadowDescSet;
+	accelerationStructureWrite.dstBinding		= 0;
+	accelerationStructureWrite.descriptorCount	= 1;
+	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+
+	// Binding = 1 Storage Image
+	VkDescriptorImageInfo imageInfo{};
+	imageInfo.imageView		= _shadowImage.imageView;
+	imageInfo.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
+
+	// Binding = 2 Camera data
+	VkDescriptorBufferInfo cameraBufferInfo{};
+	cameraBufferInfo.buffer = _rtCameraBuffer._buffer;
+	cameraBufferInfo.offset = 0;
+	cameraBufferInfo.range	= sizeof(RTCameraData);
+
+	// Binding = 3 Vertex buffer
+
+
+}
+
 void Renderer::create_rt_descriptors()
 {
 	std::vector<VkDescriptorPoolSize> poolSize = {
@@ -1866,7 +1953,6 @@ void Renderer::create_rt_descriptors()
 	_rtDescriptorBufferInfo.buffer				= _rtCameraBuffer._buffer;
 	_rtDescriptorBufferInfo.offset				= 0;
 	_rtDescriptorBufferInfo.range				= sizeof(RTCameraData);
-
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;

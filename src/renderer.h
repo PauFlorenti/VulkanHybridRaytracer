@@ -148,6 +148,10 @@ public:
 	VkDescriptorSetLayout		_hybridDescSetLayout;
 	VkCommandBuffer				_hybridCommandBuffer;
 
+	// SHADOW VARIABLES ----------------------
+	VkDescriptorSet _shadowDescSet;
+	VkDescriptorSetLayout _shadowDescSetLayout;
+
 	AllocatedBuffer				raygenSBT;
 	AllocatedBuffer				missSBT;
 	AllocatedBuffer				hitSBT;
@@ -212,6 +216,8 @@ private:
 	void buildBlas(const std::vector<BlasInput>& input, VkBuildAccelerationStructureFlagsKHR flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 
 	VkAccelerationStructureInstanceKHR object_to_instance(const TlasInstance& instance);
+
+	void create_shadow_descriptors();
 
 	void create_rt_descriptors();
 
