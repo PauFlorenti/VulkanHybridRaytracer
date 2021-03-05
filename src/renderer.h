@@ -99,7 +99,6 @@ public:
 	VkDescriptorSetLayout		_rtDescriptorSetLayout;
 	VkDescriptorSet				_rtDescriptorSet;
 	Texture						_rtImage;
-	Texture						_shadowImage;
 	VkPipeline					_rtPipeline;
 	VkPipelineLayout			_rtPipelineLayout;
 	VkCommandBuffer				_rtCommandBuffer;
@@ -115,6 +114,11 @@ public:
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
 	AllocatedBuffer				_rtCameraBuffer;
+	AllocatedBuffer				_vBuffer;	// TODO
+	AllocatedBuffer				_iBuffer;	// TODO
+	AllocatedBuffer				_matricesBuffer;
+	AllocatedBuffer				_idBuffer;
+
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
@@ -149,8 +153,10 @@ public:
 	VkCommandBuffer				_hybridCommandBuffer;
 
 	// SHADOW VARIABLES ----------------------
-	VkDescriptorSet _shadowDescSet;
-	VkDescriptorSetLayout _shadowDescSetLayout;
+	VkDescriptorPool			_shadowDescPool;
+	VkDescriptorSet				_shadowDescSet;
+	VkDescriptorSetLayout		_shadowDescSetLayout;
+	Texture						_shadowImage;
 
 	AllocatedBuffer				raygenSBT;
 	AllocatedBuffer				missSBT;
@@ -202,6 +208,8 @@ private:
 	void build_previous_command_buffer();
 	
 	void build_deferred_command_buffer();
+
+	void load_data_to_gpu();
 
 	// VKRay
 

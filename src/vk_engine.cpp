@@ -689,6 +689,7 @@ void VulkanEngine::updateCameraMatrices()
 	projection[1][1] *= -1;
 
 	// Update RASTERIZATION CAMERA if changed
+
 	if (memcmp(&prevView[0][0], &view[0][0], sizeof(glm::mat4)) != 0 || memcmp(&prevProj[0][0], &projection[0][0], sizeof(glm::mat4)) != 0)
 	{
 		// Fill the GPU camera data struct
@@ -710,6 +711,7 @@ void VulkanEngine::updateCameraMatrices()
 	// Copy RAY-TRACING camera, it need the inverse
 	// --------------------------------------------
 	// TODO: rethink how frame can be passed each frame and update the matrix only if changed
+
 	RTCameraData rtCamera;
 	rtCamera.invProj = glm::inverse(projection);
 	rtCamera.invView = glm::inverse(view);
