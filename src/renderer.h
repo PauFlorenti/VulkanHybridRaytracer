@@ -113,6 +113,7 @@ public:
 	AllocatedBuffer				_debugBuffer;
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
+	AllocatedBuffer				_rtCameraBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;

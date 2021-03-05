@@ -1443,26 +1443,6 @@ void Renderer::create_storage_image()
 	VkImageViewCreateInfo imageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _rtImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_rtImage.imageView));
 
-	VkBufferCreateInfo bufferInfo = vkinit::buffer_create_info(sizeof(RTCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-
-	allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-	allocInfo.requiredFlags = 0;
-
-	VK_CHECK(vmaCreateBuffer(VulkanEngine::engine->_allocator, &bufferInfo, &allocInfo, &VulkanEngine::engine->rtCameraBuffer._buffer, &VulkanEngine::engine->rtCameraBuffer._allocation, nullptr));
-
-	glm::mat4 view = _scene->_camera->getView();
-	glm::mat4 projection = glm::perspective(glm::radians(70.0f), 1700.f / 900.f, 0.1f, 200.0f);
-	projection[1][1] *= -1;
-
-	RTCameraData camera;
-	camera.invProj = glm::inverse(projection);
-	camera.invView = glm::inverse(view);
-
-	void* data;
-	vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->rtCameraBuffer._allocation, &data);
-	memcpy(data, &camera, sizeof(RTCameraData));
-	vmaUnmapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->rtCameraBuffer._allocation);
-	
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
 		VkImageMemoryBarrier imageMemoryBarrier{};
 		imageMemoryBarrier.sType			= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1477,7 +1457,6 @@ void Renderer::create_storage_image()
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vmaDestroyImage(VulkanEngine::engine->_allocator, _rtImage.image._image, _rtImage.image._allocation);
 		vkDestroyImageView(*device, _rtImage.imageView, nullptr);
-		vmaDestroyBuffer(VulkanEngine::engine->_allocator, VulkanEngine::engine->rtCameraBuffer._buffer, VulkanEngine::engine->rtCameraBuffer._allocation);
 		});
 	
 }
@@ -1810,6 +1789,8 @@ void Renderer::create_rt_descriptors()
 		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
 	if(!_matBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
+	if (!_rtCameraBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(RTCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _rtCameraBuffer);
 
 	VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);
 	VkDescriptorSetLayoutBinding resultImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
@@ -1868,7 +1849,7 @@ void Renderer::create_rt_descriptors()
 
 	// Binding = 2 Camera 
 	VkDescriptorBufferInfo _rtDescriptorBufferInfo{};
-	_rtDescriptorBufferInfo.buffer				= VulkanEngine::engine->rtCameraBuffer._buffer;
+	_rtDescriptorBufferInfo.buffer				= _rtCameraBuffer._buffer;
 	_rtDescriptorBufferInfo.offset				= 0;
 	_rtDescriptorBufferInfo.range				= sizeof(RTCameraData);
 
@@ -2511,6 +2492,12 @@ void Renderer::create_hybrid_descriptors()
 	const uint32_t nDrawables	= static_cast<uint32_t>(_scene->get_drawable_nodes_size());
 	const uint32_t nMaterials	= static_cast<uint32_t>(Material::_materials.size());
 	const uint32_t nTextures	= static_cast<uint32_t>(Texture::_textures.size());
+	const uint32_t nLights		= static_cast<uint32_t>(_scene->_lights.size());
+
+	if(!lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
+	if (!_rtCameraBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(RTCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _rtCameraBuffer);
 
 	// binding = 0 TLAS
 	// binding = 1 Storage image
@@ -2593,7 +2580,7 @@ void Renderer::create_hybrid_descriptors()
 
 	// Camera write
 	VkDescriptorBufferInfo cameraBufferInfo{};
-	cameraBufferInfo.buffer = VulkanEngine::engine->rtCameraBuffer._buffer;
+	cameraBufferInfo.buffer = _rtCameraBuffer._buffer;
 	cameraBufferInfo.offset = 0;
 	cameraBufferInfo.range = sizeof(RTCameraData);
 
@@ -2611,9 +2598,6 @@ void Renderer::create_hybrid_descriptors()
 		_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 
 	// lights write
-	int nLights = _scene->_lights.size();
-	if(!lightBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
 
 	VkDescriptorBufferInfo lightDescBuffer;
 	lightDescBuffer.buffer = lightBuffer._buffer;

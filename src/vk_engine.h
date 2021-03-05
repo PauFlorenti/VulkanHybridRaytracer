@@ -50,7 +50,8 @@ struct GPUCameraData
 {
 	glm::mat4 view;
 	glm::mat4 projection;
-	//glm::mat4 viewprojection;
+	glm::mat4 prevView;
+	glm::mat4 prevProj;
 };
 
 struct RTCameraData
@@ -168,7 +169,6 @@ public:
 
 	VkCommandPool	_commandPool;
 
-	AllocatedBuffer rtCameraBuffer;
 	AllocatedBuffer transformBuffer;
 	   
 	// Main functions
