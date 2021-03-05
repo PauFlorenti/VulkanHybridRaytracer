@@ -144,7 +144,7 @@ void VulkanEngine::update(const float dt)
 
 	// TODO unify with the deferred update buffer
 	void* rtLightData;
-	vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &rtLightData);
+	vmaMapMemory(_allocator, renderer->_lightBuffer._allocation, &rtLightData);
 	uboLight* rtLightUBO = (uboLight*)rtLightData;
 	for (int i = 0; i < _scene->_lights.size(); i++)
 	{
@@ -161,7 +161,7 @@ void VulkanEngine::update(const float dt)
 		}
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
-	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+	vmaUnmapMemory(_allocator, renderer->_lightBuffer._allocation);
 
 	// TODO: MEMORY LEAK and update only when instances changed
 	// Rebuild instances matrix for TLAS

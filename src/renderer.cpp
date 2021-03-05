@@ -991,13 +991,13 @@ void Renderer::init_deferred_descriptors()
 			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 
 		int nLights = _scene->_lights.size();
-		if (!lightBuffer._buffer)
-			VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
+		if (!_lightBuffer._buffer)
+			VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
 		if (!_debugBuffer._buffer)
 			VulkanEngine::engine->create_buffer(sizeof(uint32_t), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _debugBuffer);
 
 		VkDescriptorBufferInfo lightBufferDesc;
-		lightBufferDesc.buffer = lightBuffer._buffer;
+		lightBufferDesc.buffer = _lightBuffer._buffer;
 		lightBufferDesc.offset = 0;
 		lightBufferDesc.range  = sizeof(uboLight) * nLights;
 
@@ -1443,20 +1443,34 @@ void Renderer::create_storage_image()
 	VkImageViewCreateInfo imageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _rtImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_rtImage.imageView));
 
+	VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _shadowImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_shadowImage.imageView));
+
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
 		VkImageMemoryBarrier imageMemoryBarrier{};
-		imageMemoryBarrier.sType			= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		imageMemoryBarrier.image			= _rtImage.image._image;
-		imageMemoryBarrier.oldLayout		= VK_IMAGE_LAYOUT_UNDEFINED;
-		imageMemoryBarrier.newLayout		= VK_IMAGE_LAYOUT_GENERAL;
-		imageMemoryBarrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+		imageMemoryBarrier.sType					= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		imageMemoryBarrier.image					= _rtImage.image._image;
+		imageMemoryBarrier.oldLayout				= VK_IMAGE_LAYOUT_UNDEFINED;
+		imageMemoryBarrier.newLayout				= VK_IMAGE_LAYOUT_GENERAL;
+		imageMemoryBarrier.subresourceRange			= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+		VkImageMemoryBarrier shadowImageMemoryBarrier{};
+		shadowImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		shadowImageMemoryBarrier.image				= _rtImage.image._image;
+		shadowImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+		shadowImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
+		shadowImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+		VkImageMemoryBarrier barrier[] = { imageMemoryBarrier, shadowImageMemoryBarrier };
+
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 2, barrier);
 	});
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vmaDestroyImage(VulkanEngine::engine->_allocator, _rtImage.image._image, _rtImage.image._allocation);
+		vmaDestroyImage(VulkanEngine::engine->_allocator, _shadowImage.image._image, _shadowImage.image._allocation);
 		vkDestroyImageView(*device, _rtImage.imageView, nullptr);
+		vkDestroyImageView(*device, _shadowImage.imageView, nullptr);
 		});
 	
 }
@@ -1785,8 +1799,8 @@ void Renderer::create_rt_descriptors()
 	const unsigned int nMaterials	= Material::_materials.size();
 	const unsigned int nTextures	= Texture::_textures.size();
 
-	if (!lightBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
+	if (!_lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
 	if(!_matBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(GPUMaterial) * nMaterials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _matBuffer);
 	if (!_rtCameraBuffer._buffer)
@@ -1915,7 +1929,7 @@ void Renderer::create_rt_descriptors()
 
 	// Binding = 6 lights
 	VkDescriptorBufferInfo lightBufferInfo;
-	lightBufferInfo.buffer		= lightBuffer._buffer;
+	lightBufferInfo.buffer		= _lightBuffer._buffer;
 	lightBufferInfo.offset		= 0;
 	lightBufferInfo.range		= sizeof(uboLight) * nLights;
 
@@ -2494,8 +2508,8 @@ void Renderer::create_hybrid_descriptors()
 	const uint32_t nTextures	= static_cast<uint32_t>(Texture::_textures.size());
 	const uint32_t nLights		= static_cast<uint32_t>(_scene->_lights.size());
 
-	if(!lightBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, lightBuffer);
+	if(!_lightBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(uboLight) * nLights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _lightBuffer);
 	if (!_rtCameraBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(RTCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _rtCameraBuffer);
 
@@ -2598,9 +2612,8 @@ void Renderer::create_hybrid_descriptors()
 		_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 
 	// lights write
-
 	VkDescriptorBufferInfo lightDescBuffer;
-	lightDescBuffer.buffer = lightBuffer._buffer;
+	lightDescBuffer.buffer = _lightBuffer._buffer;
 	lightDescBuffer.offset = 0;
 	lightDescBuffer.range  = sizeof(uboLight) * nLights;
 

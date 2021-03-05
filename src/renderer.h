@@ -99,6 +99,7 @@ public:
 	VkDescriptorSetLayout		_rtDescriptorSetLayout;
 	VkDescriptorSet				_rtDescriptorSet;
 	Texture						_rtImage;
+	Texture						_shadowImage;
 	VkPipeline					_rtPipeline;
 	VkPipelineLayout			_rtPipelineLayout;
 	VkCommandBuffer				_rtCommandBuffer;
@@ -109,7 +110,7 @@ public:
 
 	std::vector<BlasInput>		_blas;
 	std::vector<TlasInstance>	_tlas;
-	AllocatedBuffer				lightBuffer;
+	AllocatedBuffer				_lightBuffer;
 	AllocatedBuffer				_debugBuffer;
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
