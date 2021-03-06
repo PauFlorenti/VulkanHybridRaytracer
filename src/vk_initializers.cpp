@@ -331,6 +331,20 @@ VkWriteDescriptorSet vkinit::write_descriptor_image(VkDescriptorType type, VkDes
 	return write;
 }
 
+VkWriteDescriptorSet vkinit::write_descriptor_acceleration_structure(VkDescriptorSet& dstSet, VkWriteDescriptorSetAccelerationStructureKHR* wdsAccelerationStructure, const uint32_t binding, uint32_t count /*= 1*/)
+{
+	VkWriteDescriptorSet write = {};
+	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write.pNext = wdsAccelerationStructure;
+
+	write.dstBinding		= binding;
+	write.dstSet			= dstSet;
+	write.descriptorCount	= count;
+	write.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+	
+	return write;
+}
+
 VkBufferCreateInfo vkinit::buffer_create_info(size_t bufferSize, VkBufferUsageFlags usage)
 {
 	VkBufferCreateInfo info = {};

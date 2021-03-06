@@ -15,6 +15,7 @@ layout(binding = 2, set = 0) uniform CameraProperties
 
 struct shadowPayload{
 	vec3 color;
+	uint seed;
 };
 
 layout(location = 0) rayPayloadEXT shadowPayload prd;
@@ -28,8 +29,8 @@ void main()
 
 	for(int nS = 0; nS < NSAMPLES; nS++)
 	{
-		float r1 = rnd(prd.seed);
-		float r2 = rnd(prd.seed);
+		float r1 				= rnd(prd.seed);
+		float r2 				= rnd(prd.seed);
 		vec2 pixel_offset 		= nS == 0 ? vec2(0.5) : vec2(r1, r2);
 		const vec2 pixelCenter 	= vec2(gl_LaunchIDEXT.xy) + pixel_offset;	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
 		const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
@@ -45,40 +46,13 @@ void main()
 		float tmax 		= 10000.0;
 
 		vec3 rayColor = vec3(1);
-		for( int i = 0; i < MAX_RECURSION; i++ )
-		{
-			// Call the function to start tracing rays.
-			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
-
-			rayColor 				*= prd.colorAndDist.xyz;
-			const float hitDistance = prd.colorAndDist.w;
-			const bool isScattered 	= prd.direction.w > 0;
-
-			if( hitDistance < 0 || !isScattered){
-				break;
-			}
-			else{
-				origin.xyz 		= prd.origin;
-				direction.xyz 	= prd.direction.xyz;
-			}
-		}
-		finalColor += rayColor;
+		// Call the function to start tracing rays.
+		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
+		finalColor = prd.color;
 	}
 
 	finalColor /= NSAMPLES;
 	
 	// Finally we can write the result to the output image
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
-	/*
-	if(frame > 0)
-	{
-		float alpha = 0.3;// = 1.0 / (float(cam.frame) + 1);
-		vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-		vec3 color = mix(old_color, finalColor, alpha);
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
-	}
-	else{
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
-	}
-	*/
 }

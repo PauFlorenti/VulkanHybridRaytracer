@@ -518,17 +518,10 @@ void Renderer::rasterize_hybrid()
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-	VkResult result;
-
-	result = vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage);
-
+	VK_CHECK(vkAcquireNextImageKHR(*device, *swapchain, UINT64_MAX, get_current_frame()._presentSemaphore, VK_NULL_HANDLE, &VulkanEngine::engine->_indexSwapchainImage));
 	VK_CHECK(vkResetCommandBuffer(get_current_frame()._mainCommandBuffer, 0));
 
-	if (VulkanEngine::engine->_indexSwapchainImage > 1)
-	{
-		//VK_CHECK(vkResetCommandBuffer(_offscreenComandBuffer, 0));
-		build_previous_command_buffer();
-	}
+	build_previous_command_buffer();
 
 	// First pass
 	VkSubmitInfo submit = {};
@@ -542,19 +535,19 @@ void Renderer::rasterize_hybrid()
 	submit.commandBufferCount	= 1;
 	submit.pCommandBuffers		= &_offscreenComandBuffer;
 
-	result = vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE);
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	// Second pass raytrace
 	submit.pWaitSemaphores		= &_offscreenSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
-	result = vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE);
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	build_post_command_buffers();
 	submit.pWaitSemaphores		= &_rtSemaphore;
 	submit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
 	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
-	result = vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence);
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
 
 	VkPresentInfoKHR present{};
 	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -565,12 +558,14 @@ void Renderer::rasterize_hybrid()
 	present.pWaitSemaphores		= &get_current_frame()._renderSemaphore;
 	present.pImageIndices		= &VulkanEngine::engine->_indexSwapchainImage;
 
-	result = vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present);
+	VK_CHECK(vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present));
+	/*
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
 		VulkanEngine::engine->recreate_swapchain();
 	}
 	else if (result != VK_SUCCESS)
 		throw std::runtime_error("failed to present swap chain images!");
+		*/
 }
 
 void Renderer::render_gui()
@@ -1495,6 +1490,9 @@ void Renderer::create_storage_image()
 	VkImageViewCreateInfo imageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _rtImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_rtImage.imageView));
 
+	vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
+		&_shadowImage.image._image, &_shadowImage.image._allocation, nullptr);
+
 	VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _shadowImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_shadowImage.imageView));
 
@@ -1508,7 +1506,7 @@ void Renderer::create_storage_image()
 
 		VkImageMemoryBarrier shadowImageMemoryBarrier{};
 		shadowImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		shadowImageMemoryBarrier.image				= _rtImage.image._image;
+		shadowImageMemoryBarrier.image				= _shadowImage.image._image;
 		shadowImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
 		shadowImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
 		shadowImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
@@ -1831,7 +1829,7 @@ void Renderer::create_shadow_descriptors()
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 1);
-	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_rtDescriptorPool));
+	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_shadowDescPool));
 
 	// First set
 	// binding 0 = AS
@@ -1870,7 +1868,7 @@ void Renderer::create_shadow_descriptors()
 	descriptorSetLayoutCreateInfo.pBindings		= bindings.data();
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &descriptorSetLayoutCreateInfo, nullptr, &_shadowDescSetLayout));
 
-	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_shadowDescSetLayout, 1);
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_shadowDescPool, &_shadowDescSetLayout, 1);
 	VK_CHECK(vkAllocateDescriptorSets(*device, &descriptorSetAllocateInfo, &_shadowDescSet));
 
 	// Binding = 0 AS
@@ -1878,14 +1876,6 @@ void Renderer::create_shadow_descriptors()
 	descriptorSetAS.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 	descriptorSetAS.accelerationStructureCount	= 1;
 	descriptorSetAS.pAccelerationStructures		= &_topLevelAS.handle;
-
-	VkWriteDescriptorSet accelerationStructureWrite{};
-	accelerationStructureWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	accelerationStructureWrite.descriptorCount	= 1;
-	accelerationStructureWrite.dstSet			= _shadowDescSet;
-	accelerationStructureWrite.dstBinding		= 0;
-	accelerationStructureWrite.descriptorCount	= 1;
-	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
 	// Binding = 1 Storage Image
 	VkDescriptorImageInfo imageInfo{};
@@ -1955,12 +1945,13 @@ void Renderer::create_shadow_descriptors()
 	lightBufferInfo.range = sizeof(uboLight) * nLights;
 
 	// WRITES ---
-	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, &imageInfo, 1);
-	VkWriteDescriptorSet uniformBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _shadowDescSet, &cameraBufferInfo, 2);
-	VkWriteDescriptorSet vertexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, vertexDescInfo.data(), 3, nInstances);
-	VkWriteDescriptorSet indexBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, indexDescInfo.data(), 4, nInstances);
-	VkWriteDescriptorSet matrixBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &matrixDescInfo, 5);
-	VkWriteDescriptorSet lightsBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &lightBufferInfo, 6);
+	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_shadowDescSet, &descriptorSetAS, 0);
+	VkWriteDescriptorSet resultImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, &imageInfo, 1);
+	VkWriteDescriptorSet uniformBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _shadowDescSet, &cameraBufferInfo, 2);
+	VkWriteDescriptorSet vertexBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, vertexDescInfo.data(), 3, nInstances);
+	VkWriteDescriptorSet indexBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, indexDescInfo.data(), 4, nInstances);
+	VkWriteDescriptorSet matrixBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &matrixDescInfo, 5);
+	VkWriteDescriptorSet lightsBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &lightBufferInfo, 6);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -1972,7 +1963,7 @@ void Renderer::create_shadow_descriptors()
 		lightsBufferWrite,
 	};
 
-	VkResult result = vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
+	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(*device, _shadowDescSetLayout, nullptr);
@@ -2006,6 +1997,7 @@ void Renderer::create_rt_descriptors()
 	//  binding 8 = material indices
 	//  binding 9 = textures
 	//  binding 10 = skybox texture
+	//  binding 11 = shadow texture
 
 	const unsigned int nInstances	= _scene->_entities.size();
 	const unsigned int nLights		= _scene->_lights.size();
@@ -2022,7 +2014,8 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding materialBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
 	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);
 	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
-	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
+	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10);
+	VkDescriptorSetLayoutBinding textureBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -2035,7 +2028,8 @@ void Renderer::create_rt_descriptors()
 		materialBufferBinding,
 		matIdxBufferBinding,
 		texturesBufferBinding,
-		skyboxBufferBinding
+		skyboxBufferBinding,
+		textureBufferBinding
 		});
 
 	// Allocate Descriptor
@@ -2164,10 +2158,16 @@ void Renderer::create_rt_descriptors()
 		imageInfos.push_back(imageBufferInfo);
 	}
 
+	// Binding = 10 Skybox
 	VkDescriptorImageInfo skyboxBufferInfo = {};
-	skyboxBufferInfo.sampler = sampler;
-	skyboxBufferInfo.imageView = Texture::GET("woods.jpg")->imageView;
-	skyboxBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	skyboxBufferInfo.sampler		= sampler;
+	skyboxBufferInfo.imageView		= Texture::GET("woods.jpg")->imageView;
+	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	// Binding = 11 Shadow texture
+	VkDescriptorImageInfo shadowImageDescriptor{};
+	shadowImageDescriptor.imageView		= _shadowImage.imageView;
+	shadowImageDescriptor.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
 
 	// WRITES ---
 	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
@@ -2180,6 +2180,7 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &idDescInfo, 8);
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
+	VkWriteDescriptorSet shadowBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &shadowImageDescriptor, 11);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2192,7 +2193,8 @@ void Renderer::create_rt_descriptors()
 		matBufferWrite,
 		matIdxBufferWrite,
 		textureBufferWrite,
-		skyboxBufferWrite
+		skyboxBufferWrite,
+		shadowBufferWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
@@ -2211,12 +2213,14 @@ void Renderer::init_raytracing_pipeline()
 	// Setup ray tracing shader groups
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages = {};
 	std::vector<VkPipelineShaderStageCreateInfo> hybridShaderStages = {};
+	std::vector<VkPipelineShaderStageCreateInfo> shadowShaderStages = {};
 
 	// Ray generation group
-	VkShaderModule rayGenModule, hraygenModule;
+	VkShaderModule rayGenModule, hraygenModule, sraygenModule;
 	{
 		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("raygen.rgen.spv", searchPaths, true).c_str(), &rayGenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
 		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("hybridRaygen.rgen.spv", searchPaths, true).c_str(), &hraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
+		shadowShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadowRaygen.rgen.spv", searchPaths, true).c_str(), &sraygenModule, VK_SHADER_STAGE_RAYGEN_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2224,9 +2228,10 @@ void Renderer::init_raytracing_pipeline()
 		shaderGroup.closestHitShader	= VK_SHADER_UNUSED_KHR;
 		shaderGroup.anyHitShader		= VK_SHADER_UNUSED_KHR;
 		shaderGroup.intersectionShader	= VK_SHADER_UNUSED_KHR;
+
 		shaderGroups.push_back(shaderGroup);
-		shaderGroup.generalShader = 0;
 		hybridShaderGroups.push_back(shaderGroup);
+		shadowShaderGroups.push_back(shaderGroup);
 	}
 
 	// Miss group
@@ -2241,16 +2246,18 @@ void Renderer::init_raytracing_pipeline()
 		shaderGroup.closestHitShader	= VK_SHADER_UNUSED_KHR;
 		shaderGroup.anyHitShader		= VK_SHADER_UNUSED_KHR;
 		shaderGroup.intersectionShader	= VK_SHADER_UNUSED_KHR;
+
 		shaderGroups.push_back(shaderGroup);
 		shaderGroup.generalShader = static_cast<uint32_t>(hybridShaderStages.size()) - 1;
 		hybridShaderGroups.push_back(shaderGroup);
 	}
 
 	// Shadow miss
-	VkShaderModule shadowModule, hshadowModule;
+	VkShaderModule shadowModule, hshadowModule, sshadowModule;
 	{
 		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &shadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &hshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
+		shadowShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadow.rmiss.spv", searchPaths, true).c_str(), &sshadowModule, VK_SHADER_STAGE_MISS_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
@@ -2262,13 +2269,16 @@ void Renderer::init_raytracing_pipeline()
 
 		shaderGroup.generalShader = static_cast<uint32_t>(hybridShaderStages.size()) - 1;
 		hybridShaderGroups.push_back(shaderGroup);
+		shaderGroup.generalShader = static_cast<uint32_t>(shadowShaderStages.size()) - 1;
+		shadowShaderGroups.push_back(shaderGroup);
 	}
 
 	// Hit group
-	VkShaderModule hitModule, hhitModule;
+	VkShaderModule hitModule, hhitModule, shitModule;
 	{
 		shaderStages.push_back(engine->load_shader_stage(vkutil::findFile("closesthit.rchit.spv", searchPaths, true).c_str(), &hitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
 		hybridShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("hybridHit.rchit.spv", searchPaths, true).c_str(), &hhitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
+		shadowShaderStages.push_back(engine->load_shader_stage(vkutil::findFile("shadowHit.rchit.spv", searchPaths, true).c_str(), &shitModule, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR));
 		VkRayTracingShaderGroupCreateInfoKHR shaderGroup{};
 		shaderGroup.sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		shaderGroup.type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
@@ -2280,6 +2290,8 @@ void Renderer::init_raytracing_pipeline()
 		
 		shaderGroup.closestHitShader = static_cast<uint32_t>(hybridShaderStages.size()) - 1;
 		hybridShaderGroups.push_back(shaderGroup);
+		shaderGroup.closestHitShader = static_cast<uint32_t>(shadowShaderStages.size()) - 1;
+		shadowShaderGroups.push_back(shaderGroup);
 	}
 
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
@@ -2313,10 +2325,28 @@ void Renderer::init_raytracing_pipeline()
 	hybridPipelineInfo.pStages						= hybridShaderStages.data();
 	hybridPipelineInfo.groupCount					= static_cast<uint32_t>(hybridShaderGroups.size());
 	hybridPipelineInfo.pGroups						= hybridShaderGroups.data();
-	hybridPipelineInfo.maxPipelineRayRecursionDepth = 2;
+	hybridPipelineInfo.maxPipelineRayRecursionDepth = 10;
 	hybridPipelineInfo.layout						= _hybridPipelineLayout;
 
 	VK_CHECK(vkCreateRayTracingPipelinesKHR(*device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &hybridPipelineInfo, nullptr, &_hybridPipeline));
+
+	// SHADOW PIPELINA CREATION
+	VkPipelineLayoutCreateInfo shadowPipelineLayoutInfo = {};
+	shadowPipelineLayoutInfo.sType					= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	shadowPipelineLayoutInfo.setLayoutCount			= 1;
+	shadowPipelineLayoutInfo.pSetLayouts			= &_shadowDescSetLayout;
+	VK_CHECK(vkCreatePipelineLayout(*device, &shadowPipelineLayoutInfo, nullptr, &_shadowPipelineLayout));
+
+	VkRayTracingPipelineCreateInfoKHR shadowPipelineInfo{};
+	shadowPipelineInfo.sType						= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+	shadowPipelineInfo.stageCount					= static_cast<uint32_t>(shadowShaderStages.size());
+	shadowPipelineInfo.pStages						= shadowShaderStages.data();
+	shadowPipelineInfo.groupCount					= static_cast<uint32_t>(shadowShaderGroups.size());
+	shadowPipelineInfo.pGroups						= shadowShaderGroups.data();
+	shadowPipelineInfo.maxPipelineRayRecursionDepth = 2;
+	shadowPipelineInfo.layout						= _shadowPipelineLayout;
+
+	VK_CHECK(vkCreateRayTracingPipelinesKHR(*device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &shadowPipelineInfo, nullptr, &_shadowPipeline));
 
 	vkDestroyShaderModule(*device, rayGenModule, nullptr);
 	vkDestroyShaderModule(*device, hitModule, nullptr);
@@ -2326,12 +2356,17 @@ void Renderer::init_raytracing_pipeline()
 	vkDestroyShaderModule(*device, hmissModule, nullptr);
 	vkDestroyShaderModule(*device, hshadowModule, nullptr);
 	vkDestroyShaderModule(*device, hhitModule, nullptr);
+	vkDestroyShaderModule(*device, sraygenModule, nullptr);
+	vkDestroyShaderModule(*device, sshadowModule, nullptr);
+	vkDestroyShaderModule(*device, shitModule, nullptr);
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyPipeline(*device, _rtPipeline, nullptr);
 		vkDestroyPipeline(*device, _hybridPipeline, nullptr);
+		vkDestroyPipeline(*device, _shadowPipeline, nullptr);
 		vkDestroyPipelineLayout(*device, _rtPipelineLayout, nullptr);
 		vkDestroyPipelineLayout(*device, _hybridPipelineLayout, nullptr);
+		vkDestroyPipelineLayout(*device, _shadowPipelineLayout, nullptr);
 		});
 }
 
@@ -2385,6 +2420,27 @@ void Renderer::create_shader_binding_table()
 	vmaUnmapMemory(VulkanEngine::engine->_allocator, missSBT._allocation);
 	vmaUnmapMemory(VulkanEngine::engine->_allocator, hitSBT._allocation);
 
+	// SHADOW BUFFERS
+	const uint32_t shadowCount		= static_cast<uint32_t>(shadowShaderGroups.size());
+	const uint32_t shadowSbtSize	= shadowCount * handleSize;
+
+	std::vector<uint8_t> shadowShaderHandleStorage(shadowSbtSize);
+	VK_CHECK(vkGetRayTracingShaderGroupHandlesKHR(*device, _shadowPipeline, 0, shadowCount, shadowSbtSize, shadowShaderHandleStorage.data()));
+
+	VulkanEngine::engine->create_buffer(handleSize, bufferUsageFlags, VMA_MEMORY_USAGE_CPU_TO_GPU, sraygenSBT);
+	VulkanEngine::engine->create_buffer(handleSize, bufferUsageFlags, VMA_MEMORY_USAGE_CPU_TO_GPU, smissSBT);
+	VulkanEngine::engine->create_buffer(handleSize, bufferUsageFlags, VMA_MEMORY_USAGE_CPU_TO_GPU, shitSBT);
+
+	vmaMapMemory(VulkanEngine::engine->_allocator, sraygenSBT._allocation, &rayGenData);
+	memcpy(rayGenData, shadowShaderHandleStorage.data(), handleSize);
+	vmaMapMemory(VulkanEngine::engine->_allocator, smissSBT._allocation, &missData);
+	memcpy(missData, shadowShaderHandleStorage.data() + handleAlignment, handleSize);
+	vmaMapMemory(VulkanEngine::engine->_allocator, shitSBT._allocation, &hitData);
+	memcpy(hitData, shadowShaderHandleStorage.data() + handleAlignment * 2, handleSize);
+
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, sraygenSBT._allocation);
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, smissSBT._allocation);
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, shitSBT._allocation);
 }
 
 void Renderer::build_raytracing_command_buffers()
@@ -2415,8 +2471,6 @@ void Renderer::build_raytracing_command_buffers()
 	VkStridedDeviceAddressRegionKHR callableShaderSbtEntry{};
 
 	uint32_t width = VulkanEngine::engine->_window->getWidth(), height = VulkanEngine::engine->_window->getHeight();
-
-	VkImage& image = VulkanEngine::engine->_swapchainImages[VulkanEngine::engine->_indexSwapchainImage];
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipeline);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _rtPipelineLayout, 0, 1, &_rtDescriptorSet, 0, nullptr);
@@ -2765,14 +2819,6 @@ void Renderer::create_hybrid_descriptors()
 	descriptorAccelerationStructureInfo.accelerationStructureCount	= 1;
 	descriptorAccelerationStructureInfo.pAccelerationStructures		= &_topLevelAS.handle;
 
-	VkWriteDescriptorSet accelerationStructureWrite{};
-	accelerationStructureWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	accelerationStructureWrite.pNext			= &descriptorAccelerationStructureInfo;
-	accelerationStructureWrite.dstSet			= _hybridDescSet;
-	accelerationStructureWrite.dstBinding		= 0;
-	accelerationStructureWrite.descriptorCount	= 1;
-	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-
 	// Camera write
 	VkDescriptorBufferInfo cameraBufferInfo{};
 	cameraBufferInfo.buffer = _rtCameraBuffer._buffer;
@@ -2882,6 +2928,7 @@ void Renderer::create_hybrid_descriptors()
 	skyboxBufferInfo.imageView		= Texture::GET("woods.jpg")->imageView;
 	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_hybridDescSet, &descriptorAccelerationStructureInfo, 0);
 	VkWriteDescriptorSet storageImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet cameraWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &cameraBufferInfo, 2);
 	VkWriteDescriptorSet positionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorPosition, 3);
@@ -2949,8 +2996,6 @@ void Renderer::build_hybrid_command_buffers()
 	VkStridedDeviceAddressRegionKHR callableShaderSbtEntry{};
 
 	uint32_t width = VulkanEngine::engine->_window->getWidth(), height = VulkanEngine::engine->_window->getHeight();
-
-	VkImage& image = VulkanEngine::engine->_swapchainImages[VulkanEngine::engine->_indexSwapchainImage];
 
 	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _hybridPipeline);
 	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _hybridPipelineLayout, 0, 1, &_hybridDescSet, 0, nullptr);

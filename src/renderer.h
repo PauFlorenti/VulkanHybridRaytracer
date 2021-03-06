@@ -152,15 +152,22 @@ public:
 	VkDescriptorSetLayout		_hybridDescSetLayout;
 	VkCommandBuffer				_hybridCommandBuffer;
 
+	AllocatedBuffer				raygenSBT;
+	AllocatedBuffer				missSBT;
+	AllocatedBuffer				hitSBT;
+
 	// SHADOW VARIABLES ----------------------
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> shadowShaderGroups{};
 	VkDescriptorPool			_shadowDescPool;
 	VkDescriptorSet				_shadowDescSet;
 	VkDescriptorSetLayout		_shadowDescSetLayout;
 	Texture						_shadowImage;
+	VkPipeline					_shadowPipeline;
+	VkPipelineLayout			_shadowPipelineLayout;
 
-	AllocatedBuffer				raygenSBT;
-	AllocatedBuffer				missSBT;
-	AllocatedBuffer				hitSBT;
+	AllocatedBuffer				sraygenSBT;
+	AllocatedBuffer				smissSBT;
+	AllocatedBuffer				shitSBT;
 
 	void rasterize();
 

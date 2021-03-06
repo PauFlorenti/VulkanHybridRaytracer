@@ -8,6 +8,7 @@
 
 struct shadowPayload{
 	vec3 color;
+  uint seed;
 };
 
 layout(location = 0) rayPayloadInEXT shadowPayload prd;
@@ -19,9 +20,6 @@ layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
 layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
 layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
-layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
-layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
-layout(set = 0, binding = 9) uniform sampler2D[] textures;
 
 void main()
 {
@@ -60,12 +58,12 @@ void main()
     // Init basic light information
     Light light                     = lightsBuffer.lights[i];
     const bool isDirectional        = light.pos.w < 0;
-	vec3 L                          = isDirectional ? light.pos.xyz : (light.pos.xyz - worldPos);
-	const float light_max_distance  = light.pos.w;
-	const float light_distance      = length(L);
+	  vec3 L                          = isDirectional ? light.pos.xyz : (light.pos.xyz - worldPos);
+	  const float light_max_distance  = light.pos.w;
+	  const float light_distance      = length(L);
     L                               = normalize(L);
-	const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
-	const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
+	  const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
+	  const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
     float shadowFactor    = 0.1;
 
     // Check if light has impact, then calculate shadow
