@@ -19,6 +19,7 @@ layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuf
 layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
+layout(set = 0, binding = 11) 
 
 void main()
 {
