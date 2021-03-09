@@ -82,6 +82,14 @@ void main()
       {
         // Init as shadowed
         shadowed          = true;
+
+        vec3 perpL = cross(L, vec3(0, 1, 0));
+        if(perpL == vec3(0.0))
+          perpL.x = 1.0;
+        
+        vec3 toEdge = normalize((light.pos.xyz + perpL * light.radius) - worldPos);
+        float angle = acos(dot(L, toEdge)) * 2;
+
         const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
         const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
         float tmin = 0.001, tmax = light_distance + 1;
