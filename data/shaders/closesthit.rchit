@@ -19,7 +19,7 @@ layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuf
 layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
-layout(set = 0, binding = 11, rgba8) uniform readonly image2D shadowImage;
+layout(set = 0, binding = 11, rgba8) uniform readonly image2D shadowImage;  
 
 void main()
 {
@@ -74,7 +74,7 @@ void main()
     L                               = normalize(L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
-    vec3 shadowFactor              = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
+    float shadowFactor              = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).x;
 
     // Calculate attenuation factor
     if(light_intensity == 0){
@@ -91,9 +91,12 @@ void main()
 
     if(shadingMode == 0)  // DIFUS
     {
-      difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += difColor * light_intensity * light.color.xyz * attenuation;// * shadowFactor;
-      color    += emissive;
+      if(shadowFactor > 0)
+      {
+        difColor  = computeDiffuse(mat, N, L) * albedo;
+        color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+        color    += emissive;
+      }
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -124,5 +127,5 @@ void main()
     }
   }
   
-  prd.colorAndDist.xyz *= imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
+  //prd.colorAndDist.xyz = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
 }

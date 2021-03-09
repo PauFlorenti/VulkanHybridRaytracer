@@ -71,26 +71,6 @@ void main()
 
 		int depth = 0;
 		
-		/*
-		if(NdotL > 0)
-		{
-			for(int a = 0; a < SHADOWSAMPLES; a++)
-			{
-				// Init as shadowed
-				isShadowed 			= true;
-				const vec3 dir 		= normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - position.xyz);
-				const uint flags 	= gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-				tmax				= light_distance + 1;
-
-				traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-					position.xyz + dir * 5e-2, tmin, dir, tmax, 1);
-
-				if(!isShadowed)
-					shadowFactor++;
-			}
-			shadowFactor /= SHADOWSAMPLES;
-		}
-		*/
 		// Calculate attenuation factor
 		// ----------------------------
 		if(light_intensity == 0){

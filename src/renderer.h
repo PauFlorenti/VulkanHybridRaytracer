@@ -178,7 +178,7 @@ public:
 	VkDescriptorPool			_sPostDescPool;
 	VkDescriptorSet				_sPostDescSet;
 	VkDescriptorSetLayout		_sPostDescSetLayout;
-	//Texture						_denoiseImage;
+	Texture						_denoiseImage;
 	VkCommandBuffer				_denoiseCommandBuffer;
 	VkSemaphore					_denoiseSemaphore;
 	AllocatedBuffer				_denoiseFrameBuffer;
