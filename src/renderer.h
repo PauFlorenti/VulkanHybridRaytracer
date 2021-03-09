@@ -164,10 +164,24 @@ public:
 	Texture						_shadowImage;
 	VkPipeline					_shadowPipeline;
 	VkPipelineLayout			_shadowPipelineLayout;
+	VkCommandBuffer				_shadowCommandBuffer;
+	VkSemaphore					_shadowSemaphore;
 
 	AllocatedBuffer				sraygenSBT;
 	AllocatedBuffer				smissSBT;
 	AllocatedBuffer				shitSBT;
+
+	// SHADOW POST VARIABLES -----------------
+	VkPipeline					_sPostPipeline;
+	VkPipelineLayout			_sPostPipelineLayout;
+	VkRenderPass				_sPostRenderPass;
+	VkDescriptorPool			_sPostDescPool;
+	VkDescriptorSet				_sPostDescSet;
+	VkDescriptorSetLayout		_sPostDescSetLayout;
+	//Texture						_denoiseImage;
+	VkCommandBuffer				_denoiseCommandBuffer;
+	VkSemaphore					_denoiseSemaphore;
+	AllocatedBuffer				_denoiseFrameBuffer;
 
 	void rasterize();
 
@@ -240,7 +254,13 @@ private:
 
 	void init_raytracing_pipeline();
 
+	void init_compute_pipeline();
+
 	void build_raytracing_command_buffers();
+
+	void build_shadow_command_buffer();
+
+	void build_compute_command_buffer();
 
 	// POST
 	void create_post_renderPass();

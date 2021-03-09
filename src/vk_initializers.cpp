@@ -35,11 +35,11 @@ VkPipelineShaderStageCreateInfo vkinit::pipeline_shader_stage_create_info(
 )
 {
 	VkPipelineShaderStageCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	info.pNext = nullptr;
-	info.stage = stage;
+	info.sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	info.pNext	= nullptr;
+	info.stage	= stage;
 	info.module = shaderModule;
-	info.pName = "main";
+	info.pName	= "main";
 	
 	return info;
 }

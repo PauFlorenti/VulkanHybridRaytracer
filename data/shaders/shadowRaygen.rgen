@@ -5,12 +5,12 @@
 #include "helpers.glsl"
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0, rgba8) uniform image2D image;
+layout(binding = 1, set = 0, rgba8) uniform image2D shadowImage;
 layout(binding = 2, set = 0) uniform CameraProperties 
 {
 	mat4 viewInverse;
 	mat4 projInverse;
-	int frame;
+	float frame;
 } cam;
 
 struct shadowPayload{
@@ -22,8 +22,8 @@ layout(location = 0) rayPayloadEXT shadowPayload prd;
 
 void main() 
 {
-	const int frame = cam.frame;
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
+	float frame = cam.frame;
+	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, uint(frame));
 
 	vec3 finalColor = vec3(0);
 
@@ -40,19 +40,30 @@ void main()
 		// the origin and target of the ray
 		vec4 origin		= cam.viewInverse * vec4(0,0,0,1);
 		vec4 target		= cam.projInverse * vec4(d.x, d.y, 1, 1) ;
-		vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0) ;
+		vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0);
 
 		float tmin 		= 0.001;
 		float tmax 		= 10000.0;
 
-		vec3 rayColor = vec3(1);
 		// Call the function to start tracing rays.
 		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
-		finalColor = prd.color;
+		finalColor += prd.color;
 	}
-
 	finalColor /= NSAMPLES;
-	
+
 	// Finally we can write the result to the output image
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
+	//imageStore(shadowImage, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	
+	if(frame > 0)
+	{
+		float a = 1.0f / float(frame + 1);
+		vec3 old_color = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).rgb;
+		//old_color = vec3(1, 0, 0);
+		vec3 c = mix(old_color, finalColor, a);
+		imageStore(shadowImage, ivec2(gl_LaunchIDEXT.xy), vec4(c, 1));
+	}
+	else{
+		imageStore(shadowImage, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	}
+	
 }

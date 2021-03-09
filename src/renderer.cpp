@@ -57,10 +57,12 @@ Renderer::Renderer(Scene* scene)
 	create_rt_descriptors();
 	create_hybrid_descriptors();
 	init_raytracing_pipeline();
+	//init_compute_pipeline();
 	create_shader_binding_table();
+	build_shadow_command_buffer();
+	//build_compute_command_buffer();
 	build_raytracing_command_buffers();
 	build_hybrid_command_buffers();
-	
 }
 
 void Renderer::init_commands()
@@ -93,6 +95,8 @@ void Renderer::init_commands()
 	VkCommandBufferAllocateInfo cmdPostAllocInfo = vkinit::command_buffer_allocate_info(_commandPool);
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_rtCommandBuffer));
 	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_hybridCommandBuffer));
+	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_shadowCommandBuffer));
+	VK_CHECK(vkAllocateCommandBuffers(*device, &cmdPostAllocInfo, &_denoiseCommandBuffer));
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyCommandPool(*device, _commandPool, nullptr);
@@ -471,19 +475,34 @@ void Renderer::raytrace()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
+	// Shadow pass
 	VkSubmitInfo submit{};
-	submit.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit.pNext					= nullptr;
-	submit.pWaitDstStageMask		= waitStages;
-	submit.waitSemaphoreCount		= 1;
-	submit.pWaitSemaphores			= &get_current_frame()._presentSemaphore;
-	submit.signalSemaphoreCount		= 1;
-	submit.pSignalSemaphores		= &_rtSemaphore;
-	submit.commandBufferCount		= 1;
-	submit.pCommandBuffers			= &_rtCommandBuffer;
+	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.pNext				= nullptr;
+	submit.pWaitDstStageMask	= waitStages;
+	submit.waitSemaphoreCount	= 1;
+	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore;
+	submit.signalSemaphoreCount	= 1;
+	submit.pSignalSemaphores	= &_shadowSemaphore;
+	submit.commandBufferCount	= 1;
+	submit.pCommandBuffers		= &_shadowCommandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
+	//submit.pWaitSemaphores		= &_shadowSemaphore;
+	//submit.pSignalSemaphores	= &_denoiseSemaphore;
+	//submit.pCommandBuffers		= &_denoiseCommandBuffer;
+
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	// RTX Pass
+	submit.pWaitSemaphores		= &_shadowSemaphore;
+	submit.pSignalSemaphores	= &_rtSemaphore;
+	submit.pCommandBuffers		= &_rtCommandBuffer;
+
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	// Post pass
 	build_post_command_buffers();
 
 	submit.pWaitSemaphores		= &_rtSemaphore;
@@ -537,8 +556,21 @@ void Renderer::rasterize_hybrid()
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
-	// Second pass raytrace
+	// Shadow pass
 	submit.pWaitSemaphores		= &_offscreenSemaphore;
+	submit.pSignalSemaphores	= &_shadowSemaphore;
+	submit.pCommandBuffers		= &_shadowCommandBuffer;
+
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	//submit.pWaitSemaphores		= &_shadowSemaphore;
+	//submit.pSignalSemaphores	= &_denoiseSemaphore;
+	//submit.pCommandBuffers		= &_denoiseCommandBuffer;
+
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+
+	// Second pass raytrace
+	submit.pWaitSemaphores		= &_shadowSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
@@ -758,6 +790,8 @@ void Renderer::init_sync_structures()
 
 	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_offscreenSemaphore));
 	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_rtSemaphore));
+	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_shadowSemaphore));
+	VK_CHECK(vkCreateSemaphore(*device, &semaphoreCreateInfo, nullptr, &_denoiseSemaphore));
 
 	for (int i = 0; i < FRAME_OVERLAP; i++)
 	{
@@ -781,6 +815,8 @@ void Renderer::init_sync_structures()
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroySemaphore(*device, _offscreenSemaphore, nullptr);
 		vkDestroySemaphore(*device, _rtSemaphore, nullptr);
+		vkDestroySemaphore(*device, _shadowSemaphore, nullptr);
+		vkDestroySemaphore(*device, _denoiseSemaphore, nullptr);
 		});
 }
 
@@ -1496,6 +1532,12 @@ void Renderer::create_storage_image()
 	VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _shadowImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_shadowImage.imageView));
 
+	//vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
+	//	&_denoiseImage.image._image, &_denoiseImage.image._allocation, nullptr);
+	//
+	//VkImageViewCreateInfo denoiseImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _denoiseImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	//VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_denoiseImage.imageView));
+
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
 		VkImageMemoryBarrier imageMemoryBarrier{};
 		imageMemoryBarrier.sType					= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1511,6 +1553,13 @@ void Renderer::create_storage_image()
 		shadowImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
 		shadowImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
+		//VkImageMemoryBarrier denoiseImageMemoryBarrier{};
+		//denoiseImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		//denoiseImageMemoryBarrier.image				= _denoiseImage.image._image;
+		//denoiseImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+		//denoiseImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
+		//denoiseImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
 		VkImageMemoryBarrier barrier[] = { imageMemoryBarrier, shadowImageMemoryBarrier };
 
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 2, barrier);
@@ -1519,8 +1568,10 @@ void Renderer::create_storage_image()
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vmaDestroyImage(VulkanEngine::engine->_allocator, _rtImage.image._image, _rtImage.image._allocation);
 		vmaDestroyImage(VulkanEngine::engine->_allocator, _shadowImage.image._image, _shadowImage.image._allocation);
+		//vmaDestroyImage(VulkanEngine::engine->_allocator, _denoiseImage.image._image, _denoiseImage.image._allocation);
 		vkDestroyImageView(*device, _rtImage.imageView, nullptr);
 		vkDestroyImageView(*device, _shadowImage.imageView, nullptr);
+		//vkDestroyImageView(*device, _denoiseImage.imageView, nullptr);
 		});
 	
 }
@@ -1823,13 +1874,14 @@ void Renderer::create_shadow_descriptors()
 {
 	std::vector<VkDescriptorPoolSize> poolSize = {
 		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
 		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
 	};
 
-	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 1);
+	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 2);
 	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_shadowDescPool));
+	//VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_sPostDescPool));
 
 	// First set
 	// binding 0 = AS
@@ -1839,26 +1891,29 @@ void Renderer::create_shadow_descriptors()
 	// binding 4 = Index buffer
 	// binding 5 = Model matrices buffer
 	// binding 6 = Lights buffer
+	// binding 7 = IDs
 
 	const unsigned int nInstances	= _scene->_entities.size();
 	const unsigned int nLights		= _scene->_lights.size();
 
 	VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);
-	VkDescriptorSetLayoutBinding resultImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
+	VkDescriptorSetLayoutBinding storageImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
 	VkDescriptorSetLayoutBinding uniformBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
 	VkDescriptorSetLayoutBinding vertexBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
 	VkDescriptorSetLayoutBinding indexBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
 	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
+	VkDescriptorSetLayoutBinding idsBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
-		resultImageLayoutBinding,
+		storageImageLayoutBinding,
 		uniformBufferBinding,
 		vertexBufferBinding,
 		indexBufferBinding,
 		matrixBufferBinding,
 		lightBufferBinding,
+		idsBufferBinding
 	});
 
 	// Allocate Descriptor
@@ -1944,6 +1999,20 @@ void Renderer::create_shadow_descriptors()
 	lightBufferInfo.offset = 0;
 	lightBufferInfo.range = sizeof(uboLight) * nLights;
 
+	// Binding = 7 IDs
+	if (!_idBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(glm::vec4) * idVector.size(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _idBuffer);
+
+	void* idData;
+	vmaMapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation, &idData);
+	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
+	vmaUnmapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation);
+
+	VkDescriptorBufferInfo idDescInfo;
+	idDescInfo.buffer = _idBuffer._buffer;
+	idDescInfo.offset = 0;
+	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
+
 	// WRITES ---
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_shadowDescSet, &descriptorSetAS, 0);
 	VkWriteDescriptorSet resultImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, &imageInfo, 1);
@@ -1952,6 +2021,7 @@ void Renderer::create_shadow_descriptors()
 	VkWriteDescriptorSet indexBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, indexDescInfo.data(), 4, nInstances);
 	VkWriteDescriptorSet matrixBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &matrixDescInfo, 5);
 	VkWriteDescriptorSet lightsBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &lightBufferInfo, 6);
+	VkWriteDescriptorSet idsBufferWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &idDescInfo, 7);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -1961,12 +2031,65 @@ void Renderer::create_shadow_descriptors()
 		indexBufferWrite,
 		matrixBufferWrite,
 		lightsBufferWrite,
+		idsBufferWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
+	/*
+	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1);
+	VkDescriptorSetLayoutBinding framebufferBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
 
+	std::vector<VkDescriptorSetLayoutBinding> denoiseBindings({
+		inputImageLayoutBinding,
+		//resultImageLayoutBinding,
+		framebufferBinding
+	});
+
+	// Allocate Descriptor
+	VkDescriptorSetLayoutCreateInfo denoiseDescriptorSetLayoutCreateInfo = {};
+	denoiseDescriptorSetLayoutCreateInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	denoiseDescriptorSetLayoutCreateInfo.bindingCount	= static_cast<uint32_t>(denoiseBindings.size());
+	denoiseDescriptorSetLayoutCreateInfo.pBindings		= denoiseBindings.data();
+	VK_CHECK(vkCreateDescriptorSetLayout(*device, &denoiseDescriptorSetLayoutCreateInfo, nullptr, &_sPostDescSetLayout));
+
+	VkDescriptorSetAllocateInfo denoiseDescriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_shadowDescPool, &_sPostDescSetLayout, 1);
+	VK_CHECK(vkAllocateDescriptorSets(*device, &denoiseDescriptorSetAllocateInfo, &_sPostDescSet));
+
+	// Binding = 1 Storage Image
+	VkDescriptorImageInfo inputImageInfo{};
+	inputImageInfo.imageView		= _shadowImage.imageView;
+	inputImageInfo.imageLayout		= VK_IMAGE_LAYOUT_GENERAL;
+
+	// Binding = 2 Storage Image
+	//VkDescriptorImageInfo outputImageInfo{};
+	//outputImageInfo.imageView		= _denoiseImage.imageView;
+	//outputImageInfo.imageLayout		= VK_IMAGE_LAYOUT_GENERAL;
+
+	if (!_denoiseFrameBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(glm::vec4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _denoiseFrameBuffer);
+
+	// Binding = 3 FrameBuffer
+	VkDescriptorBufferInfo frameBufferInfo{};
+	frameBufferInfo.buffer = _denoiseFrameBuffer._buffer;
+	frameBufferInfo.offset = 0;
+	frameBufferInfo.range = sizeof(glm::vec4);
+
+	VkWriteDescriptorSet inputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, &inputImageInfo, 0);
+	//VkWriteDescriptorSet outputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, &outputImageInfo, 1);
+	VkWriteDescriptorSet frameBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _sPostDescSet, &frameBufferInfo, 2);
+
+	std::vector<VkWriteDescriptorSet> writeDenoiseDescriptorSets = {
+		inputImageWrite,
+		//outputImageWrite,
+		frameBufferWrite
+	};
+
+	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDenoiseDescriptorSets.size()), writeDenoiseDescriptorSets.data(), 0, VK_NULL_HANDLE);
+	*/
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vkDestroyDescriptorSetLayout(*device, _shadowDescSetLayout, nullptr);
+		//vkDestroyDescriptorSetLayout(*device, _sPostDescSetLayout, nullptr);
 		vkDestroyDescriptorPool(*device, _shadowDescPool, nullptr);
 		});
 
@@ -1976,7 +2099,7 @@ void Renderer::create_rt_descriptors()
 {
 	std::vector<VkDescriptorPoolSize> poolSize = {
 		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
 		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
 		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 100}
@@ -2044,9 +2167,9 @@ void Renderer::create_rt_descriptors()
 
 	// Binding = 0 AS
 	VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{};
-	descriptorAccelerationStructureInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-	descriptorAccelerationStructureInfo.accelerationStructureCount = 1;
-	descriptorAccelerationStructureInfo.pAccelerationStructures = &_topLevelAS.handle;
+	descriptorAccelerationStructureInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	descriptorAccelerationStructureInfo.accelerationStructureCount	= 1;
+	descriptorAccelerationStructureInfo.pAccelerationStructures		= &_topLevelAS.handle;
 
 	VkWriteDescriptorSet accelerationStructureWrite{};
 	accelerationStructureWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -2166,7 +2289,7 @@ void Renderer::create_rt_descriptors()
 
 	// Binding = 11 Shadow texture
 	VkDescriptorImageInfo shadowImageDescriptor{};
-	shadowImageDescriptor.imageView		= _shadowImage.imageView;
+	shadowImageDescriptor.imageView = _rtImage.imageView;//_shadowImage.imageView;
 	shadowImageDescriptor.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
 
 	// WRITES ---
@@ -2370,6 +2493,34 @@ void Renderer::init_raytracing_pipeline()
 		});
 }
 
+void Renderer::init_compute_pipeline()
+{
+	VkShaderModule computeShaderModule;
+	VulkanEngine::engine->load_shader_module(vkutil::findFile("blur.comp.spv", searchPaths, true).c_str(), &computeShaderModule);
+
+	VkPipelineShaderStageCreateInfo shaderStageCI = vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_COMPUTE_BIT, computeShaderModule);
+
+	VkPipelineLayoutCreateInfo pipelineLayoutCI = vkinit::pipeline_layout_create_info();
+	pipelineLayoutCI.setLayoutCount = 1;
+	pipelineLayoutCI.pSetLayouts	= &_sPostDescSetLayout;
+	VK_CHECK(vkCreatePipelineLayout(*device, &pipelineLayoutCI, nullptr, &_sPostPipelineLayout));
+
+	VkComputePipelineCreateInfo computePipelineCI = {};
+	computePipelineCI.sType		= VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCI.stage		= shaderStageCI;
+	computePipelineCI.layout	= _sPostPipelineLayout;
+	
+	VK_CHECK(vkCreateComputePipelines(*device, VK_NULL_HANDLE, 1, &computePipelineCI, nullptr, &_sPostPipeline));
+
+	// Fill the buffer
+
+	vkDestroyShaderModule(*device, computeShaderModule, nullptr);
+	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
+		vkDestroyPipeline(*device, _sPostPipeline, nullptr);
+		vkDestroyPipelineLayout(*device, _sPostPipelineLayout, nullptr);
+		});
+}
+
 void Renderer::create_shader_binding_table()
 {
 	// RAYTRACING BUFFERS
@@ -2486,6 +2637,65 @@ void Renderer::build_raytracing_command_buffers()
 		1
 	);
 	
+	VK_CHECK(vkEndCommandBuffer(cmd));
+}
+
+void Renderer::build_shadow_command_buffer()
+{
+	VkCommandBufferBeginInfo cmdBuffInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+	VkCommandBuffer& cmd = _shadowCommandBuffer;
+
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBuffInfo));
+
+	VkStridedDeviceAddressRegionKHR raygenShaderSbtEntry{};
+	raygenShaderSbtEntry.deviceAddress	= VulkanEngine::engine->getBufferDeviceAddress(sraygenSBT._buffer);
+	raygenShaderSbtEntry.stride			= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+	raygenShaderSbtEntry.size			= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+
+	VkStridedDeviceAddressRegionKHR missShaderSbtEntry{};
+	missShaderSbtEntry.deviceAddress	= VulkanEngine::engine->getBufferDeviceAddress(smissSBT._buffer);
+	missShaderSbtEntry.stride			= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+	missShaderSbtEntry.size				= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+
+	VkStridedDeviceAddressRegionKHR hitShaderSbtEntry{};
+	hitShaderSbtEntry.deviceAddress		= VulkanEngine::engine->getBufferDeviceAddress(shitSBT._buffer);
+	hitShaderSbtEntry.stride			= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+	hitShaderSbtEntry.size				= VulkanEngine::engine->_rtProperties.shaderGroupHandleSize;
+
+	VkStridedDeviceAddressRegionKHR callableShaderSbtEntry{};
+
+	uint32_t width = VulkanEngine::engine->_window->getWidth(), height = VulkanEngine::engine->_window->getHeight();
+
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _shadowPipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _shadowPipelineLayout, 0, 1, &_shadowDescSet, 0, nullptr);
+
+	vkCmdTraceRaysKHR(
+		cmd,
+		&raygenShaderSbtEntry,
+		&missShaderSbtEntry,
+		&hitShaderSbtEntry,
+		&callableShaderSbtEntry,
+		width,
+		height,
+		1
+	);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+}
+
+void Renderer::build_compute_command_buffer()
+{
+	VkCommandBufferBeginInfo beginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+
+	VkCommandBuffer &cmd = _denoiseCommandBuffer;
+
+	VK_CHECK(vkBeginCommandBuffer(cmd, &beginInfo));
+
+	vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _sPostPipeline);
+	vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _sPostPipelineLayout, 0, 1, &_sPostDescSet, 0, nullptr);
+
+	vkCmdDispatch(cmd, VulkanEngine::engine->_window->getWidth() / 16, VulkanEngine::engine->_window->getHeight() / 16, 1);
+
 	VK_CHECK(vkEndCommandBuffer(cmd));
 }
 
@@ -2745,8 +2955,6 @@ void Renderer::create_hybrid_descriptors()
 	const uint32_t nTextures	= static_cast<uint32_t>(Texture::_textures.size());
 	const uint32_t nLights		= static_cast<uint32_t>(_scene->_lights.size());
 
-
-
 	// binding = 0 TLAS
 	// binding = 1 Storage image
 	// binding = 2 Camera buffer
@@ -2777,6 +2985,7 @@ void Renderer::create_hybrid_descriptors()
 	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
 	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12); // Scene indices
 	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13);	// Matrices
+	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14);			// storage image
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
@@ -2793,7 +3002,8 @@ void Renderer::create_hybrid_descriptors()
 		matrixBufferBinding,
 		materialBufferBinding,
 		matIdxBufferBinding,
-		skyboxBufferBinding
+		skyboxBufferBinding,
+		shadowImageBinding
 	};
 
 	VkDescriptorSetLayoutCreateInfo setInfo = {};
@@ -2928,6 +3138,12 @@ void Renderer::create_hybrid_descriptors()
 	skyboxBufferInfo.imageView		= Texture::GET("woods.jpg")->imageView;
 	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+	// Binding = 14 Shadow image
+	VkDescriptorImageInfo shadowImageInfo = {};
+	shadowImageInfo.sampler		= sampler;
+	shadowImageInfo.imageView	= _shadowImage.imageView;
+	shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_hybridDescSet, &descriptorAccelerationStructureInfo, 0);
 	VkWriteDescriptorSet storageImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet cameraWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &cameraBufferInfo, 2);
@@ -2942,6 +3158,7 @@ void Renderer::create_hybrid_descriptors()
 	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &materialBufferInfo, 11);
 	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 12);
 	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 13);
+	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &shadowImageInfo, 14);
 
 	std::vector<VkWriteDescriptorSet> writes = {
 		accelerationStructureWrite,	// 0 TLAS
@@ -2957,7 +3174,8 @@ void Renderer::create_hybrid_descriptors()
 		matrixBufferWrite,
 		materialBufferWrite,
 		matIdxBufferWrite,
-		skyboxBufferWrite
+		skyboxBufferWrite,
+		shadowImageWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);

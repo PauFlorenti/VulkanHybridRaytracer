@@ -20,6 +20,7 @@ layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
 layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
 layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
+layout(set = 0, binding = 7) buffer sceneBuffer { vec4 idx[]; } objIndices;
 
 void main()
 {
@@ -64,7 +65,7 @@ void main()
     L                               = normalize(L);
 	  const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 	  const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
-    float shadowFactor    = 0.1;
+    float shadowFactor    = 0.0;
 
     // Check if light has impact, then calculate shadow
     if( NdotL > 0 )
@@ -78,7 +79,7 @@ void main()
         float tmin = 0.001, tmax = light_distance + 1;
         
         // Shadow ray cast
-        traceRayEXT(topLevelAS, flags, 0xFF, 1, 0, 1, 
+        traceRayEXT(topLevelAS, flags, 0xFF, 1, 0, 0, 
           worldPos + dir * 1e-2, tmin, dir, tmax, 1);
 
         if(!shadowed){

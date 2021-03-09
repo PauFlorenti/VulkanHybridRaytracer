@@ -36,7 +36,7 @@ void main()
 		// the origin and target of the ray
 		vec4 origin		= cam.viewInverse * vec4(0,0,0,1);
 		vec4 target		= cam.projInverse * vec4(d.x, d.y, 1, 1) ;
-		vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0) ;
+		vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0);
 
 		float tmin 		= 0.001;
 		float tmax 		= 10000.0;
@@ -64,15 +64,5 @@ void main()
 
 	finalColor /= NSAMPLES;
 	
-	// Finally we can write the result to the output image
-	if(frame > 0)
-	{
-		float alpha = 0.3;// = 1.0 / (float(cam.frame) + 1);
-		vec3 old_color = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
-		vec3 color = mix(old_color, finalColor, alpha);
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));
-	}
-	else{
-		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
-	}	
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 0.0));
 }
