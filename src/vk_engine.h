@@ -58,7 +58,8 @@ struct RTCameraData
 {
 	glm::mat4 invView;
 	glm::mat4 invProj;
-	alignas(16) float frame;
+	glm::vec4 frame;
+	//alignas(16) float frame;
 };
 
 struct GPUSceneData {

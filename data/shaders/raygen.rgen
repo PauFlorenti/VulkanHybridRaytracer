@@ -11,14 +11,14 @@ layout(binding = 2, set = 0) uniform CameraProperties
 {
 	mat4 viewInverse;
 	mat4 projInverse;
-	int frame;
+	vec4 frame;
 } cam;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 
 void main() 
 {
-	const int frame = cam.frame;
+	int frame = int(cam.frame.x);
 	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
 
 	vec3 finalColor = vec3(0);
@@ -67,7 +67,7 @@ void main()
 	// Finally we can write the result to the output image
 	if(frame > 0)
 	{
-		float alpha 	= 0.3;
+		float alpha 	= 1.0 / float(frame + 1);
 		vec3 old_color 	= imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
 		vec3 color 		= mix(old_color, finalColor, alpha);
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 0.0));

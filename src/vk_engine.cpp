@@ -710,7 +710,7 @@ void VulkanEngine::updateCameraMatrices()
 	RTCameraData rtCamera;
 	rtCamera.invProj = glm::inverse(projection);
 	rtCamera.invView = glm::inverse(view);
-	rtCamera.frame = !_denoise ? 0 : _denoise_frame;
+	rtCamera.frame = !_denoise ? glm::vec4(0) : glm::vec4(_denoise_frame);
 
 	//std::cout << _denoise_frame << std::endl;
 
