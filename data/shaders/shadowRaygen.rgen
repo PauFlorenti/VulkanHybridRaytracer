@@ -53,6 +53,7 @@ void main()
 
 	// Finally we can write the result to the output image
 	//imageStore(shadowImage, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	
 	if(frame > 0)
 	{
 		float a = 1.0f / float(frame + 1);

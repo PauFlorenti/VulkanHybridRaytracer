@@ -133,12 +133,12 @@ void VulkanEngine::update(const float dt)
 	updateFrame();
 	updateCameraMatrices();
 
-	//glm::vec4 frame = glm::vec4(_denoise_frame);
+	glm::vec4 frame = glm::vec4(_denoise_frame);
 
-	//void* frameData;
-	//vmaMapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation, &frameData);
-	//memcpy(frameData, &_denoise_frame, sizeof(glm::vec4));
-	//vmaUnmapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation);
+	void* frameData;
+	vmaMapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation, &frameData);
+	memcpy(frameData, &frame, sizeof(glm::vec4));
+	vmaUnmapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation);
 	//std::cout << _denoise_frame << std::endl;
 
 	// Skybox Matrix followin the camera

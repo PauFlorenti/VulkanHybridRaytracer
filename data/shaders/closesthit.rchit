@@ -91,12 +91,9 @@ void main()
 
     if(shadingMode == 0)  // DIFUS
     {
-      if(shadowFactor > 0)
-      {
-        difColor  = computeDiffuse(mat, N, L) * albedo;
-        color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
-        color    += emissive;
-      }
+      difColor  = computeDiffuse(mat, N, L) * albedo;
+      color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      color    += emissive;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
@@ -105,7 +102,7 @@ void main()
       const bool isScattered  = dot(reflected, N) > 0;
 
       difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      color += difColor * light_intensity * light.color.xyz * attenuation;// * shadowFactor;
+      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
 
       prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
     }
