@@ -29,8 +29,6 @@ struct AccelerationStructure {
 	VkAccelerationStructureKHR	handle;
 	uint64_t					deviceAddress = 0;
 	AllocatedBuffer	buffer;
-	//VkBuffer					buffer;
-	//VkDeviceMemory				memory;
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
@@ -86,6 +84,9 @@ public:
 	VkSemaphore					_offscreenSemaphore;
 	VkPipelineLayout			_offscreenPipelineLayout;
 	VkPipeline					_offscreenPipeline;
+
+	AllocatedBuffer				_cameraBuffer;
+	AllocatedBuffer				_cameraPositionBuffer;
 
 	// Skybox pass
 	VkDescriptorSetLayout		_skyboxDescriptorSetLayout;

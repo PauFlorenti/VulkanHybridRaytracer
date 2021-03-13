@@ -2,14 +2,6 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
-struct Material{
-	vec4	  diffuse;
-	vec4	  specular; // w is the Glossines factor
-	float	  ior;	    // index of refraction
-	float	  glossiness;
-	int		  illum;
-};
-
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec3 inColor;

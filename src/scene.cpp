@@ -24,7 +24,7 @@ void Scene::create_scene()
 	// Create lights
 	// -------------
 	Light* light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 12, -5));
 	light->intensity = 100.0f;
 
 	Light* light2 = new Light();
@@ -106,15 +106,15 @@ void Scene::create_scene()
 	lucy->m_matrix = glm::scale(glm::mat4(1), glm::vec3(0.01));
 	
 	_entities.push_back(floor);
-	_entities.push_back(sphere);
+	//_entities.push_back(sphere);
 	//_entities.push_back(duck);
 	//_entities.push_back(cornell);
-	_entities.push_back(mirror);
+	//_entities.push_back(mirror);
 	//_entities.push_back(helmet);
 	_entities.push_back(helmet2);
 	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
-	_entities.push_back(lucy);
+	//_entities.push_back(lucy);
 	//_entities.push_back(cube);
 	//_entities.push_back(lantern);
 }
