@@ -675,7 +675,7 @@ void VulkanEngine::updateFrame()
 
 	if (memcmp(&refMatrix[0][0], &m[0][0], sizeof(glm::mat4)) != 0)
 	{
-		//resetFrame();
+		resetFrame();
 		refMatrix = m;
 	}
 	_denoise_frame++;
