@@ -35,11 +35,11 @@ VkPipelineShaderStageCreateInfo vkinit::pipeline_shader_stage_create_info(
 )
 {
 	VkPipelineShaderStageCreateInfo info = {};
-	info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	info.pNext = nullptr;
-	info.stage = stage;
+	info.sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	info.pNext	= nullptr;
+	info.stage	= stage;
 	info.module = shaderModule;
-	info.pName = "main";
+	info.pName	= "main";
 	
 	return info;
 }
@@ -328,6 +328,20 @@ VkWriteDescriptorSet vkinit::write_descriptor_image(VkDescriptorType type, VkDes
 	write.descriptorType	= type;
 	write.pImageInfo		= imageInfo;
 
+	return write;
+}
+
+VkWriteDescriptorSet vkinit::write_descriptor_acceleration_structure(VkDescriptorSet& dstSet, VkWriteDescriptorSetAccelerationStructureKHR* wdsAccelerationStructure, const uint32_t binding, uint32_t count /*= 1*/)
+{
+	VkWriteDescriptorSet write = {};
+	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write.pNext = wdsAccelerationStructure;
+
+	write.dstBinding		= binding;
+	write.dstSet			= dstSet;
+	write.descriptorCount	= count;
+	write.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+	
 	return write;
 }
 

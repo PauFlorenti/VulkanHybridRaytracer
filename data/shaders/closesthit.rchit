@@ -19,9 +19,11 @@ layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuf
 layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
+layout(set = 0, binding = 11, rgba8) uniform readonly image2D shadowImage;  
 
 void main()
 {
+  
   // Do all vertices, indices and barycentrics calculations
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
@@ -72,29 +74,7 @@ void main()
     L                               = normalize(L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
-    float shadowFactor    = 0.1;
-
-    // Check if light has impact, then calculate shadow
-    if( NdotL > 0 )
-    {
-      for(int a = 0; a < SHADOWSAMPLES; a++)
-      {
-        // Init as shadowed
-        shadowed          = true;
-        const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
-        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-        float tmin = 0.001, tmax = light_distance + 1;
-        
-        // Shadow ray cast
-        traceRayEXT(topLevelAS, flags, 0xFF, 1, 0, 1, 
-          worldPos + dir * 1e-2, tmin, dir, tmax, 1);
-
-        if(!shadowed){
-          shadowFactor++;
-        }
-      }
-      shadowFactor /= SHADOWSAMPLES;
-    }
+    float shadowFactor              = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).x;
 
     // Calculate attenuation factor
     if(light_intensity == 0){
@@ -143,4 +123,6 @@ void main()
       prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
     }
   }
+  
+  //prd.colorAndDist.xyz = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
 }

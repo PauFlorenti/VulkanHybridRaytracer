@@ -131,15 +131,14 @@ void VulkanEngine::update(const float dt)
 {
 	_window->input_update();
 	updateFrame();
+	updateCameraMatrices();
+	glm::vec4 frame = glm::vec4(_denoise_frame);
 
-	glm::mat4 view			= _scene->_camera->getView();
-	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
-	projection[1][1] *= -1;
-
-	// Fill the GPU camera data struct
-	GPUCameraData cameraData;
-	cameraData.view				= view;
-	cameraData.projection		= projection;
+	void* frameData;
+	vmaMapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation, &frameData);
+	memcpy(frameData, &frame, sizeof(glm::vec4));
+	vmaUnmapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation);
+	//std::cout << _denoise_frame << std::endl;
 
 	// Skybox Matrix followin the camera
 	if (_skyboxFollow) {
@@ -150,27 +149,9 @@ void VulkanEngine::update(const float dt)
 		vmaUnmapMemory(_allocator, renderer->_skyboxBuffer._allocation);
 	}
 
-	void* data;
-	vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
-	memcpy(data, &cameraData, sizeof(GPUCameraData));
-	vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
-	
-	// Copy ray tracing camera, it need the inverse
-	RTCameraData rtCamera;
-	rtCamera.invProj	= glm::inverse(projection);
-	rtCamera.invView	= glm::inverse(view);
-	rtCamera.frame		= !_denoise ? 0 : _denoise_frame;
-
-	std::cout << _denoise_frame << std::endl;
-
-	void* rtCameraData;
-	vmaMapMemory(_allocator, rtCameraBuffer._allocation, &rtCameraData);
-	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
-	vmaUnmapMemory(_allocator, rtCameraBuffer._allocation);
-
 	// TODO unify with the deferred update buffer
 	void* rtLightData;
-	vmaMapMemory(_allocator, renderer->lightBuffer._allocation, &rtLightData);
+	vmaMapMemory(_allocator, renderer->_lightBuffer._allocation, &rtLightData);
 	uboLight* rtLightUBO = (uboLight*)rtLightData;
 	for (int i = 0; i < _scene->_lights.size(); i++)
 	{
@@ -187,7 +168,7 @@ void VulkanEngine::update(const float dt)
 		}
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
-	vmaUnmapMemory(_allocator, renderer->lightBuffer._allocation);
+	vmaUnmapMemory(_allocator, renderer->_lightBuffer._allocation);
 
 	// TODO: MEMORY LEAK and update only when instances changed
 	// Rebuild instances matrix for TLAS
@@ -709,6 +690,45 @@ void VulkanEngine::updateCameraMatrices()
 {
 	static glm::mat4 prevView;
 	static glm::mat4 prevProj;
+
+	glm::mat4 view			= _scene->_camera->getView();
+	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
+	projection[1][1] *= -1;
+
+	if (memcmp(&prevView[0][0], &view[0][0], sizeof(glm::mat4)) != 0 || memcmp(&prevProj[0][0], &projection[0][0], sizeof(glm::mat4)) != 0)
+	{
+		// Fill the GPU camera data struct
+		GPUCameraData cameraData;
+		cameraData.view			= view;
+		cameraData.projection	= projection;
+		cameraData.prevView		= prevView;
+		cameraData.prevProj		= prevProj;
+
+		prevView = view;
+		prevProj = projection;
+
+		void* data;
+		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+		memcpy(data, &cameraData, sizeof(GPUCameraData));
+		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+	}
+
+	// Copy RAY-TRACING camera, it need the inverse
+	// --------------------------------------------
+	// TODO: rethink how frame can be passed each frame and update the matrix only if changed
+
+	// Copy ray tracing camera, it need the inverse
+	RTCameraData rtCamera;
+	rtCamera.invProj = glm::inverse(projection);
+	rtCamera.invView = glm::inverse(view);
+	rtCamera.frame = !_denoise ? glm::vec4(0) : glm::vec4(_denoise_frame);
+
+	//std::cout << _denoise_frame << std::endl;
+
+	void* rtCameraData;
+	vmaMapMemory(_allocator, renderer->_rtCameraBuffer._allocation, &rtCameraData);
+	memcpy(rtCameraData, &rtCamera, sizeof(RTCameraData));
+	vmaUnmapMemory(_allocator, renderer->_rtCameraBuffer._allocation);
 }
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)

@@ -50,14 +50,16 @@ struct GPUCameraData
 {
 	glm::mat4 view;
 	glm::mat4 projection;
-	//glm::mat4 viewprojection;
+	glm::mat4 prevView;
+	glm::mat4 prevProj;
 };
 
 struct RTCameraData
 {
 	glm::mat4 invView;
 	glm::mat4 invProj;
-	alignas(16) float frame;
+	glm::vec4 frame;
+	//alignas(16) float frame;
 };
 
 struct GPUSceneData {
@@ -168,7 +170,6 @@ public:
 
 	VkCommandPool	_commandPool;
 
-	AllocatedBuffer rtCameraBuffer;
 	AllocatedBuffer transformBuffer;
 	   
 	// Main functions

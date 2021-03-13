@@ -7,6 +7,7 @@ layout (location = 0) in vec2 inUV;
 layout (set = 0, binding = 0) uniform sampler2D positionTexture;
 layout (set = 0, binding = 1) uniform sampler2D normalTexture;
 layout (set = 0, binding = 2) uniform sampler2D albedoTexture;
+layout (set = 0, binding = 3) uniform sampler2D motionTexture;
 
 struct Light{
 	vec4 pos;	// w used for max distance
@@ -28,9 +29,10 @@ void main()
 	vec3 position 	= texture(positionTexture, inUV).xyz;
 	vec3 normal 	= texture(normalTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
+	vec3 motion		= texture(motionTexture, inUV).xyz * 2.0 - vec3(1);
 	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 
-	if(debug.target > 0)
+	if(debug.target > 0.001)
 	{
 		switch(debug.target){
 			case 1:
@@ -42,6 +44,8 @@ void main()
 			case 3:
 				outFragColor = vec4(albedo, 1);
 				break;
+			case 4:
+				outFragColor = vec4(motion, 1);
 		}
 		return;
 	}

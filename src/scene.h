@@ -10,6 +10,8 @@ public:
 	std::vector<Object*>		_entities;
 	std::vector<Light*>			_lights;
 
+	std::vector<glm::mat4> _matricesVector;
+
 	Camera* _camera;
 
 	unsigned int get_drawable_nodes_size();

@@ -109,10 +109,15 @@ public:
 
 	std::vector<BlasInput>		_blas;
 	std::vector<TlasInstance>	_tlas;
-	AllocatedBuffer				lightBuffer;
+	AllocatedBuffer				_lightBuffer;
 	AllocatedBuffer				_debugBuffer;
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
+	AllocatedBuffer				_rtCameraBuffer;
+	AllocatedBuffer				_vBuffer;	// TODO
+	AllocatedBuffer				_iBuffer;	// TODO
+	AllocatedBuffer				_matricesBuffer;
+	AllocatedBuffer				_idBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
@@ -149,6 +154,33 @@ public:
 	AllocatedBuffer				raygenSBT;
 	AllocatedBuffer				missSBT;
 	AllocatedBuffer				hitSBT;
+
+	// SHADOW VARIABLES ----------------------
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> shadowShaderGroups{};
+	VkDescriptorPool			_shadowDescPool;
+	VkDescriptorSet				_shadowDescSet;
+	VkDescriptorSetLayout		_shadowDescSetLayout;
+	Texture						_shadowImage;
+	VkPipeline					_shadowPipeline;
+	VkPipelineLayout			_shadowPipelineLayout;
+	VkCommandBuffer				_shadowCommandBuffer;
+	VkSemaphore					_shadowSemaphore;
+
+	AllocatedBuffer				sraygenSBT;
+	AllocatedBuffer				smissSBT;
+	AllocatedBuffer				shitSBT;
+
+	// SHADOW POST VARIABLES -----------------
+	VkPipeline					_sPostPipeline;
+	VkPipelineLayout			_sPostPipelineLayout;
+	VkRenderPass				_sPostRenderPass;
+	VkDescriptorPool			_sPostDescPool;
+	VkDescriptorSet				_sPostDescSet;
+	VkDescriptorSetLayout		_sPostDescSetLayout;
+	Texture						_denoisedImage;
+	VkCommandBuffer				_denoiseCommandBuffer;
+	VkSemaphore					_denoiseSemaphore;
+	AllocatedBuffer				_denoiseFrameBuffer;
 
 	void rasterize();
 
@@ -197,6 +229,8 @@ private:
 	
 	void build_deferred_command_buffer();
 
+	void load_data_to_gpu();
+
 	// VKRay
 
 	void create_bottom_acceleration_structure();
@@ -211,13 +245,21 @@ private:
 
 	VkAccelerationStructureInstanceKHR object_to_instance(const TlasInstance& instance);
 
+	void create_shadow_descriptors();
+
 	void create_rt_descriptors();
 
 	void create_shader_binding_table();
 
 	void init_raytracing_pipeline();
 
+	void init_compute_pipeline();
+
 	void build_raytracing_command_buffers();
+
+	void build_shadow_command_buffer();
+
+	void build_compute_command_buffer();
 
 	// POST
 	void create_post_renderPass();

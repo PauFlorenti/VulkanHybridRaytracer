@@ -74,13 +74,16 @@ namespace vkinit {
 		uint32_t binding,
 		uint32_t count = 1);
 
+	VkWriteDescriptorSet write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorImageInfo* imageInfo, uint32_t binding, uint32_t count = 1);
+
+	VkWriteDescriptorSet write_descriptor_acceleration_structure(VkDescriptorSet& dstSet, VkWriteDescriptorSetAccelerationStructureKHR* wdsAccelerationStructure, uint32_t binding, uint32_t count = 1);
+
 	VkCommandBufferBeginInfo command_buffer_begin_info(VkCommandBufferUsageFlags usageFlags);
 
 	VkSubmitInfo submit_info(VkCommandBuffer* cmd);
 
 	VkSamplerCreateInfo sampler_create_info(VkFilter filters, VkSamplerAddressMode samplerAddressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT);
 
-	VkWriteDescriptorSet write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorImageInfo* imageInfo, uint32_t binding, uint32_t count = 1);
 
 	VkBufferCreateInfo buffer_create_info(size_t bufferSize, VkBufferUsageFlags usage);
 
