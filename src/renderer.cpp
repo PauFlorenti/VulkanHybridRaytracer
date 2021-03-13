@@ -251,30 +251,32 @@ void Renderer::init_forward_render_pass()
 
 void Renderer::init_offscreen_render_pass()
 {
-	Texture position, normal, albedo, material, depth;
+	Texture position, normal, albedo, motion, depth;
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &position);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &normal);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &albedo);
-	//VulkanEngine::engine->create_attachment(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &material);
+	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &motion);
 	VulkanEngine::engine->create_attachment(VulkanEngine::engine->_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, &depth);
 
 	_deferredTextures.push_back(position);
 	_deferredTextures.push_back(normal);
 	_deferredTextures.push_back(albedo);
-	//_deferredTextures.push_back(material);
+	_deferredTextures.push_back(motion);
 	_deferredTextures.push_back(depth);
 
-	std::array<VkAttachmentDescription, 4> attachmentDescs = {};
+	const int nAttachments = _deferredTextures.size();
+
+	std::array<VkAttachmentDescription, 5> attachmentDescs = {};
 
 	// Init attachment properties
-	for (uint32_t i = 0; i < 4; i++)
+	for (uint32_t i = 0; i < nAttachments; i++)
 	{
 		attachmentDescs[i].samples			= VK_SAMPLE_COUNT_1_BIT;
 		attachmentDescs[i].loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;
 		attachmentDescs[i].storeOp			= VK_ATTACHMENT_STORE_OP_STORE;
 		attachmentDescs[i].stencilLoadOp	= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachmentDescs[i].stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		if (i == 3)
+		if (i == nAttachments - 1)
 		{
 			attachmentDescs[i].initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;
 			attachmentDescs[i].finalLayout		= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -290,17 +292,17 @@ void Renderer::init_offscreen_render_pass()
 	attachmentDescs[0].format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	attachmentDescs[1].format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	attachmentDescs[2].format = VK_FORMAT_R8G8B8A8_UNORM;
-	//attachmentDescs[3].format = VK_FORMAT_R8G8B8A8_UNORM;
-	attachmentDescs[3].format = VulkanEngine::engine->_depthFormat;
+	attachmentDescs[3].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	attachmentDescs[4].format = VulkanEngine::engine->_depthFormat;
 
 	std::vector<VkAttachmentReference> colorReferences;
 	colorReferences.push_back({ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
 	colorReferences.push_back({ 1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
 	colorReferences.push_back({ 2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
-	//colorReferences.push_back({ 3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
+	colorReferences.push_back({ 3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
 
 	VkAttachmentReference depthReference;
-	depthReference.attachment	= 3;
+	depthReference.attachment	= 4;
 	depthReference.layout		= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 	VkSubpassDescription subpass = {};
@@ -614,7 +616,7 @@ void Renderer::render_gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::Checkbox("Denoise", &VulkanEngine::engine->_denoise);
 
-	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo" };
+	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo", "Motion" };
 	std::vector<const char*> charTargets;
 	charTargets.reserve(targets.size());
 	for (size_t i = 0; i < targets.size(); i++)
@@ -628,6 +630,7 @@ void Renderer::render_gui()
 	if (ImGui::Combo(title, &index, &charTargets[0], targets.size(), targets.size()))
 	{
 		VulkanEngine::engine->debugTarget = index;
+		std::cout << index << std::endl;
 		void* debugData;
 		vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation, &debugData);
 		memcpy(debugData, &VulkanEngine::engine->debugTarget, sizeof(uint32_t));
@@ -753,12 +756,12 @@ void Renderer::init_framebuffers()
 
 void Renderer::init_offscreen_framebuffers()
 {
-	std::array<VkImageView, 4> attachments;
+	std::array<VkImageView, 5> attachments;
 	attachments[0] = _deferredTextures.at(0).imageView;	// Position
 	attachments[1] = _deferredTextures.at(1).imageView;	// Normal
 	attachments[2] = _deferredTextures.at(2).imageView;	// Color	
-	//attachments[3] = _deferredTextures.at(3).imageView;	// Material	
-	attachments[3] = _deferredTextures.at(3).imageView;	// Depth
+	attachments[3] = _deferredTextures.at(3).imageView;	// Motion Vector	
+	attachments[4] = _deferredTextures.at(4).imageView;	// Depth
 
 	VkExtent2D extent = { (uint32_t)VulkanEngine::engine->_window->getWidth(), (uint32_t)VulkanEngine::engine->_window->getHeight() };
 
@@ -988,6 +991,7 @@ void Renderer::init_deferred_descriptors()
 	VkDescriptorSetLayoutBinding positionBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0);	// Position
 	VkDescriptorSetLayoutBinding normalBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1);	// Normals
 	VkDescriptorSetLayoutBinding albedoBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2);	// Albedo
+	VkDescriptorSetLayoutBinding motionBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3);	// Motion
 	VkDescriptorSetLayoutBinding lightBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 4);	// Lights buffer
 	VkDescriptorSetLayoutBinding debugBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 5);	// Debug display
 
@@ -996,6 +1000,7 @@ void Renderer::init_deferred_descriptors()
 		positionBinding,
 		normalBinding,
 		albedoBinding,
+		motionBinding,
 		lightBinding,
 		debugBinding
 	};
@@ -1027,6 +1032,8 @@ void Renderer::init_deferred_descriptors()
 			_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
 		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
+		VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
+			_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion
 
 		VkDescriptorBufferInfo lightBufferDesc;
 		lightBufferDesc.buffer	= _lightBuffer._buffer;
@@ -1041,6 +1048,7 @@ void Renderer::init_deferred_descriptors()
 		VkWriteDescriptorSet positionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorPosition, 0);
 		VkWriteDescriptorSet normalWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorNormal, 1);
 		VkWriteDescriptorSet albedoWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorAlbedo, 2);
+		VkWriteDescriptorSet motionWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].deferredDescriptorSet, &texDescriptorMotion, 3);
 		VkWriteDescriptorSet lightBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _frames[i].deferredDescriptorSet, &lightBufferDesc, 4);
 		VkWriteDescriptorSet debugWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _frames[i].deferredDescriptorSet, &debugDesc, 5);
 
@@ -1048,6 +1056,7 @@ void Renderer::init_deferred_descriptors()
 			positionWrite,
 			normalWrite,
 			albedoWrite,
+			motionWrite,
 			lightBufferWrite,
 			debugWrite
 		};
@@ -1218,9 +1227,10 @@ void Renderer::init_deferred_pipelines()
 	pipBuilder._scissor.offset		= { 0, 0 };
 	pipBuilder._scissor.extent		= extent;
 
-	std::array<VkPipelineColorBlendAttachmentState, 3> blendAttachmentStates = {
+	std::array<VkPipelineColorBlendAttachmentState, 4> blendAttachmentStates = {
 		vkinit::color_blend_attachment_state(
 			VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT, VK_FALSE),
+		vkinit::color_blend_attachment_state(0xf, VK_FALSE),
 		vkinit::color_blend_attachment_state(0xf, VK_FALSE),
 		vkinit::color_blend_attachment_state(0xf, VK_FALSE)
 	};
@@ -1376,11 +1386,12 @@ void Renderer::build_previous_command_buffer()
 
 	VkDeviceSize offset = { 0 };
 
-	std::array<VkClearValue, 4> clearValues;
+	std::array<VkClearValue, 5> clearValues;
 	clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
 	clearValues[1].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-	clearValues[2].color = { 1.0f, 0.0f, 0.0f, 1.0f };
-	clearValues[3].depthStencil = { 1.0f, 0 };
+	clearValues[2].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+	clearValues[3].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+	clearValues[4].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassBeginInfo = {};
 	renderPassBeginInfo.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -3011,11 +3022,12 @@ void Renderer::create_hybrid_descriptors()
 	VkDescriptorSetLayoutBinding vertexBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7, nInstances);	// Vertices
 	VkDescriptorSetLayoutBinding indexBufferBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);	// Indices
 	VkDescriptorSetLayoutBinding texturesBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures); // Textures buffer
-	VkDescriptorSetLayoutBinding skyboxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10, 1);
+	VkDescriptorSetLayoutBinding skyboxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10);
 	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
 	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12); // Scene indices
 	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13);	// Matrices
-	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14);	// storage image
+	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14);	// Shadow image
+	VkDescriptorSetLayoutBinding motionImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 15);	// Motion	image
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
@@ -3033,7 +3045,8 @@ void Renderer::create_hybrid_descriptors()
 		materialBufferBinding,
 		matIdxBufferBinding,
 		skyboxBufferBinding,
-		shadowImageBinding
+		shadowImageBinding,
+		motionImageBinding
 	};
 
 	VkDescriptorSetLayoutCreateInfo setInfo = {};
@@ -3077,6 +3090,8 @@ void Renderer::create_hybrid_descriptors()
 		_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
 	VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
 		_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
+	VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
+		_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
 
 	// lights write
 	VkDescriptorBufferInfo lightDescBuffer;
@@ -3189,7 +3204,8 @@ void Renderer::create_hybrid_descriptors()
 	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 12);
 	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 13);
 	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &shadowImageInfo, 14);
-
+	VkWriteDescriptorSet motionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMotion, 15);
+	
 	std::vector<VkWriteDescriptorSet> writes = {
 		accelerationStructureWrite,	// 0 TLAS
 		storageImageWrite,
@@ -3205,7 +3221,8 @@ void Renderer::create_hybrid_descriptors()
 		materialBufferWrite,
 		matIdxBufferWrite,
 		skyboxBufferWrite,
-		shadowImageWrite
+		shadowImageWrite,
+		motionImageWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);

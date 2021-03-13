@@ -132,7 +132,6 @@ void VulkanEngine::update(const float dt)
 	_window->input_update();
 	updateFrame();
 	updateCameraMatrices();
-
 	glm::vec4 frame = glm::vec4(_denoise_frame);
 
 	void* frameData;
@@ -676,7 +675,7 @@ void VulkanEngine::updateFrame()
 
 	if (memcmp(&refMatrix[0][0], &m[0][0], sizeof(glm::mat4)) != 0)
 	{
-		resetFrame();
+		//resetFrame();
 		refMatrix = m;
 	}
 	_denoise_frame++;
@@ -695,8 +694,6 @@ void VulkanEngine::updateCameraMatrices()
 	glm::mat4 view			= _scene->_camera->getView();
 	glm::mat4 projection	= _scene->_camera->getProjection((float)_window->getWidth() / (float)_window->getHeight());
 	projection[1][1] *= -1;
-
-	// Update RASTERIZATION CAMERA if changed
 
 	if (memcmp(&prevView[0][0], &view[0][0], sizeof(glm::mat4)) != 0 || memcmp(&prevProj[0][0], &projection[0][0], sizeof(glm::mat4)) != 0)
 	{
@@ -720,10 +717,13 @@ void VulkanEngine::updateCameraMatrices()
 	// --------------------------------------------
 	// TODO: rethink how frame can be passed each frame and update the matrix only if changed
 
+	// Copy ray tracing camera, it need the inverse
 	RTCameraData rtCamera;
 	rtCamera.invProj = glm::inverse(projection);
 	rtCamera.invView = glm::inverse(view);
-	rtCamera.frame   = !_denoise ? 0 : _denoise_frame;
+	rtCamera.frame = !_denoise ? glm::vec4(0) : glm::vec4(_denoise_frame);
+
+	//std::cout << _denoise_frame << std::endl;
 
 	void* rtCameraData;
 	vmaMapMemory(_allocator, renderer->_rtCameraBuffer._allocation, &rtCameraData);

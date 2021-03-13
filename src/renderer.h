@@ -119,7 +119,6 @@ public:
 	AllocatedBuffer				_matricesBuffer;
 	AllocatedBuffer				_idBuffer;
 
-
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;
 	AllocatedBuffer				hitShaderBindingTable;

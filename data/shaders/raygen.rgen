@@ -11,7 +11,7 @@ layout(binding = 2, set = 0) uniform CameraProperties
 {
 	mat4 viewInverse;
 	mat4 projInverse;
-	int frame;
+	vec4 frame;
 } cam;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
@@ -19,7 +19,7 @@ layout(location = 1) rayPayloadEXT bool shadowed;
 
 void main() 
 {
-	const int frame = cam.frame;
+	int frame = int(cam.frame.x);
 	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
 
 	vec3 finalColor = vec3(0);

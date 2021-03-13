@@ -99,6 +99,22 @@ vec3 sampleCone(inout uint seed, const vec3 direction, const float angle)
     mat4 rot = rotationMatrix(axis, rotAngle);
 
     return vec3(rot * vec4(x, y, z, 1));//vec3(x, y, z);
+    /*
+    const float cosAngle = cos(angle);
+    const float a = rnd(seed);
+    const float cosTheta = (1.0 - a) + a * cosAngle;
+    const float sinTheta = sqrt(1 - cosTheta * cosTheta);
+    const float phi = rnd(seed) * 2 * PI;
+    
+    vec3 sampleDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+
+    const vec3 north = vec3(0, 0, 1);
+    const vec3 axis = normalize(cross(north, normalize(sampleDir)));
+    const float rotationAngle = acos(dot(normalize(sampleDir), north));
+    mat3 rot = rotMat(axis, rotationAngle);
+
+    return rot * sampleDir;
+    */
 }
 
 vec3 sampleSphere(inout uint seed, const vec3 center, const float r)

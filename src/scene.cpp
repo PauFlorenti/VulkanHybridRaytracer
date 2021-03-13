@@ -54,7 +54,7 @@ void Scene::create_scene()
 	Prefab* p_mirror	= Prefab::GET("cube", Mesh::get_cube());
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
-	//p_glass_sphere->_root[0]->addMaterial(m_glass);
+	p_glass_sphere->_root[0]->addMaterial(m_glass);
 	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
 	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
 	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
@@ -68,7 +68,7 @@ void Scene::create_scene()
 	
 	Object* sphere = new Object();
 	sphere->prefab = p_glass_sphere;
-	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 1, -5));
+	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 5, -5));
 	
 	//Object* duck = new Object();
 	//duck->prefab = p_duck;
@@ -115,6 +115,6 @@ void Scene::create_scene()
 	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
 	_entities.push_back(lucy);
-	_entities.push_back(cube);
+	//_entities.push_back(cube);
 	//_entities.push_back(lantern);
 }
