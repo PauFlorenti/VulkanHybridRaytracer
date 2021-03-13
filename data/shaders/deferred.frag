@@ -110,7 +110,6 @@ void main()
 			kD *= 1.0 - metallic;
 
 			light_color += (kD * albedo / PI + specular) * radiance * NdotL;
-			//light_color += NdotL * light.color.xyz * light_intensity * attenuation;
 		}
 	}
 	

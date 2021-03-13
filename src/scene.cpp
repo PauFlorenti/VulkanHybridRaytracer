@@ -59,7 +59,6 @@ void Scene::create_scene()
 	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
 	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
 	//Prefab* p_car		= Prefab::GET("scene.gltf");
-	//Prefab* p_box		= Prefab::GET("Box.glb");
 	Prefab* p_lucy		= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
 	p_lucy->_root[0]->addMaterial(m_glass);
 
@@ -109,7 +108,7 @@ void Scene::create_scene()
 	//_entities.push_back(sphere);
 	//_entities.push_back(duck);
 	//_entities.push_back(cornell);
-	//_entities.push_back(mirror);
+	_entities.push_back(mirror);
 	//_entities.push_back(helmet);
 	_entities.push_back(helmet2);
 	//_entities.push_back(helmet3);

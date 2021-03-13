@@ -91,7 +91,6 @@ Mesh* Mesh::GET(const char* filename)
 	{
 		return _loadedMeshes[name];
 	}
-	//return mesh;
 }
 
 bool Mesh::load_from_obj(const char* filename)
@@ -787,6 +786,7 @@ int Prefab::loadMaterial(const tinygltf::Model& tmodel, const int index)
 		mat->roughnessFactor			= tpbr.roughnessFactor;
 		mat->diffuseTexture				= tpbr.baseColorTexture.index;
 		mat->metallicRoughnessTexture	= tpbr.metallicRoughnessTexture.index;
+		mat->emissiveTexture			= tmat.emissiveTexture.index;
 	}
 
 	if (Material::exists(mat))

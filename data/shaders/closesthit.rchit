@@ -57,10 +57,15 @@ void main()
   float light_intensity = 1.0;
   float shadowFactor    = 0.0;
 
-  Material mat    = materials.mat[materialID];
-  int shadingMode = int(mat.shadingMetallicRoughness.x);
-  vec3 albedo     = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
-  vec3 emissive   = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
+  Material mat            = materials.mat[materialID];
+  int shadingMode         = int(mat.shadingMetallicRoughness.x);
+  vec3 albedo             = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  vec3 emissive           = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
+  vec3 roughnessMetallic  = mat.textures.w > -1 ? texture(textures[int(mat.textures.w)], uv).xyz : mat.shadingMetallicRoughness.xyz;
+
+  const float roughness   = roughnessMetallic.y;
+  const float metallic    = roughnessMetallic.z;
+  const vec3 V = normalize(-gl_WorldRayDirectionEXT);
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -75,6 +80,7 @@ void main()
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
     float shadowFactor              = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).x;
+    const vec3 H                    = normalize(V + L);
 
     // Calculate attenuation factor
     if(light_intensity == 0){
@@ -91,9 +97,27 @@ void main()
 
     if(shadingMode == 0)  // DIFUS
     {
-      difColor  = computeDiffuse(mat, N, L) * albedo;
-      color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
+      vec3 F0 = vec3(0.04);
+			F0 = mix(F0, albedo, metallic);
+			vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
+			float NDF = DistributionGGX(N, H, roughness);
+			float G = GeometrySmith(N, V, L, roughness);
+
+			vec3 numerator = NDF * G * F;
+			float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
+			vec3 specular = numerator / max(denominator, 0.001);
+
+			vec3 kS = F;
+			vec3 kD = vec3(1.0) - F;
+
+			kD *= 1.0 - metallic;
+
+			color += (kD * albedo / PI + specular) * radiance * NdotL;
+      //difColor  = computeDiffuse(mat, N, L) * albedo;
+      //color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
       color    += emissive;
+      //color = roughnessMetallic;
       prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
     }
     else if(shadingMode == 3) // MIRALL
