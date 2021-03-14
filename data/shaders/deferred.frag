@@ -121,9 +121,9 @@ void main()
 	if(!background)
 		color *= light_color;
 	
-	//color += emissive;
+	color += emissive;
 
-	outFragColor = vec4( color + emissive, 1.0f );
+	outFragColor = vec4( color, 1.0f );
 }
 
 // Trowbridge-Reitz GGX - Normal Distribution Function

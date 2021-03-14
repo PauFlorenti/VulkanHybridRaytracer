@@ -59,9 +59,9 @@ void main()
 
   Material mat            = materials.mat[materialID];
   int shadingMode         = int(mat.shadingMetallicRoughness.x);
-  vec3 albedo             = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(1);
+  vec3 albedo             = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : vec3(mat.diffuse);
   vec3 emissive           = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
-  vec3 roughnessMetallic  = mat.textures.w > -1 ? texture(textures[int(mat.textures.w)], uv).xyz : vec3(0);
+  vec3 roughnessMetallic  = mat.textures.w > -1 ? texture(textures[int(mat.textures.w)], uv).xyz : vec3(0, mat.shadingMetallicRoughness.z, mat.shadingMetallicRoughness.y);
 
   const float roughness   = roughnessMetallic.y;
   const float metallic    = roughnessMetallic.z;

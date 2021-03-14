@@ -14,7 +14,8 @@ void main()
   vec4 color = texture(finalTexture, uv);
   vec3 rgb = color.xyz;
   rgb = max(rgb, 0.001);
+  //rgb = rgb / ( rgb + vec3(1.0));
   //rgb = pow(rgb, vec3(gamma));
 
-  fragColor = vec4(rgb, color.w);//texture(finalTexture, uv);
+  fragColor = vec4(rgb, color.w);
 }
