@@ -23,6 +23,7 @@ layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materia
 layout (set = 0, binding = 14, rgba8) uniform readonly image2D shadowImage; 
 layout (set = 0, binding = 15) uniform sampler2D motionTexture;
 layout (set = 0, binding = 16) uniform sampler2D materialTexture;
+layout (set = 0, binding = 17) uniform sampler2D emissiveTexture;
 
 layout(location = 0) rayPayloadEXT hitPayload prd;
 layout(location = 1) rayPayloadEXT bool isShadowed;
@@ -44,6 +45,7 @@ void main()
 	vec3 albedo 			= texture(albedoTexture, inUV).xyz;
 	vec2 motion	 			= texture(motionTexture, inUV).xy;
 	vec3 material 			= texture(materialTexture, inUV).xyz;
+	vec3 emissive 			= texture(emissiveTexture, inUV).xyz;
 	bool background 		= texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 
 	const float roughness 	= material.y;
@@ -115,8 +117,6 @@ void main()
 
 			kD *= 1.0 - metallic;
 			rayColor *= (kD * albedo / PI + specular) * radiance * NdotL;
-			//vec3 difColor = computeDiffuse(mat, N, L);
-			//rayColor *= difColor * light.color.xyz * light_intensity * attenuation * shadowFactor;
 		}
 		else if(shadingMode == 3)
 		{
@@ -164,7 +164,8 @@ void main()
 				origin 			= prd.origin;
 				direction 		= prd.direction.xyz;
 			}
-		}	
+		}
+		rayColor += emissive;
 		finalColor += rayColor;
 	}
 	

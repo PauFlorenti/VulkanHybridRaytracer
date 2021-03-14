@@ -17,6 +17,7 @@ layout (set = 0, binding = 3) uniform sampler2D motionTexture;
 layout (std140, set = 0, binding = 4) buffer LightBuffer {Light lights[];} lightBuffer;
 layout (set = 0, binding = 5) uniform debugInfo {int target;} debug;
 layout (set = 0, binding = 6) uniform sampler2D materialTexture;
+layout (set = 0, binding = 8) uniform sampler2D emissiveTexture;
 
 const vec3 ambient_light = vec3(0.0);
 const float PI = 3.14159265359;
@@ -33,8 +34,9 @@ void main()
 	vec3 albedo 	= texture(albedoTexture, inUV).xyz;
 	vec3 motion		= texture(motionTexture, inUV).xyz * 2.0 - vec3(1);
 	vec3 material 	= texture(materialTexture, inUV).xyz;
+	vec3 emissive 	= texture(emissiveTexture, inUV).xyz;
 	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
-	float metallic = material.z;
+	float metallic 	= material.z;
 	float roughness = material.y;
 
 	if(debug.target > 0.001)
@@ -54,6 +56,9 @@ void main()
 				break;
 			case 5:
 				outFragColor = vec4(material, 1);
+				break;
+			case 6:
+				outFragColor = vec4(emissive, 1);
 				break;
 		}
 		return;
@@ -115,8 +120,10 @@ void main()
 	
 	if(!background)
 		color *= light_color;
+	
+	//color += emissive;
 
-	outFragColor = vec4( color, 1.0f );
+	outFragColor = vec4( color + emissive, 1.0f );
 }
 
 // Trowbridge-Reitz GGX - Normal Distribution Function
