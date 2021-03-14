@@ -57,8 +57,8 @@ void main()
   const vec3 albedo             = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : mat.diffuse.xyz;
   const vec3 emissive           = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
   const vec3 roughnessMetallic  = mat.textures.w > -1 ? texture(textures[int(mat.textures.w)], uv).xyz : vec3(0, mat.shadingMetallicRoughness.z, mat.shadingMetallicRoughness.y);
-  const float roughness  = roughnessMetallic.y;
-  const float metallic   = roughnessMetallic.z;
+  const float roughness         = roughnessMetallic.y;
+  const float metallic          = roughnessMetallic.z;
 
   // Init values used for lightning
 	vec3 color            = vec3(0);
