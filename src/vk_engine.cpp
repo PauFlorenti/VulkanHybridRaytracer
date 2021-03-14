@@ -22,7 +22,7 @@ VulkanEngine::VulkanEngine()
 
 void VulkanEngine::init()
 {
-	_mode =	DEFERRED;
+	_mode =	RAYTRACING;
 
 	_window->init("Vulkan Pinut", 1700, 900);
 

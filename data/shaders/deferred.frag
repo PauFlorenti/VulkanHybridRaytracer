@@ -19,7 +19,6 @@ layout (set = 0, binding = 5) uniform debugInfo {int target;} debug;
 layout (set = 0, binding = 6) uniform sampler2D materialTexture;
 layout (set = 0, binding = 8) uniform sampler2D emissiveTexture;
 
-const vec3 ambient_light = vec3(0.0);
 const float PI = 3.14159265359;
 
 float DistributionGGX(vec3 N, vec3 H, float a);
@@ -64,11 +63,8 @@ void main()
 		return;
 	}
 
-	vec3 color = vec3(0), light_color = vec3(0);
+	vec3 color = vec3(1), light_color = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
-
-	color = albedo;
-	light_color += ambient_light;
 
 	vec3 N = normalize(normal);
 	
@@ -80,49 +76,53 @@ void main()
 		vec3 V 				= normalize(inCamPosition - position.xyz);
 		vec3 H 				= normalize(V + normalize(L));
 		float NdotL 		= clamp(dot(N, normalize(L)), 0.0, 1.0);
-
-		// Calculate the directional light
-		if(isDirectional)
+		if(NdotL > 0.0)
 		{
-			light_color += (NdotL * light.color.xyz);
-		}
-		else	// Calculate point lights
-		{
-			float light_max_distance 	= light.pos.w;
-			float light_distance 		= length(L);
-			light_intensity 			= light.color.w / (light_distance * light_distance);
+			// Calculate the directional light
+			if(isDirectional)
+			{
+				light_color += (NdotL * light.color.xyz);
+			}
+			else	// Calculate point lights
+			{
+				float light_max_distance 	= light.pos.w;
+				float light_distance 		= length(L);
+				light_intensity 			= light.color.w / (light_distance * light_distance);
 
-			attenuation = light_max_distance - light_distance;
-			attenuation /= light_max_distance;
-			attenuation = max(attenuation, 0.0);
-			attenuation = attenuation * attenuation;
+				attenuation = light_max_distance - light_distance;
+				attenuation /= light_max_distance;
+				attenuation = max(attenuation, 0.0);
+				attenuation = attenuation * attenuation;
 
-			vec3 radiance = light.color.xyz * light_intensity * attenuation;
+				vec3 radiance = light.color.xyz * light_intensity * attenuation;
 
-			vec3 F0 = vec3(0.04);
-			F0 = mix(F0, albedo, metallic);
-			vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
-			float NDF = DistributionGGX(N, H, roughness);
-			float G = GeometrySmith(N, V, L, roughness);
+				vec3 F0 	= vec3(0.04);
+				F0 			= mix(F0, albedo, metallic);
+				vec3 F 		= FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
+				float NDF 	= DistributionGGX(N, H, roughness);
+				float G 	= GeometrySmith(N, V, L, roughness);
 
-			vec3 numerator = NDF * G * F;
-			float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
-			vec3 specular = numerator / max(denominator, 0.001);
+				vec3 numerator 		= NDF * G * F;
+				float denominator 	= 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
+				vec3 specular 		= numerator / max(denominator, 0.001);
 
-			vec3 kS = F;
-			vec3 kD = vec3(1.0) - F;
+				vec3 kS = F;
+				vec3 kD = vec3(1.0) - F;
 
-			kD *= 1.0 - metallic;
+				kD *= 1.0 - metallic;
 
-			light_color += (kD * albedo / PI + specular) * radiance * NdotL;
+				light_color += (kD * albedo / PI + specular) * radiance * NdotL;
+			}
 		}
 	}
 	
-	if(!background)
-		color *= light_color;
-	
-	color += emissive;
-
+	if(!background){
+		color = light_color;
+		color += emissive;
+	}
+	else{
+		color = albedo;
+	}
 	outFragColor = vec4( color, 1.0f );
 }
 

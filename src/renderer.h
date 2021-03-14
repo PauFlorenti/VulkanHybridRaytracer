@@ -161,11 +161,12 @@ public:
 	VkDescriptorPool			_shadowDescPool;
 	VkDescriptorSet				_shadowDescSet;
 	VkDescriptorSetLayout		_shadowDescSetLayout;
-	Texture						_shadowImage;
+	//Texture						_shadowImage;
 	VkPipeline					_shadowPipeline;
 	VkPipelineLayout			_shadowPipelineLayout;
 	VkCommandBuffer				_shadowCommandBuffer;
 	VkSemaphore					_shadowSemaphore;
+	std::vector<Texture>		_shadowImages;
 
 	AllocatedBuffer				sraygenSBT;
 	AllocatedBuffer				smissSBT;
@@ -178,7 +179,7 @@ public:
 	VkDescriptorPool			_sPostDescPool;
 	VkDescriptorSet				_sPostDescSet;
 	VkDescriptorSetLayout		_sPostDescSetLayout;
-	Texture						_denoisedImage;
+	std::vector<Texture>		_denoisedImages;
 	VkCommandBuffer				_denoiseCommandBuffer;
 	VkSemaphore					_denoiseSemaphore;
 	AllocatedBuffer				_denoiseFrameBuffer;

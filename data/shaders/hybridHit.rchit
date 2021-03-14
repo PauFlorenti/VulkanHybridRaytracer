@@ -64,6 +64,7 @@ void main()
 	vec3 color            = vec3(0);
 	float attenuation     = 1.0;
   float light_intensity = 1.0;
+  vec4 direction = vec4(1, 1, 1, 0);
 
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
@@ -98,71 +99,66 @@ void main()
         }
 			}
 			shadowFactor /= SHADOWSAMPLES;
-    }
 
-    // Calculate attenuation factor
-    if(light_intensity == 0){
-      attenuation = 0.1;
-    }
-    else{
-      attenuation = light_max_distance - light_distance;
-      attenuation /= light_max_distance;
-      attenuation = max(attenuation, 0.0);
-      attenuation = isDirectional ? 0.3 : attenuation * attenuation;
-    }
+      // Calculate attenuation factor
+      if(light_intensity == 0){
+        attenuation = 0.1;
+      }
+      else{
+        attenuation = light_max_distance - light_distance;
+        attenuation /= light_max_distance;
+        attenuation = max(attenuation, 0.0);
+        attenuation = isDirectional ? 0.3 : attenuation * attenuation;
+      }
 
-    vec3 difColor = vec3(0);
+      vec3 difColor = vec3(0);
 
-    if(shadingMode == 0)  // DIFUS
-    {
-      vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
-      vec3 F0 = vec3(0.04);
-			F0 = mix(F0, albedo, metallic);
-			vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
-			float NDF = DistributionGGX(N, H, roughness);
-			float G = GeometrySmith(N, V, L, roughness);
+      if(shadingMode == 0)  // DIFUS
+      {
+        vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
+        vec3 F0 = vec3(0.04);
+        F0 = mix(F0, albedo, metallic);
+        vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
 
-			vec3 numerator = NDF * G * F;
-			float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
-			vec3 specular = numerator / max(denominator, 0.001);
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
+        vec3 specular = numerator / max(denominator, 0.001);
 
-			vec3 kS = F;
-			vec3 kD = vec3(1.0) - F;
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - F;
 
-			kD *= 1.0 - metallic;
+        kD *= 1.0 - metallic;
 
-			color    += (kD * albedo / PI + specular) * radiance * NdotL;
-      color    += emissive;
-      prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
-      //difColor  = computeDiffuse(mat, N, L) * albedo;
-      //color    += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
-      //prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
-    }
-    else if(shadingMode == 3) // MIRALL
-    {
-      const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
-      const bool isScattered  = dot(reflected, N) > 0;
+        color    += (kD * albedo / PI + specular) * radiance * NdotL;
+        direction = vec4(1, 1, 1, 0);
+      }
+      else if(shadingMode == 3) // MIRALL
+      {
+        const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
+        const bool isScattered  = dot(reflected, N) > 0;
 
-      difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+        difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+        color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+        direction = vec4(reflected, isScattered ? 1 : 0);
+      }
+      else if(shadingMode == 4) // VIDRE
+      {
+        const float ior       = mat.diffuse.w;
+        const float NdotV     = dot( N, normalize(gl_WorldRayDirectionEXT));
+        const vec3 refrNormal = NdotV > 0.0 ? -N : N;
+        const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-      prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
-    }
-    else if(shadingMode == 4) // VIDRE
-    {
-      const float ior       = mat.diffuse.w;
-      const float NdotV     = dot( N, normalize(gl_WorldRayDirectionEXT));
-			const vec3 refrNormal = NdotV > 0.0 ? -N : N;
-			const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
-
-      color += mat.diffuse.xyz * light_intensity * light.color.xyz;
-			
-      float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
-      const vec4 direction = radicand < 0.0 ? 
-                  vec4(reflect(gl_WorldRayDirectionEXT, N), 1) :
-                  vec4(refract( normalize(gl_WorldRayDirectionEXT), refrNormal, refrEta ), 1);
-
-      prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+        color += mat.diffuse.xyz * light_intensity * light.color.xyz;
+        
+        float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
+        direction = radicand < 0.0 ? 
+                    vec4(reflect(gl_WorldRayDirectionEXT, N), 1) :
+                    vec4(refract( normalize(gl_WorldRayDirectionEXT), refrNormal, refrEta ), 1);
+      }
     }
   }
+  color += emissive;
+  prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
 }

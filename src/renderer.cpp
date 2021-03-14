@@ -1580,17 +1580,23 @@ void Renderer::create_storage_image()
 	VkImageViewCreateInfo imageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _rtImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	VK_CHECK(vkCreateImageView(*device, &imageViewInfo, nullptr, &_rtImage.imageView));
 
-	vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
-		&_shadowImage.image._image, &_shadowImage.image._allocation, nullptr);
+	_shadowImages.reserve(_scene->_lights.size());
 
-	VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _shadowImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VK_CHECK(vkCreateImageView(*device, &shadowImageViewInfo, nullptr, &_shadowImage.imageView));
-
-	vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
-		&_denoisedImage.image._image, &_denoisedImage.image._allocation, nullptr);
+	for (decltype(_scene->_lights.size()) i = 0; i < _scene->_lights.size(); i++)
+	{
+		Texture image, denoisedImage;
+		vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo, 
+			&image.image._image, &image.image._allocation, nullptr);
+		VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, image.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+		VK_CHECK(vkCreateImageView(*device, &shadowImageViewInfo, nullptr, &image.imageView));
+		_shadowImages.emplace_back(image);
 	
-	VkImageViewCreateInfo denoiseImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, _denoisedImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
-	VK_CHECK(vkCreateImageView(*device, &denoiseImageViewInfo, nullptr, &_denoisedImage.imageView));
+		vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
+			&denoisedImage.image._image, &denoisedImage.image._allocation, nullptr);
+		VkImageViewCreateInfo denoiseImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, denoisedImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+		VK_CHECK(vkCreateImageView(*device, &denoiseImageViewInfo, nullptr, &denoisedImage.imageView));
+		_denoisedImages.emplace_back(denoisedImage);
+	}
 
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
 		VkImageMemoryBarrier imageMemoryBarrier{};
@@ -1599,63 +1605,54 @@ void Renderer::create_storage_image()
 		imageMemoryBarrier.oldLayout				= VK_IMAGE_LAYOUT_UNDEFINED;
 		imageMemoryBarrier.newLayout				= VK_IMAGE_LAYOUT_GENERAL;
 		imageMemoryBarrier.subresourceRange			= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		/*
-		VkImageMemoryBarrier shadowImageMemoryBarrier{};
-		shadowImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		shadowImageMemoryBarrier.image				= _shadowImage.image._image;
-		shadowImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
-		shadowImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
-		shadowImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-		VkImageMemoryBarrier denoiseImageMemoryBarrier{};
-		denoiseImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		denoiseImageMemoryBarrier.image				= _denoisedImage.image._image;
-		denoiseImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
-		denoiseImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
-		denoiseImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-		*/
-		VkImageMemoryBarrier barrier[] = { imageMemoryBarrier };
+		VkImageMemoryBarrier barrier[] = { imageMemoryBarrier};
 
 		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, barrier);
 	});
 
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
-
-		VkImageMemoryBarrier shadowImageMemoryBarrier{};
-		shadowImageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		shadowImageMemoryBarrier.image = _shadowImage.image._image;
-		shadowImageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		shadowImageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		shadowImageMemoryBarrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-
-		VkImageMemoryBarrier barrier[] = { shadowImageMemoryBarrier };
-
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, barrier);
-		});
+		std::vector<VkImageMemoryBarrier> shadowBarriers(_shadowImages.size());
+		for (int i = 0; i < _shadowImages.size(); i++)
+		{
+			VkImageMemoryBarrier shadowImageMemoryBarrier{};
+			shadowImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			shadowImageMemoryBarrier.image				= _shadowImages[i].image._image;
+			shadowImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+			shadowImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
+			shadowImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+			shadowBarriers[i] = shadowImageMemoryBarrier;
+		}
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, _shadowImages.size(), shadowBarriers.data());
+	});
 
 	VulkanEngine::engine->immediate_submit([&](VkCommandBuffer cmd) {
-
-		VkImageMemoryBarrier shadowImageMemoryBarrier{};
-		shadowImageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		shadowImageMemoryBarrier.image = _denoisedImage.image._image;
-		shadowImageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		shadowImageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		shadowImageMemoryBarrier.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-
-		VkImageMemoryBarrier barrier[] = { shadowImageMemoryBarrier };
-
-		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, barrier);
-		});
+		std::vector<VkImageMemoryBarrier> denoisedBarriers(_shadowImages.size());
+		for (int i = 0; i < _shadowImages.size(); i++)
+		{
+			VkImageMemoryBarrier denoiseImageMemoryBarrier{};
+			denoiseImageMemoryBarrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			denoiseImageMemoryBarrier.image				= _denoisedImages[i].image._image;
+			denoiseImageMemoryBarrier.oldLayout			= VK_IMAGE_LAYOUT_UNDEFINED;
+			denoiseImageMemoryBarrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;
+			denoiseImageMemoryBarrier.subresourceRange	= { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+			denoisedBarriers[i] = denoiseImageMemoryBarrier;
+		}
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, _shadowImages.size(), denoisedBarriers.data());
+	});
 
 	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 		vmaDestroyImage(VulkanEngine::engine->_allocator, _rtImage.image._image, _rtImage.image._allocation);
-		vmaDestroyImage(VulkanEngine::engine->_allocator, _shadowImage.image._image, _shadowImage.image._allocation);
-		vmaDestroyImage(VulkanEngine::engine->_allocator, _denoisedImage.image._image, _denoisedImage.image._allocation);
 		vkDestroyImageView(*device, _rtImage.imageView, nullptr);
-		vkDestroyImageView(*device, _shadowImage.imageView, nullptr);
-		vkDestroyImageView(*device, _denoisedImage.imageView, nullptr);
-		});
-	
+		for (int i = 0; i < _shadowImages.size(); i++)
+		{
+			vmaDestroyImage(VulkanEngine::engine->_allocator, _shadowImages[i].image._image, _shadowImages[i].image._allocation);
+			vmaDestroyImage(VulkanEngine::engine->_allocator, _denoisedImages[i].image._image, _denoisedImages[i].image._allocation);
+			vkDestroyImageView(*device, _shadowImages[i].imageView, nullptr);
+			vkDestroyImageView(*device, _denoisedImages[i].imageView, nullptr);
+
+		}
+	});
 }
 
 void Renderer::recreate_renderer()
@@ -1956,14 +1953,13 @@ void Renderer::create_shadow_descriptors()
 {
 	std::vector<VkDescriptorPoolSize> poolSize = {
 		{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1},
-		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 100},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
 		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 2);
 	VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_shadowDescPool));
-	//VK_CHECK(vkCreateDescriptorPool(*device, &descriptorPoolCreateInfo, nullptr, &_sPostDescPool));
 
 	// First set
 	// binding 0 = AS
@@ -1979,7 +1975,7 @@ void Renderer::create_shadow_descriptors()
 	const unsigned int nLights		= _scene->_lights.size();
 
 	VkDescriptorSetLayoutBinding accelerationStructureLayoutBinding = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);
-	VkDescriptorSetLayoutBinding storageImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);
+	VkDescriptorSetLayoutBinding storageImageLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 1, nLights);
 	VkDescriptorSetLayoutBinding uniformBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);
 	VkDescriptorSetLayoutBinding vertexBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 3, nInstances);
 	VkDescriptorSetLayoutBinding indexBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4, nInstances);
@@ -2015,9 +2011,12 @@ void Renderer::create_shadow_descriptors()
 	descriptorSetAS.pAccelerationStructures		= &_topLevelAS.handle;
 
 	// Binding = 1 Storage Image
-	VkDescriptorImageInfo imageInfo{};
-	imageInfo.imageView		= _shadowImage.imageView;
-	imageInfo.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
+	std::vector<VkDescriptorImageInfo> shadowsInfo(nLights);
+	for (int i = 0; i < nLights; i++)
+	{
+		shadowsInfo.at(i).imageView = _shadowImages.at(i).imageView;
+		shadowsInfo.at(i).imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	}
 
 	// Binding = 2 Camera data
 	VkDescriptorBufferInfo cameraBufferInfo{};
@@ -2097,7 +2096,7 @@ void Renderer::create_shadow_descriptors()
 
 	// WRITES ---
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_shadowDescSet, &descriptorSetAS, 0);
-	VkWriteDescriptorSet resultImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, &imageInfo, 1);
+	VkWriteDescriptorSet resultImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, shadowsInfo.data(), 1, nLights);
 	VkWriteDescriptorSet uniformBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _shadowDescSet, &cameraBufferInfo, 2);
 	VkWriteDescriptorSet vertexBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, vertexDescInfo.data(), 3, nInstances);
 	VkWriteDescriptorSet indexBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, indexDescInfo.data(), 4, nInstances);
@@ -2118,8 +2117,8 @@ void Renderer::create_shadow_descriptors()
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
 	
-	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1);
+	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0, nLights);
+	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1, nLights);
 	VkDescriptorSetLayoutBinding framebufferBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
 
 	std::vector<VkDescriptorSetLayoutBinding> denoiseBindings({
@@ -2139,14 +2138,16 @@ void Renderer::create_shadow_descriptors()
 	VK_CHECK(vkAllocateDescriptorSets(*device, &denoiseDescriptorSetAllocateInfo, &_sPostDescSet));
 
 	// Binding = 1 Storage Image
-	VkDescriptorImageInfo inputImageInfo{};
-	inputImageInfo.imageView		= _shadowImage.imageView;
-	inputImageInfo.imageLayout		= VK_IMAGE_LAYOUT_GENERAL;
+	std::vector<VkDescriptorImageInfo> inputImagesInfo(nLights);
+	std::vector<VkDescriptorImageInfo> outputImagesInfo(nLights);
+	for (int i = 0; i < nLights; i++)
+	{
+		inputImagesInfo.at(i).imageView = _shadowImages.at(i).imageView;
+		inputImagesInfo.at(i).imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
-	// Binding = 2 Storage Image
-	VkDescriptorImageInfo outputImageInfo{};
-	outputImageInfo.imageView		= _denoisedImage.imageView;
-	outputImageInfo.imageLayout		= VK_IMAGE_LAYOUT_GENERAL;
+		outputImagesInfo.at(i).imageView = _denoisedImages.at(i).imageView;
+		outputImagesInfo.at(i).imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	}
 
 	if (!_denoiseFrameBuffer._buffer)
 		VulkanEngine::engine->create_buffer(sizeof(glm::vec4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _denoiseFrameBuffer);
@@ -2157,8 +2158,8 @@ void Renderer::create_shadow_descriptors()
 	frameBufferInfo.offset = 0;
 	frameBufferInfo.range = sizeof(glm::vec4);
 
-	VkWriteDescriptorSet inputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, &inputImageInfo, 0);
-	VkWriteDescriptorSet outputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, &outputImageInfo, 1);
+	VkWriteDescriptorSet inputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, inputImagesInfo.data(), 0, nLights);
+	VkWriteDescriptorSet outputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, outputImagesInfo.data(), 1, nLights);
 	VkWriteDescriptorSet frameBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _sPostDescSet, &frameBufferInfo, 2);
 
 	std::vector<VkWriteDescriptorSet> writeDenoiseDescriptorSets = {
@@ -2220,7 +2221,7 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding matIdxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);
 	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
 	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_MISS_BIT_KHR, 10);
-	VkDescriptorSetLayoutBinding textureBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);
+	VkDescriptorSetLayoutBinding textureBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11, nLights);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -2370,9 +2371,11 @@ void Renderer::create_rt_descriptors()
 	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	// Binding = 11 Shadow texture
-	VkDescriptorImageInfo shadowImageDescriptor{};
-	shadowImageDescriptor.imageView		= _denoisedImage.imageView;
-	shadowImageDescriptor.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
+	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
+	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
+	{
+		shadowImagesDesc[i] = { nullptr, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
+	}
 
 	// WRITES ---
 	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
@@ -2385,7 +2388,7 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet matIdxBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _rtDescriptorSet, &idDescInfo, 8);
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, &skyboxBufferInfo, 10);
-	VkWriteDescriptorSet shadowBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &shadowImageDescriptor, 11);
+	VkWriteDescriptorSet shadowBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, shadowImagesDesc.data(), 11, nLights);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -3071,7 +3074,7 @@ void Renderer::create_hybrid_descriptors()
 	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
 	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12); // Scene indices
 	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13);	// Matrices
-	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14);	// Shadow image
+	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14, nLights);	// Shadow image
 	VkDescriptorSetLayoutBinding motionImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 15);	// Motion Gbuffer
 	VkDescriptorSetLayoutBinding materialImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 16); // Material Gbuffer
 	VkDescriptorSetLayoutBinding emissiveImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 17); // Emissive Gbuffer
@@ -3237,10 +3240,11 @@ void Renderer::create_hybrid_descriptors()
 	skyboxBufferInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	// Binding = 14 Shadow image
-	VkDescriptorImageInfo shadowImageInfo = {};
-	shadowImageInfo.sampler		= sampler;
-	shadowImageInfo.imageView	= _denoisedImage.imageView;
-	shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
+	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
+	{
+		shadowImagesDesc[i] = { sampler, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
+	}
 
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_hybridDescSet, &descriptorAccelerationStructureInfo, 0);
 	VkWriteDescriptorSet storageImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &storageImageDescriptor, 1);
@@ -3256,7 +3260,7 @@ void Renderer::create_hybrid_descriptors()
 	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &materialBufferInfo, 11);
 	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 12);
 	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 13);
-	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &shadowImageInfo, 14);
+	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, shadowImagesDesc.data(), 14, nLights);
 	VkWriteDescriptorSet motionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMotion, 15);
 	VkWriteDescriptorSet materialImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMaterial, 16);
 	VkWriteDescriptorSet emissiveImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorEmissive, 17);
