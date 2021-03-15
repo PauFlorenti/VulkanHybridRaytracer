@@ -29,8 +29,6 @@ struct AccelerationStructure {
 	VkAccelerationStructureKHR	handle;
 	uint64_t					deviceAddress = 0;
 	AllocatedBuffer	buffer;
-	//VkBuffer					buffer;
-	//VkDeviceMemory				memory;
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
@@ -86,6 +84,9 @@ public:
 	VkSemaphore					_offscreenSemaphore;
 	VkPipelineLayout			_offscreenPipelineLayout;
 	VkPipeline					_offscreenPipeline;
+
+	AllocatedBuffer				_cameraBuffer;
+	AllocatedBuffer				_cameraPositionBuffer;
 
 	// Skybox pass
 	VkDescriptorSetLayout		_skyboxDescriptorSetLayout;
@@ -160,11 +161,12 @@ public:
 	VkDescriptorPool			_shadowDescPool;
 	VkDescriptorSet				_shadowDescSet;
 	VkDescriptorSetLayout		_shadowDescSetLayout;
-	Texture						_shadowImage;
+	//Texture						_shadowImage;
 	VkPipeline					_shadowPipeline;
 	VkPipelineLayout			_shadowPipelineLayout;
 	VkCommandBuffer				_shadowCommandBuffer;
 	VkSemaphore					_shadowSemaphore;
+	std::vector<Texture>		_shadowImages;
 
 	AllocatedBuffer				sraygenSBT;
 	AllocatedBuffer				smissSBT;
@@ -177,7 +179,7 @@ public:
 	VkDescriptorPool			_sPostDescPool;
 	VkDescriptorSet				_sPostDescSet;
 	VkDescriptorSetLayout		_sPostDescSetLayout;
-	Texture						_denoisedImage;
+	std::vector<Texture>		_denoisedImages;
 	VkCommandBuffer				_denoiseCommandBuffer;
 	VkSemaphore					_denoiseSemaphore;
 	AllocatedBuffer				_denoiseFrameBuffer;

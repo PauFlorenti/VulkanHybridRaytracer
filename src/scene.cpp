@@ -24,15 +24,15 @@ void Scene::create_scene()
 	// Create lights
 	// -------------
 	Light* light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 12, -5));
 	light->intensity = 100.0f;
 
 	Light* light2 = new Light();
-	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 15, 0));
+	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 15, -5));
 	light2->intensity = 100.0f;
 
 	_lights.push_back(light);
-	//_lights.push_back(light2);
+	_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------
@@ -44,6 +44,10 @@ void Scene::create_scene()
 	m_glass->diffuseColor = glm::vec4{ 0.7f, 0.7f, 1.0f, 1 };
 	m_glass->shadingModel = 4;
 	m_glass->ior = 1.125;// 1.2f;
+	Material* m_gold = new Material();
+	m_gold->diffuseColor = glm::vec4{ 1.0, 0.71, 0.29, 1.0 };
+	m_gold->metallicFactor = 0.5f;
+	m_gold->roughnessFactor = 0.1f;
 
 	// Create prefabs
 	// --------------
@@ -55,11 +59,12 @@ void Scene::create_scene()
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
+	Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
+	p_gold_sphere->_root[0]->addMaterial(m_gold);
 	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
 	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
 	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
 	//Prefab* p_car		= Prefab::GET("scene.gltf");
-	//Prefab* p_box		= Prefab::GET("Box.glb");
 	Prefab* p_lucy		= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
 	p_lucy->_root[0]->addMaterial(m_glass);
 
@@ -67,8 +72,8 @@ void Scene::create_scene()
 	// ---------------
 	
 	Object* sphere = new Object();
-	sphere->prefab = p_glass_sphere;
-	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 5, -5));
+	sphere->prefab = p_gold_sphere;
+	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
 	
 	//Object* duck = new Object();
 	//duck->prefab = p_duck;

@@ -7,8 +7,8 @@
 #include "helpers.glsl"
 
 struct shadowPayload{
-	vec3 color;
   uint seed;
+  float frame;
 };
 
 layout(location = 0) rayPayloadInEXT shadowPayload prd;
@@ -16,6 +16,7 @@ layout(location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 1, set = 0, rgba8) uniform image2D[] shadowImage;
 layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
 layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
@@ -51,7 +52,6 @@ void main()
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-  float shadowFactor    = 0.0;
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -88,6 +88,16 @@ void main()
       }
       shadowFactor /= SHADOWSAMPLES;
     }
-    prd.color = vec3(shadowFactor);
+
+    if(prd.frame > 0)
+    {
+      float a = 1.0f / float(prd.frame + 1);
+      vec3 old_color = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
+      vec3 c = mix(old_color, vec3(shadowFactor), a);
+      imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1));
+    }
+    else{
+      imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(vec3(shadowFactor), 1.0));
+    }
   }
 }

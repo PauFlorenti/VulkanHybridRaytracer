@@ -29,11 +29,42 @@ struct Material{
 
 // FUNCTIONS --------------------------------------------------
 // Polynomial approximation by Christophe Schlick
-float Schlick(const float cosine, const float refractionIndex)
+// Trowbridge-Reitz GGX - Normal Distribution Function
+float DistributionGGX(vec3 N, vec3 H, float a)
 {
-	float r0 = (1 - refractionIndex) / (1 + refractionIndex);
-	r0 *= r0;
-	return r0 + (1 - r0) * pow(1 - cosine, 5);
+	float a2 = a * a;
+	float NdotH = clamp(dot(N, H), 0.0, 1.0);
+	float NdotH2 = NdotH * NdotH;
+
+	float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+	denom = PI * denom * denom;
+
+	return a2 / denom;
+}
+
+// Geometry Function
+float GeometrySchlickGGX(float NdotV, float k)
+{
+	float nom = NdotV;
+	float denom = NdotV * (1.0 - k) + k;
+
+	return nom/denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float k)
+{
+	float NdotV = clamp(dot(N, V), 0.0, 1.0);
+	float NdotL = clamp(dot(N, L), 0.0, 1.0);
+	float ggx1 = GeometrySchlickGGX(NdotV, k);
+	float ggx2 = GeometrySchlickGGX(NdotL, k);
+
+	return ggx1 / ggx2;
+}
+
+// Fresnel Equation
+vec3 FresnelSchlick(float cosTheta, vec3 F0)
+{
+	return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
 vec3 computeDiffuse(Material m, vec3 normal, vec3 lightDir)

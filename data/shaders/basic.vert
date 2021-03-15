@@ -2,14 +2,6 @@
 
 #extension GL_GOOGLE_include_directive : enable
 
-struct Material{
-	vec4	  diffuse;
-	vec4	  specular; // w is the Glossines factor
-	float	  ior;	    // index of refraction
-	float	  glossiness;
-	int		  illum;
-};
-
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec3 inColor;
@@ -48,7 +40,7 @@ void main()
 
 	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
-	outNormal 	= vec3(pushC.matrix * vec4(inNormal, 0.0)).xyz;
+	outNormal 	= mat3(transpose(inverse(pushC.matrix))) * vec3(inNormal);
     outUV 		= inUV;
 	ndc 		= transformationMatrix * vec4(inPosition, 1.0);	// in homogeneous space
 	ndcPrev 	= previousTransformation * vec4(inPosition, 1.0);

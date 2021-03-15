@@ -12,6 +12,8 @@ layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
 layout (location = 2) out vec4 outAlbedo;
 layout (location = 3) out vec4 outMotion;
+layout (location = 4) out vec4 outMaterial;
+layout (location = 5) out vec4 outEmissive;
 
 // Set 1: texture array
 layout(set = 0, binding = 1) uniform sampler2D[] textures;
@@ -29,13 +31,15 @@ void main()
     vec3 N          = normalize( inNormal );
     vec3 color      = pushC.textures.x > -1 ? texture(textures[int(pushC.textures.x)], inUV).xyz * inColor : pushC.color.xyz;
     vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);
-    color += emissive;
+    vec3 material   = pushC.textures.w > -1 ? texture(textures[int(pushC.textures.w)], inUV).xyz : vec3(0, pushC.shadingMetallicRoughness.z, pushC.shadingMetallicRoughness.y);
 
     float materialIdx = pushC.shadingMetallicRoughness.w / 100;
 
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );
     outAlbedo   = vec4( color, 1.0 );
+    outMaterial = vec4( material, 1.0 );
+    outEmissive = vec4( emissive, 1.0 );
 
     // convert to clip space
     vec3 ndc            = inNdc.xyz / inNdc.w;

@@ -138,7 +138,7 @@ public:
 	UploadContext						_uploadContext;
 
 	// Set 0 is a Global set - updated once per frame
-	AllocatedBuffer						_cameraBuffer;	// Buffer to hold all information from camera to the shader
+	//AllocatedBuffer						_cameraBuffer;	// Buffer to hold all information from camera to the shader
 	GPUSceneData						_sceneParameters;
 	AllocatedBuffer						_sceneBuffer;	// Buffer to hold all information involving the scene
 

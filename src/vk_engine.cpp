@@ -697,6 +697,11 @@ void VulkanEngine::updateCameraMatrices()
 
 	if (memcmp(&prevView[0][0], &view[0][0], sizeof(glm::mat4)) != 0 || memcmp(&prevProj[0][0], &projection[0][0], sizeof(glm::mat4)) != 0)
 	{
+		void* camPosData;
+		vmaMapMemory(_allocator, renderer->_cameraPositionBuffer._allocation, &camPosData);
+		memcpy(camPosData, &_scene->_camera->_position, sizeof(glm::vec3));
+		vmaUnmapMemory(_allocator, renderer->_cameraPositionBuffer._allocation);
+
 		// Fill the GPU camera data struct
 		GPUCameraData cameraData;
 		cameraData.view			= view;
@@ -708,9 +713,9 @@ void VulkanEngine::updateCameraMatrices()
 		prevProj = projection;
 
 		void* data;
-		vmaMapMemory(_allocator, _cameraBuffer._allocation, &data);
+		vmaMapMemory(_allocator, renderer->_cameraBuffer._allocation, &data);
 		memcpy(data, &cameraData, sizeof(GPUCameraData));
-		vmaUnmapMemory(_allocator, _cameraBuffer._allocation);
+		vmaUnmapMemory(_allocator, renderer->_cameraBuffer._allocation);
 	}
 
 	// Copy RAY-TRACING camera, it need the inverse
