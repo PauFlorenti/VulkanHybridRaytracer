@@ -678,7 +678,8 @@ void VulkanEngine::updateFrame()
 		resetFrame();
 		refMatrix = m;
 	}
-	_denoise_frame++;
+	if(_denoise_frame < 100)
+		_denoise_frame++;
 }
 
 void VulkanEngine::resetFrame()

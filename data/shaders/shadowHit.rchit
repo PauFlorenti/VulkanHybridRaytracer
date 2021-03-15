@@ -22,6 +22,7 @@ layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
 layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
 layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
 layout(set = 0, binding = 7) buffer sceneBuffer { vec4 idx[]; } objIndices;
+layout(set = 0, binding = 8) uniform sampler2D motionTexture;
 
 void main()
 {
@@ -45,11 +46,15 @@ void main()
 
   const mat4 model = matrices.m[transformationID];
 
+  const vec2 pixelCenter	= vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
+	const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
+
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
   const vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   const vec3 N        = normalize(model * vec4(normal, 0)).xyz;
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+  vec2 motion   = texture(motionTexture, inUV).xy * 2.0 - vec2(1.0);
 
   // Init values used for lightning
 
@@ -89,15 +94,35 @@ void main()
       shadowFactor /= SHADOWSAMPLES;
     }
 
+    motion.y = 1.0 - motion.y;
+    vec2 reprojectedUV = gl_LaunchIDEXT.xy - motion;
+
+    if(prd.frame > 0)
+    {
+      float a = 1.0f / float(prd.frame + 1);
+      vec3 cLast = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
+      vec3 c = mix(cLast, vec3(shadowFactor), a);
+      imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
+    }
+    else{
+      vec3 cLast = imageLoad(shadowImage[i], ivec2(reprojectedUV)).rgb;
+      vec3 c = mix(cLast, vec3(shadowFactor), 0.5);
+      imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
+    }
+
+    /*
     if(prd.frame > 0)
     {
       float a = 1.0f / float(prd.frame + 1);
       vec3 old_color = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
       vec3 c = mix(old_color, vec3(shadowFactor), a);
       imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1));
+      //imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(motion, 1));
     }
     else{
+      //imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(motion, 1.0));
       imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(vec3(shadowFactor), 1.0));
     }
+    */
   }
 }
