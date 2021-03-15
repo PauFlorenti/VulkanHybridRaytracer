@@ -32,7 +32,7 @@ void Scene::create_scene()
 	light2->intensity = 100.0f;
 
 	_lights.push_back(light);
-	_lights.push_back(light2);
+	//_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------

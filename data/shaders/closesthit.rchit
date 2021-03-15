@@ -19,7 +19,7 @@ layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuf
 layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials;
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
-layout(set = 0, binding = 11, rgba8) uniform readonly image2D[] shadowImage;  
+//layout(set = 0, binding = 11, rgba8) uniform readonly image2D[] shadowImage;  
 
 void main()
 {
@@ -81,11 +81,30 @@ void main()
     L                               = normalize(L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
-    float shadowFactor              = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).x;
+    //float shadowFactor              = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).x;
+    float shadowFactor = 0.05;
     const vec3 H                    = normalize(V + L);
 
     if(NdotL > 0.0)
     {
+
+			for(int a = 0; a < SHADOWSAMPLES; a++)
+			{
+        // Init as shadowed
+				shadowed 	        = true;
+				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
+        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+        // Shadow ray cast
+				float tmin = 0.001, tmax  = light_distance + 1;
+				traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+          worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+
+				if(!shadowed){
+					shadowFactor++;
+        }
+			}
+			shadowFactor /= SHADOWSAMPLES;
+
       // Calculate attenuation factor
       if(light_intensity == 0){
         attenuation = 0.0;
@@ -117,7 +136,7 @@ void main()
 
         kD *= 1.0 - metallic;
 
-        color    += (kD * albedo / PI + specular) * radiance * NdotL;
+        color += (kD * albedo / PI + specular) * radiance * NdotL;
         direction = vec4(1, 1, 1, 0);
       }
       else if(shadingMode == 3) // MIRALL
@@ -136,7 +155,7 @@ void main()
         const vec3 refrNormal = NdotV > 0.0 ? -N : N;
         const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-        color += mat.diffuse.xyz * light_intensity * light.color.xyz;
+        color += mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation;
 
         float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
         direction = radicand < 0.0 ? 
@@ -144,8 +163,8 @@ void main()
                     vec4(refract( gl_WorldRayDirectionEXT, refrNormal, refrEta ), 1);
       }
     }
+    //prd.colorAndDist.xyz = vec3(shadowFactor);//imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
   }
   color    += emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
-  //prd.colorAndDist.xyz = imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
 }

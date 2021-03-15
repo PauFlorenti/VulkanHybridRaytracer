@@ -497,17 +497,17 @@ void Renderer::raytrace()
 	submit.commandBufferCount	= 1;
 	submit.pCommandBuffers		= &_shadowCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	// Compute pass
 	submit.pWaitSemaphores		= &_shadowSemaphore;
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	// RTX Pass
-	submit.pWaitSemaphores		= &_denoiseSemaphore;
+	submit.pWaitSemaphores = &get_current_frame()._presentSemaphore; _denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_rtCommandBuffer;
 
