@@ -48,7 +48,7 @@ void main()
   // Calculate worldPos by using ray information
   const vec3 normal   = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   const vec2 uv       = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  const vec3 N        = normalize(model * vec4(normal, 0)).xyz;
+  const vec3 N        = normalize(mat3(transpose(inverse(model))) * normal).xyz;
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
@@ -119,7 +119,6 @@ void main()
 
         color    += (kD * albedo / PI + specular) * radiance * NdotL;
         direction = vec4(1, 1, 1, 0);
-        //prd       = hitPayload(vec4(color, gl_HitTEXT), vec4(1, 1, 1, 0), worldPos, prd.seed);
       }
       else if(shadingMode == 3) // MIRALL
       {
@@ -129,7 +128,6 @@ void main()
         difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
         color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
         direction = vec4(reflected, isScattered ? 1 : 0);
-        //prd = hitPayload(vec4(color, gl_HitTEXT), vec4(reflected, isScattered ? 1 : 0), worldPos, prd.seed);
       }
       else if(shadingMode == 4) // VIDRE
       {
@@ -144,12 +142,10 @@ void main()
         direction = radicand < 0.0 ? 
                     vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
                     vec4(refract( gl_WorldRayDirectionEXT, refrNormal, refrEta ), 1);
-
-        //prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
       }
     }
   }
   color    += emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
-  //prd.colorAndDist.xyz = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
+  prd.colorAndDist.xyz = imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
 }

@@ -7,7 +7,6 @@
 #include "helpers.glsl"
 
 struct shadowPayload{
-	//vec3 color;
   uint seed;
   float frame;
 };
@@ -53,7 +52,6 @@ void main()
   const vec3 worldPos = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
   // Init values used for lightning
-  float shadowFactor    = 0.0;
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)

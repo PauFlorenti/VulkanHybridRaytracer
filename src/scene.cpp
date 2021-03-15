@@ -24,11 +24,11 @@ void Scene::create_scene()
 	// Create lights
 	// -------------
 	Light* light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 12, -5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(10, 12, -5));
 	light->intensity = 100.0f;
 
 	Light* light2 = new Light();
-	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 15, 0));
+	light2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 15, -5));
 	light2->intensity = 100.0f;
 
 	_lights.push_back(light);
@@ -119,7 +119,7 @@ void Scene::create_scene()
 	_entities.push_back(helmet2);
 	//_entities.push_back(helmet3);
 	//_entities.push_back(car);
-	//_entities.push_back(lucy);
+	_entities.push_back(lucy);
 	//_entities.push_back(cube);
 	//_entities.push_back(lantern);
 }
