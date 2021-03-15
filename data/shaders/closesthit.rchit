@@ -147,5 +147,5 @@ void main()
   }
   color    += emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
-  prd.colorAndDist.xyz = imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
+  //prd.colorAndDist.xyz = imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
 }

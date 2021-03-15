@@ -59,8 +59,8 @@ void Scene::create_scene()
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
-	p_gold_sphere->_root[0]->addMaterial(m_gold);
+	//Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
+	//p_gold_sphere->_root[0]->addMaterial(m_gold);
 	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
 	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
 	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
@@ -72,7 +72,7 @@ void Scene::create_scene()
 	// ---------------
 	
 	Object* sphere = new Object();
-	sphere->prefab = p_gold_sphere;
+	sphere->prefab = p_glass_sphere;
 	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
 	
 	//Object* duck = new Object();
