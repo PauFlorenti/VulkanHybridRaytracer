@@ -82,7 +82,7 @@ void main()
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
 		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
     //float shadowFactor              = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).x;
-    float shadowFactor = 0.05;
+    float shadowFactor = 0.1;
     const vec3 H                    = normalize(V + L);
 
     if(NdotL > 0.0)
@@ -104,6 +104,7 @@ void main()
         }
 			}
 			shadowFactor /= SHADOWSAMPLES;
+    }
 
       // Calculate attenuation factor
       if(light_intensity == 0){
@@ -162,7 +163,6 @@ void main()
                     vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
                     vec4(refract( gl_WorldRayDirectionEXT, refrNormal, refrEta ), 1);
       }
-    }
     //prd.colorAndDist.xyz = vec3(shadowFactor);//imageLoad(shadowImage[1], ivec2(gl_LaunchIDEXT.xy)).xyz;
   }
   color    += emissive;

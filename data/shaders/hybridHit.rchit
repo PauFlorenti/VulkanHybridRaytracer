@@ -99,7 +99,7 @@ void main()
         }
 			}
 			shadowFactor /= SHADOWSAMPLES;
-
+    }
       // Calculate attenuation factor
       if(light_intensity == 0){
         attenuation = 0.1;
@@ -157,7 +157,7 @@ void main()
                     vec4(reflect(gl_WorldRayDirectionEXT, N), 1) :
                     vec4(refract( normalize(gl_WorldRayDirectionEXT), refrNormal, refrEta ), 1);
       }
-    }
+    //}
   }
   color += emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
