@@ -188,6 +188,7 @@ void main()
 	if(background)
 		finalColor = albedo;
 
-	//vec3 scolor = imageLoad(shadowImage, ivec2(gl_LaunchIDEXT.xy)).xyz;
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	//vec4 scolor = imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy));
+	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), scolor);
 }

@@ -91,10 +91,29 @@ void main()
     const vec3 H                    = normalize(V + L);
 		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
     const float NdotH               = clamp(dot(N, H), 0.0, 1.0);
-    float shadowFactor              = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).x;
+    float shadowFactor = 0.0;
+    //float shadowFactor              = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).x;
 
     if(NdotL > 0.0)
     {
+			for(int a = 0; a < SHADOWSAMPLES; a++)
+			{
+        // Init as shadowed
+				shadowed 	        = true;
+				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
+        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+        // Shadow ray cast
+				float tmin = 0.001, tmax  = light_distance + 1;
+				traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+          worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+
+				if(!shadowed){
+					shadowFactor++;
+        }
+			}
+			shadowFactor /= SHADOWSAMPLES;
+    }
+
       // Calculate attenuation factor
       if(light_intensity == 0){
         attenuation = 0.0;
@@ -122,7 +141,7 @@ void main()
         vec3 kS = F;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-        Lo    += (kD * albedo / PI + specular) * radiance * NdotL;
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
         direction = vec4(1, 1, 1, 0);
       }
       else if(shadingMode == 3) // MIRALL
@@ -148,12 +167,11 @@ void main()
                     vec4(reflect(gl_WorldRayDirectionEXT, N), 1) : 
                     vec4(refract( gl_WorldRayDirectionEXT, refrNormal, refrEta ), 1);
       }
-    }
   }
 
   // Ambient from IBL
-  vec3 F = FresnelSchlick(NdotV, F0);
-  vec3 kD = (1.0 - F) * (1.0 - metallic);
+  vec3 F       = FresnelSchlick(NdotV, F0);
+  vec3 kD      = (1.0 - F) * (1.0 - metallic);
   vec3 diffuse = kD * albedo * irradiance;
   vec3 ambient = diffuse;
 

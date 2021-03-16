@@ -497,17 +497,17 @@ void Renderer::raytrace()
 	submit.commandBufferCount	= 1;
 	submit.pCommandBuffers		= &_shadowCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	// Compute pass
 	submit.pWaitSemaphores		= &_shadowSemaphore;
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 
 	// RTX Pass
-	submit.pWaitSemaphores		= &_denoiseSemaphore;
+	submit.pWaitSemaphores = &get_current_frame()._presentSemaphore; _denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_rtCommandBuffer;
 
@@ -603,13 +603,6 @@ void Renderer::rasterize_hybrid()
 	present.pImageIndices		= &VulkanEngine::engine->_indexSwapchainImage;
 
 	VK_CHECK(vkQueuePresentKHR(VulkanEngine::engine->_graphicsQueue, &present));
-	/*
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-		VulkanEngine::engine->recreate_swapchain();
-	}
-	else if (result != VK_SUCCESS)
-		throw std::runtime_error("failed to present swap chain images!");
-		*/
 }
 
 void Renderer::render_gui()
@@ -769,8 +762,8 @@ void Renderer::init_offscreen_framebuffers()
 	attachments[1] = _deferredTextures.at(1).imageView;	// Normal
 	attachments[2] = _deferredTextures.at(2).imageView;	// Color	
 	attachments[3] = _deferredTextures.at(3).imageView;	// Motion Vector	
-	attachments[4] = _deferredTextures.at(4).imageView;	// Material Vector	
-	attachments[5] = _deferredTextures.at(5).imageView;	// Material Vector	
+	attachments[4] = _deferredTextures.at(4).imageView;	// Material Properties
+	attachments[5] = _deferredTextures.at(5).imageView;	// Emissive Color
 	attachments[6] = _deferredTextures.at(6).imageView;	// Depth
 
 	VkExtent2D extent = { (uint32_t)VulkanEngine::engine->_window->getWidth(), (uint32_t)VulkanEngine::engine->_window->getHeight() };
@@ -1968,6 +1961,7 @@ void Renderer::create_shadow_descriptors()
 		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 100},
 		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 10},
 		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 100},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
 	};
 
 	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo = vkinit::descriptor_pool_create_info(poolSize, 2);
@@ -1982,6 +1976,7 @@ void Renderer::create_shadow_descriptors()
 	// binding 5 = Model matrices buffer
 	// binding 6 = Lights buffer
 	// binding 7 = IDs
+	// binding 8 = Motion Gbuffer
 
 	const unsigned int nInstances	= _scene->_entities.size();
 	const unsigned int nLights		= _scene->_lights.size();
@@ -1994,6 +1989,7 @@ void Renderer::create_shadow_descriptors()
 	VkDescriptorSetLayoutBinding matrixBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5);
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
 	VkDescriptorSetLayoutBinding idsBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
+	VkDescriptorSetLayoutBinding motionImageBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);	// Motion Gbuffer
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -2003,7 +1999,8 @@ void Renderer::create_shadow_descriptors()
 		indexBufferBinding,
 		matrixBufferBinding,
 		lightBufferBinding,
-		idsBufferBinding
+		idsBufferBinding,
+		motionImageBinding
 	});
 
 	// Allocate Descriptor
@@ -2106,6 +2103,10 @@ void Renderer::create_shadow_descriptors()
 	idDescInfo.offset = 0;
 	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
 
+	// Binding = 8 Motion
+	VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
+		_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion GBuffer
+
 	// WRITES ---
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_shadowDescSet, &descriptorSetAS, 0);
 	VkWriteDescriptorSet resultImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _shadowDescSet, shadowsInfo.data(), 1, nLights);
@@ -2115,6 +2116,7 @@ void Renderer::create_shadow_descriptors()
 	VkWriteDescriptorSet matrixBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &matrixDescInfo, 5);
 	VkWriteDescriptorSet lightsBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &lightBufferInfo, 6);
 	VkWriteDescriptorSet idsBufferWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &idDescInfo, 7);
+	VkWriteDescriptorSet motionImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _shadowDescSet, &texDescriptorMotion, 8);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2124,15 +2126,18 @@ void Renderer::create_shadow_descriptors()
 		indexBufferWrite,
 		matrixBufferWrite,
 		lightsBufferWrite,
-		idsBufferWrite
+		idsBufferWrite,
+		motionImageWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
 	
+	// COMPUTE PASS
+	//-------------
 	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0, nLights);
 	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1, nLights);
 	VkDescriptorSetLayoutBinding framebufferBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
-
+	
 	std::vector<VkDescriptorSetLayoutBinding> denoiseBindings({
 		inputImageLayoutBinding,
 		resultImageLayoutBinding,
