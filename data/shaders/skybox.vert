@@ -18,7 +18,13 @@ layout(set = 0, binding = 2) uniform MatrixBuffer { mat4 matrix; } matrixBuf;
 
 void main()
 {
-    //gl_Position = cameraData.projection * cameraData.view * mat4(1) * vec4(inPosition, 1);
-    gl_Position = cameraData.projection * cameraData.view * matrixBuf.matrix * vec4(inPosition, 1);
+    float angle = radians(-90);
+    mat4 rotMatrix = mat4(  vec4(cos(angle), 0, sin(angle), 0),
+                            vec4(0, 1, 0, 0),
+                            vec4(-sin(angle), 0, cos(angle), 0),
+                            vec4(0, 0, 0, 1));
+
+    mat4 model = matrixBuf.matrix * rotMatrix;
+    gl_Position = cameraData.projection * cameraData.view * model * vec4(inPosition, 1);
     outUV = inUV;
 }

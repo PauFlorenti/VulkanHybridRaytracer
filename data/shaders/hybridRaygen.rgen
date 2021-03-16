@@ -19,6 +19,7 @@ layout (set = 0, binding = 3) uniform sampler2D positionTexture;
 layout (set = 0, binding = 4) uniform sampler2D normalTexture;
 layout (set = 0, binding = 5) uniform sampler2D albedoTexture;
 layout (set = 0, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
+layout (set = 0, binding = 10) uniform sampler2D[] environmentTexture;
 layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
 layout (set = 0, binding = 14, rgba8) uniform readonly image2D[] shadowImage; 
 layout (set = 0, binding = 15) uniform sampler2D motionTexture;
@@ -50,12 +51,18 @@ void main()
 
 	const float roughness 	= material.y;
 	const float metallic 	= material.z;
+	const vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
 	// Using the pixel coordinates we can apply the inverse transformation of the view and procjection matrices of the camera to obtain
 	// the origin and target of the ray
 	const vec4 camPosition	= cam.viewInverse * vec4(0,0,0,1);
     const vec3 V			= normalize(camPosition.xyz - position);
     const vec3 N 			= normalize(normal);
+	const float NdotV 		= clamp(dot(N, V), 0.0, 1.0);
+
+	// Environment 
+  	vec2 environmentUV = vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
+  	vec3 irradiance = texture(environmentTexture[1], environmentUV).xyz;
 
 	float tmin 				= 0.001;
 	float tmax 				= 10000.0;
@@ -105,13 +112,11 @@ void main()
 			{
 				vec3 radiance 	= light.color.xyz * light_intensity * attenuation * shadowFactor;
 				const vec3 H 	= normalize(V + L);
-				vec3 F0 		= vec3(0.04);
-				F0 				= mix(F0, albedo, metallic);
 				vec3 F 			= FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
-				float NDF 		= DistributionGGX(N, H, roughness);
+				float D 		= DistributionGGX(N, H, roughness);
 				float G 		= GeometrySmith(N, V, L, roughness);
 
-				vec3 numerator = NDF * G * F;
+				vec3 numerator = D * G * F;
 				float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
 				vec3 specular = numerator / max(denominator, 0.001);
 
@@ -120,7 +125,6 @@ void main()
 
 				kD *= 1.0 - metallic;
 				rayColor *= (kD * albedo / PI + specular) * radiance * NdotL;
-				//finalColor += (kD * albedo / PI + specular) * radiance * NdotL;
 			}
 			else if(shadingMode == 3)
 			{
@@ -135,7 +139,6 @@ void main()
 
 					if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
 					{
-						//finalColor += rayColor;
 						break;
 					}
 					origin 			= prd.origin;
@@ -164,7 +167,6 @@ void main()
 
 					if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
 					{
-						//finalColor += rayColor;
 						break;
 					}
 					origin 			= prd.origin;
@@ -174,7 +176,14 @@ void main()
 			finalColor += rayColor;
 		}
 	}
-	finalColor += emissive;
+
+	// Ambient from IBL
+  	vec3 F = FresnelSchlick(NdotV, F0);
+  	vec3 kD = (1.0 - F) * (1.0 - metallic);
+  	vec3 diffuse = kD * albedo * irradiance;
+  	vec3 ambient = diffuse;
+
+	finalColor += ambient + emissive;
 	
 	if(background)
 		finalColor = albedo;

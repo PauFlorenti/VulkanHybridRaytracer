@@ -18,6 +18,7 @@ layout (std140, set = 0, binding = 4) buffer LightBuffer {Light lights[];} light
 layout (set = 0, binding = 5) uniform debugInfo {int target;} debug;
 layout (set = 0, binding = 6) uniform sampler2D materialTexture;
 layout (set = 0, binding = 8) uniform sampler2D emissiveTexture;
+layout (set = 0, binding = 9) uniform sampler2D environmentTexture;
 
 const float PI = 3.14159265359;
 
@@ -37,6 +38,13 @@ void main()
 	bool background = texture(positionTexture, inUV).w == 0 && texture(normalTexture, inUV).w == 0;
 	float metallic 	= material.z;
 	float roughness = material.y;
+
+	vec3 N 			= normalize(normal);
+	vec3 V 			= normalize(inCamPosition - position.xyz);
+	float NdotV 	= clamp(dot(N, V), 0.0, 1.0);
+	vec3 F0 		= mix(vec3(0.04), albedo, metallic);
+	vec2 envUV 		= vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
+	vec3 irradiance = texture(environmentTexture, envUV).xyz;
 
 	if(debug.target > 0.001)
 	{
@@ -63,17 +71,14 @@ void main()
 		return;
 	}
 
-	vec3 color = vec3(1), light_color = vec3(0);
+	vec3 color = vec3(1), Lo = vec3(0);
 	float attenuation = 1.0, light_intensity = 1.0;
-
-	vec3 N = normalize(normal);
 	
 	for(int i = 0; i < lightBuffer.lights.length(); i++)
 	{
 		Light light 		= lightBuffer.lights[i];
 		bool isDirectional 	= light.pos.w < 0;
 		vec3 L 				= isDirectional ? light.pos.xyz : (light.pos.xyz - position.xyz);
-		vec3 V 				= normalize(inCamPosition - position.xyz);
 		vec3 H 				= normalize(V + normalize(L));
 		float NdotL 		= clamp(dot(N, normalize(L)), 0.0, 1.0);
 		if(NdotL > 0.0)
@@ -81,7 +86,7 @@ void main()
 			// Calculate the directional light
 			if(isDirectional)
 			{
-				light_color += (NdotL * light.color.xyz);
+				Lo += (NdotL * light.color.xyz);
 			}
 			else	// Calculate point lights
 			{
@@ -96,14 +101,12 @@ void main()
 
 				vec3 radiance = light.color.xyz * light_intensity * attenuation;
 
-				vec3 F0 	= vec3(0.04);
-				F0 			= mix(F0, albedo, metallic);
 				vec3 F 		= FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
 				float NDF 	= DistributionGGX(N, H, roughness);
 				float G 	= GeometrySmith(N, V, L, roughness);
 
 				vec3 numerator 		= NDF * G * F;
-				float denominator 	= 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
+				float denominator 	= 4.0 * NdotV * NdotL;
 				vec3 specular 		= numerator / max(denominator, 0.001);
 
 				vec3 kS = F;
@@ -111,13 +114,19 @@ void main()
 
 				kD *= 1.0 - metallic;
 
-				light_color += (kD * albedo / PI + specular) * radiance * NdotL;
+				Lo += (kD * albedo / PI + specular) * radiance * NdotL;
 			}
 		}
 	}
 	
 	if(!background){
-		color = light_color;
+		// Ambient from IBL
+		vec3 F = FresnelSchlick(NdotV, F0);
+  		vec3 kD = (1.0 - F) * (1.0 - metallic);
+  		vec3 diffuse = kD * albedo * irradiance;
+  		vec3 ambient = diffuse;
+
+		color = Lo + ambient;
 		color += emissive;
 	}
 	else{

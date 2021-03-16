@@ -41,7 +41,8 @@ namespace vkinit {
 	VkImageViewCreateInfo image_view_create_info(
 		VkFormat format,
 		VkImage image,
-		VkImageAspectFlags aspectFlags);
+		VkImageAspectFlags aspectFlags,
+		VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
 	VkPipelineDepthStencilStateCreateInfo depth_stencil_create_info(
 		bool bDepthTest,

@@ -104,12 +104,29 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* filename, Al
 	return true;
 }
 
+bool vkutil::load_cubemap(VulkanEngine& engine, const char* filename, VkFormat format, AllocatedImage& outImage)
+{
+	int texWidth, textHeight, texChannels;
+
+	stbi_uc* pixels = stbi_load(filename, &texWidth, &textHeight, &texChannels, 0);
+	unsigned int hdrTexture;
+
+	if (!pixels)
+	{
+		std::cout << "Failed to load texture file: " << filename << std::endl;
+		return false;
+	}
+
+	return true;
+
+}
+
 bool isInVector(const std::string name, const std::pair<std::string, Texture*> textures)
 {
 	return textures.first == name;
 }
 
-Texture* Texture::GET(const char* filename)
+Texture* Texture::GET(const char* filename, const bool cubemap)
 {
 	std::string name = vkutil::findFile(filename, searchPaths, true);
 
@@ -125,7 +142,6 @@ Texture* Texture::GET(const char* filename)
 	// Load texture if it does not exist
 	Texture* t = new Texture();
 	vkutil::load_image_from_file(*VulkanEngine::engine, name.c_str(), t->image);
-
 	VkImageViewCreateInfo imageInfo = vkinit::image_view_create_info(VK_FORMAT_R8G8B8A8_UNORM, t->image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(VulkanEngine::engine->_device, &imageInfo, nullptr, &t->imageView);
 

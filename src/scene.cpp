@@ -51,7 +51,6 @@ void Scene::create_scene()
 
 	// Create prefabs
 	// --------------
-	//Prefab* p_duck		= Prefab::GET("duck.gltf");
 	//Prefab* p_sphere	= Prefab::GET("sphere.obj");
 	Prefab* p_quad		= Prefab::GET("quad", Mesh::get_quad());
 	p_quad->_root[0]->addMaterial(m_asphalt);
@@ -59,8 +58,8 @@ void Scene::create_scene()
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
-	p_gold_sphere->_root[0]->addMaterial(m_gold);
+	Prefab* p_mirror_sphere = Prefab::GET("sphere.obj");
+	p_mirror_sphere->_root[0]->addMaterial(m_mirror);
 	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
 	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
 	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
@@ -72,12 +71,8 @@ void Scene::create_scene()
 	// ---------------
 	
 	Object* sphere = new Object();
-	sphere->prefab = p_gold_sphere;
+	sphere->prefab = p_mirror_sphere;
 	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
-	
-	//Object* duck = new Object();
-	//duck->prefab = p_duck;
-	//duck->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -20));
 	
 	Object* floor = new Object();
 	floor->prefab = p_quad;
@@ -96,30 +91,20 @@ void Scene::create_scene()
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
-	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-15, 5, -5));
-
-	Object* helmet2 = new Object();
-	helmet2->prefab = p_helmet;
-	helmet2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -5));
-	
-	Object* helmet3 = new Object();
-	helmet3->prefab = p_helmet;
-	helmet3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(15, 5, -5));
+	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -5));
 
 	Object* lucy = new Object();
 	lucy->prefab = p_lucy;
 	lucy->m_matrix = glm::scale(glm::mat4(1), glm::vec3(0.01));
 	
-	_entities.push_back(floor);
+	//_entities.push_back(floor);
 	_entities.push_back(sphere);
 	//_entities.push_back(duck);
 	//_entities.push_back(cornell);
-	_entities.push_back(mirror);
-	//_entities.push_back(helmet);
-	_entities.push_back(helmet2);
-	//_entities.push_back(helmet3);
+	//_entities.push_back(mirror);
+	_entities.push_back(helmet);
 	//_entities.push_back(car);
-	_entities.push_back(lucy);
+	//_entities.push_back(lucy);
 	//_entities.push_back(cube);
 	//_entities.push_back(lantern);
 }
