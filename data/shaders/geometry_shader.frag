@@ -25,15 +25,43 @@ layout(push_constant) uniform constants
     vec4 shadingMetallicRoughness;
 }pushC;
 
+mat3 cotangent_frame(vec3 N, vec3 p, vec2 uv)
+{
+    vec3 dp1 = dFdx( p );
+    vec3 dp2 = dFdy( p );
+    vec2 duv1 = dFdx( p ).xy;
+    vec2 duv2 = dFdy( p ).xy;
+
+    vec3 dp2perp = cross( dp2, N );
+    vec3 dp1perp = cross( N, dp1 );
+    vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+
+    float invmax = inversesqrt( max(dot(T, T), dot(B, B)));
+    return mat3(T * invmax, B * invmax, N);
+}
+
+vec3 perturbNormal(vec3 N, vec3 WP, vec2 uv, vec3 normal_pixel)
+{
+    normal_pixel = normal_pixel * 255./127. - 128./127.;
+    mat3 TBN = cotangent_frame(N, WP, uv);
+    return normalize(TBN * normal_pixel);
+}
+
 void main()
 {
 
-    vec3 N          = normalize( inNormal );
     vec3 color      = pushC.textures.x > -1 ? texture(textures[int(pushC.textures.x)], inUV).xyz * inColor : pushC.color.xyz;
+    vec3 N          = pushC.textures.y > -1 ? texture(textures[int(pushC.textures.y)], inUV).xyz : normalize( inNormal );
     vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);
     vec3 material   = pushC.textures.w > -1 ? texture(textures[int(pushC.textures.w)], inUV).xyz : vec3(0, pushC.shadingMetallicRoughness.z, pushC.shadingMetallicRoughness.y);
 
     float materialIdx = pushC.shadingMetallicRoughness.w / 100;
+
+    if(pushC.textures.y > -1)
+    {
+        N = perturbNormal(inNormal, inWorldPos, inUV, N);
+    }
 
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );

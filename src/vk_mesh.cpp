@@ -787,6 +787,7 @@ int Prefab::loadMaterial(const tinygltf::Model& tmodel, const int index)
 		mat->diffuseTexture				= tpbr.baseColorTexture.index;
 		mat->metallicRoughnessTexture	= tpbr.metallicRoughnessTexture.index;
 		mat->emissiveTexture			= tmat.emissiveTexture.index;
+		mat->normalTexture				= tmat.normalTexture.index;
 	}
 
 	if (Material::exists(mat))
