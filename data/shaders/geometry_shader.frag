@@ -56,7 +56,7 @@ void main()
     vec3 emissive   = pushC.textures.z > -1 ? texture(textures[int(pushC.textures.z)], inUV).xyz : vec3(0);
     vec3 material   = pushC.textures.w > -1 ? texture(textures[int(pushC.textures.w)], inUV).xyz : vec3(0, pushC.shadingMetallicRoughness.z, pushC.shadingMetallicRoughness.y);
 
-    float materialIdx = pushC.shadingMetallicRoughness.w / 100;
+    float materialIdx = pushC.shadingMetallicRoughness.w;
 
     if(pushC.textures.y > -1)
     {

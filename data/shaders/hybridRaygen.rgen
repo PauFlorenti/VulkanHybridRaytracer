@@ -37,7 +37,7 @@ void main()
     const vec2 pixelCenter	= vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
 	const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
 	
-	float matIdx 			= round(texture(positionTexture, inUV).w * 100);
+	float matIdx 			= texture(positionTexture, inUV).w;
 	Material mat 			= materials.mat[int(matIdx)];
 	int shadingMode 		= int(mat.shadingMetallicRoughness.x);
 
@@ -150,7 +150,7 @@ void main()
 				float ior 				= mat.diffuse.w;
 				origin 					= position;
 				const float cosAlpha 	= dot(N, V);
-				const vec3 				I = -V; // incident ray
+				const vec3 	I 			= -V; // incident ray
 				float NdotI 			= dot( N, I );
 				vec3 refrNormal 		= NdotI > 0.0 ? -N : N;
 				float refrEta 			= NdotI > 0.0 ?  1 / ior : ior;
@@ -189,6 +189,4 @@ void main()
 		finalColor = albedo;
 
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
-	//vec4 scolor = imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy));
-	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), scolor);
 }

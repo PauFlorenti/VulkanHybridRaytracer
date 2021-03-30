@@ -617,25 +617,43 @@ void Renderer::render_gui()
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	ImGui::Checkbox("Denoise", &VulkanEngine::engine->_denoise);
 
-	const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo", "Motion", "Material", "Emissive" };
-	std::vector<const char*> charTargets;
-	charTargets.reserve(targets.size());
-	for (size_t i = 0; i < targets.size(); i++)
+	const std::vector<std::string> renderers = { "Deferred Shading Renderer", "Ray Traced Renderer", "Hybrid Shading Renderer" };
+	std::vector<const char*> charShadings;
+	charShadings.reserve(renderers.size());
+	for (size_t i = 0; i < renderers.size(); i++)
 	{
-		charTargets.push_back(targets[i].c_str());
+		charShadings.push_back(renderers[i].c_str());
 	}
 
-	const char* title = "Target";
-	int index = VulkanEngine::engine->debugTarget;
-
-	if (ImGui::Combo(title, &index, &charTargets[0], targets.size(), targets.size()))
+	const char* title = "Rendering Mode";
+	int renderer = VulkanEngine::engine->_mode;
+	if (ImGui::Combo(title, &renderer, &charShadings[0], renderers.size(), renderers.size()))
 	{
-		VulkanEngine::engine->debugTarget = index;
-		std::cout << index << std::endl;
-		void* debugData;
-		vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation, &debugData);
-		memcpy(debugData, &VulkanEngine::engine->debugTarget, sizeof(uint32_t));
-		vmaUnmapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation);
+		std::cout << (renderMode)renderer << std::endl;
+		VulkanEngine::engine->_mode = (renderMode)renderer;
+	}
+
+	if (VulkanEngine::engine->_mode == DEFERRED)
+	{
+		const std::vector<std::string> targets = { "Final", "Position", "Normal", "Albedo", "Motion", "Material", "Emissive" };
+		std::vector<const char*> charTargets;
+		charTargets.reserve(targets.size());
+		for (size_t i = 0; i < targets.size(); i++)
+		{
+			charTargets.push_back(targets[i].c_str());
+		}
+
+		title = "Target";
+		int index = VulkanEngine::engine->debugTarget;
+
+		if (ImGui::Combo(title, &index, &charTargets[0], targets.size(), targets.size()))
+		{
+			VulkanEngine::engine->debugTarget = index;
+			void* debugData;
+			vmaMapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation, &debugData);
+			memcpy(debugData, &VulkanEngine::engine->debugTarget, sizeof(uint32_t));
+			vmaUnmapMemory(VulkanEngine::engine->_allocator, VulkanEngine::engine->renderer->_debugBuffer._allocation);
+		}
 	}
 
 	for (auto& light : _scene->_lights)

@@ -40,7 +40,6 @@ struct DeletionQueue
 };
 
 enum renderMode{
-	FORWARD_RENDER,
 	DEFERRED,
 	RAYTRACING,
 	HYBRID

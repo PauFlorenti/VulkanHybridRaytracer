@@ -57,14 +57,14 @@ void Scene::create_scene()
 	// Create prefabs
 	// --------------
 	//Prefab* p_sphere	= Prefab::GET("sphere.obj");
-	//Prefab* p_quad		= Prefab::GET("quad", Mesh::get_quad());
+	Prefab* p_quad		= Prefab::GET("quad", Mesh::get_quad());
 	//p_quad->_root[0]->addMaterial(m_floor);
-	//Prefab* p_mirror	= Prefab::GET("cube", Mesh::get_cube());
-	//p_mirror->_root[0]->addMaterial(m_mirror);
-	//Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
-	//p_sphere_mirror->_root[0]->addMaterial(m_mirror);
-	//Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
-	//p_glass_sphere->_root[0]->addMaterial(m_glass);
+	Prefab* p_mirror	= Prefab::GET("cube", Mesh::get_cube());
+	p_mirror->_root[0]->addMaterial(m_mirror);
+	Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
+	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
+	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
+	p_glass_sphere->_root[0]->addMaterial(m_glass);
 	//Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
 	//p_gold_sphere->_root[0]->addMaterial(m_gold);
 	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
@@ -77,24 +77,24 @@ void Scene::create_scene()
 
 	// Create entities
 	// ---------------
-	//Object* sphere = new Object();
-	//sphere->prefab = p_gold_sphere;
-	//sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
+	Object* sphere = new Object();
+	sphere->prefab = p_sphere_mirror;
+	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
 	
-	//Object* floor = new Object();
-	//floor->prefab = p_quad;
-	//floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
-	//	glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1, 0, 0)) *
-	//	glm::scale(glm::mat4(1), glm::vec3(5));
+	Object* floor = new Object();
+	floor->prefab = p_quad;
+	floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
+		glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1, 0, 0)) *
+		glm::scale(glm::mat4(1), glm::vec3(5));
 	
 	//Object* mirror = new Object();
 	//mirror->prefab = p_mirror;
 	//mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -10)) * 
 	//	glm::scale(glm::mat4(1), glm::vec3(8, 4, 1));
 	
-	//Object* cube = new Object();
-	//cube->prefab = p_mirror;
-	//cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
+	Object* cube = new Object();
+	cube->prefab = p_mirror;
+	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
@@ -107,15 +107,15 @@ void Scene::create_scene()
 	//Object* sponza = new Object();
 	//sponza->prefab = p_sponza;
 	
-	//_entities.push_back(floor);
-	//_entities.push_back(sphere);
+	_entities.push_back(floor);
+	_entities.push_back(sphere);
 	//_entities.push_back(duck);
 	//_entities.push_back(cornell);
 	//_entities.push_back(mirror);
 	_entities.push_back(helmet);
 	//_entities.push_back(car);
 	//_entities.push_back(lucy);
-	//_entities.push_back(cube);
+	_entities.push_back(cube);
 	//_entities.push_back(lantern);
 	//_entities.push_back(sponza);
 }
