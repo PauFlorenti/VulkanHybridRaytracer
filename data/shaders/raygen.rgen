@@ -6,7 +6,7 @@
 #include "helpers.glsl"
 
 layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0, rgba8) uniform writeonly image2D image;
+layout(binding = 1, set = 0, rgba8) uniform image2D image;
 layout(binding = 2, set = 0) uniform CameraProperties 
 {
 	mat4 viewInverse;
@@ -56,7 +56,7 @@ void main()
 				break;
 			}
 			else{
-				origin.xyz 		= prd.origin;
+				origin.xyz 		= prd.origin.xyz;
 				direction.xyz 	= prd.direction.xyz;
 			}
 		}
@@ -65,4 +65,16 @@ void main()
 	finalColor /= NSAMPLES;
 
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	/*
+	if(frame < 0.0)
+	{
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	}
+	else{
+		float a = 1.0 / float(1.0 + frame);
+		vec3 lastColor = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
+		finalColor = mix(finalColor, lastColor, a);
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	}
+	*/
 }

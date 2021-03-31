@@ -115,10 +115,10 @@ public:
 	AllocatedBuffer				_matBuffer;
 	AllocatedBuffer				_instanceBuffer;
 	AllocatedBuffer				_rtCameraBuffer;
-	AllocatedBuffer				_vBuffer;	// TODO
-	AllocatedBuffer				_iBuffer;	// TODO
 	AllocatedBuffer				_matricesBuffer;
 	AllocatedBuffer				_idBuffer;
+	AllocatedBuffer				_shadowSamplesBuffer;
+	AllocatedBuffer				_frameCountBuffer;
 
 	AllocatedBuffer				raygenShaderBindingTable;
 	AllocatedBuffer				missShaderBindingTable;

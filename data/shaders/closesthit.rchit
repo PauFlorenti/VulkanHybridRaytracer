@@ -20,11 +20,11 @@ layout(set = 0, binding = 7) buffer MaterialBuffer { Material mat[]; } materials
 layout(set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout(set = 0, binding = 9) uniform sampler2D[] textures;
 layout(set = 0, binding = 10) uniform sampler2D[] environment_texture;
-layout(set = 0, binding = 11, rgba8) uniform readonly image2D[] shadowImage;  
+layout(set = 0, binding = 11, rgba8) uniform readonly image2D[] shadowImage;
+layout(set = 0, binding = 12) uniform SampleBuffer {int samples;} samplesBuffer;
 
 void main()
 {
-  
   // Do all vertices, indices and barycentrics calculations
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
@@ -76,6 +76,8 @@ void main()
   vec3 irradiance = texture(environment_texture[1], environmentUV).xyz;
 
   vec4 direction = vec4(1, 1, 1, 0);
+  vec4 origin = vec4(worldPos, 0);
+  const int shadowSamples = samplesBuffer.samples;
 
   // Calculate light influence for each light
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -96,11 +98,17 @@ void main()
 
     if(NdotL > 0.0)
     {
-			for(int a = 0; a < SHADOWSAMPLES; a++)
+			for(int a = 0; a < shadowSamples; a++)
 			{
         // Init as shadowed
 				shadowed 	        = true;
-				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
+        float pointRadius = light.radius * sqrt(rnd(prd.seed));
+        float angle       = rnd(prd.seed) * 2.0f * PI;
+        vec2 diskPoint    = vec2(pointRadius * cos(angle), pointRadius * sin(angle));
+        vec3 lTangent     = normalize(cross(L, vec3(0, 1, 0)));
+        vec3 lBitangent   = normalize(cross(lTangent, L));
+        vec3 target       = worldPos + L + diskPoint.x * lTangent + diskPoint.y * lBitangent;
+        vec3 dir          = normalize(target - worldPos);
         const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
         // Shadow ray cast
 				float tmin = 0.001, tmax  = light_distance + 1;
@@ -111,7 +119,7 @@ void main()
 					shadowFactor++;
         }
 			}
-			shadowFactor /= SHADOWSAMPLES;
+			shadowFactor /= shadowSamples;
     }
 
       // Calculate attenuation factor
@@ -143,13 +151,14 @@ void main()
 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
         direction = vec4(1, 1, 1, 0);
+        //origin.w = 1;
       }
       else if(shadingMode == 3) // MIRALL
       {
         const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
         const bool isScattered  = dot(reflected, N) > 0;
 
-        difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+        difColor = vec3(1);
         Lo += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
         direction = vec4(reflected, isScattered ? 1 : 0);
       }
@@ -177,5 +186,5 @@ void main()
 
   vec3 color = Lo + ambient;
   color    += emissive;
-  prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+  prd = hitPayload(vec4(color, gl_HitTEXT), direction, origin, prd.seed);
 }

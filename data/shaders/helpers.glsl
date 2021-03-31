@@ -4,8 +4,8 @@
 // CONSTS ----------------------
 const float PI = 3.14159265;
 const int NSAMPLES = 1;
-const int SHADOWSAMPLES = 1;
-const int MAX_RECURSION = 10;
+const int SHADOWSAMPLES = 64;
+const int MAX_RECURSION = 5;
 
 // STRUCTS --------------------
 struct Vertex
@@ -30,8 +30,9 @@ struct Material{
 // FUNCTIONS --------------------------------------------------
 // Polynomial approximation by Christophe Schlick
 // Trowbridge-Reitz GGX - Normal Distribution Function
-float DistributionGGX(vec3 N, vec3 H, float a)
+float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
+    float a = roughness * roughness;
 	float a2 = a * a;
 	float NdotH = clamp(dot(N, H), 0.0, 1.0);
 	float NdotH2 = NdotH * NdotH;
@@ -74,21 +75,6 @@ vec3 computeAmbient(vec3 N, vec3 V, vec3 albedo, vec3 irradiance, vec3 F0)
     vec3 diffuse = albedo * irradiance;
     return (kD * diffuse);
 }
-
-vec3 computeDiffuse(Material m, vec3 normal, vec3 lightDir)
-{
-    float NdotL = clamp(dot(normal, lightDir), 0.0f, 1.0f);
-    return NdotL * m.diffuse.xyz;
-};
-
-vec3 computeSpecular(Material m, vec3 normal, vec3 lightDir, vec3 viewDir)
-{
-    // Specular
-    vec3 V          = normalize(viewDir);
-    vec3 R          = reflect(-normalize(lightDir), normalize(normal));
-    float specular  = pow(clamp(dot(normalize(R), V), 0.0, 1.0), m.shadingMetallicRoughness.z);
-    return vec3(1) * specular;
-};
 
 mat3 rotMat(const vec3 axis, const float angle)
 {

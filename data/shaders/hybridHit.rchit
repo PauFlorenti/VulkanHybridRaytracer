@@ -66,6 +66,8 @@ void main()
   float light_intensity = 1.0;
   vec4 direction = vec4(1, 1, 1, 0);
 
+  vec4 origin = vec4(worldPos, 0);
+
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
   {
     // Init basic light information
@@ -139,7 +141,7 @@ void main()
       const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
       const bool isScattered  = dot(reflected, N) > 0;
 
-      difColor = isScattered ? computeDiffuse(mat, N, L) : vec3(1);
+      difColor = vec3(1);//isScattered ? computeDiffuse(mat, N, L) : vec3(1);
       color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
       direction = vec4(reflected, isScattered ? 1 : 0);
     }
@@ -159,5 +161,5 @@ void main()
     }
   }
   color += emissive;
-  prd = hitPayload(vec4(color, gl_HitTEXT), direction, worldPos, prd.seed);
+  prd = hitPayload(vec4(color, gl_HitTEXT), direction, origin, prd.seed);
 }

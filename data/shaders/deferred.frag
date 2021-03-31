@@ -106,7 +106,7 @@ void main()
 				float G 	= GeometrySmith(N, V, L, roughness);
 
 				vec3 numerator 		= NDF * G * F;
-				float denominator 	= 4.0 * NdotV * NdotL;
+				float denominator 	= 4.0 * NdotV * max(dot(N, L), 0.0);//NdotL;
 				vec3 specular 		= numerator / max(denominator, 0.001);
 
 				vec3 kS = F;

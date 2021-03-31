@@ -132,13 +132,6 @@ void VulkanEngine::update(const float dt)
 	_window->input_update();
 	updateFrame();
 	updateCameraMatrices();
-	glm::vec4 frame = glm::vec4(_denoise_frame);
-
-	void* frameData;
-	vmaMapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation, &frameData);
-	memcpy(frameData, &frame, sizeof(glm::vec4));
-	vmaUnmapMemory(_allocator, renderer->_denoiseFrameBuffer._allocation);
-	//std::cout << _denoise_frame << std::endl;
 
 	// Skybox Matrix followin the camera
 	if (_skyboxFollow) {
@@ -169,6 +162,12 @@ void VulkanEngine::update(const float dt)
 	}
 	memcpy(rtLightData, rtLightUBO, sizeof(rtLightUBO));
 	vmaUnmapMemory(_allocator, renderer->_lightBuffer._allocation);
+
+	// Shadow samples
+	void* samplesData;
+	vmaMapMemory(_allocator, renderer->_shadowSamplesBuffer._allocation, &samplesData);
+	std::memcpy(samplesData, &_samples, sizeof(int));
+	vmaUnmapMemory(_allocator, renderer->_shadowSamplesBuffer._allocation);
 
 	// TODO: MEMORY LEAK and update only when instances changed
 	// Rebuild instances matrix for TLAS
@@ -678,8 +677,8 @@ void VulkanEngine::updateFrame()
 		resetFrame();
 		refMatrix = m;
 	}
-	if(_denoise_frame < 100)
-		_denoise_frame++;
+	//if(_denoise_frame < 100)
+	_denoise_frame++;
 }
 
 void VulkanEngine::resetFrame()
@@ -718,6 +717,11 @@ void VulkanEngine::updateCameraMatrices()
 		memcpy(data, &cameraData, sizeof(GPUCameraData));
 		vmaUnmapMemory(_allocator, renderer->_cameraBuffer._allocation);
 	}
+
+	void* frameData;
+	vmaMapMemory(_allocator, renderer->_frameCountBuffer._allocation, &frameData);
+	memcpy(frameData, &_denoise_frame, sizeof(int));
+	vmaUnmapMemory(_allocator, renderer->_frameCountBuffer._allocation);
 
 	// Copy RAY-TRACING camera, it need the inverse
 	// --------------------------------------------

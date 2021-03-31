@@ -3,12 +3,13 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_EXT_scalar_block_layout : enable
 
-layout (local_size_x = 16, local_size_y = 16) in;
-layout (binding = 0, rgba8) uniform readonly image2D[1] inputImage;
-layout (binding = 1, rgba8) uniform image2D[1] outputImage;
-layout (binding = 2) uniform Frame {vec4 f;}frame;
-
 const int SIZE = 9;
+const int NLIGHTS = 1;
+
+layout (local_size_x = 16, local_size_y = 16) in;
+layout (binding = 0, rgba8) uniform readonly image2D[NLIGHTS] inputImage;
+layout (binding = 1, rgba8) uniform image2D[NLIGHTS] outputImage;
+layout (binding = 2) uniform FrameCount {int frame;} frameBuffer;
 
 struct ImageData
 {
@@ -28,12 +29,11 @@ float conv(in float[SIZE] kernel, in float[SIZE] data, in float denom, in float 
 }
 
 void main()
-{
-	int frame = int(frame.f.x);
-	
-	for(int l = 0; l < 2; l++)
+{	
+	for(int l = 0; l < NLIGHTS; l++)
 	{
-		const int limit = 2;
+		/*
+		const int limit = 1;
 		int n = 0;
 		for(int i = -limit; i <= limit; i++)
 		{
@@ -48,24 +48,54 @@ void main()
 		}
 
 		float[SIZE] kernel;
-		//kernel[0]  = 1; kernel[1]  = 4; kernel[2]  = 7; kernel[3]  = 4; kernel[4]  = 1; 
-		//kernel[5]  = 4; kernel[6]  = 16; kernel[7]  = 26; kernel[8]  = 16; kernel[9]  = 4;
-		//kernel[10] = 7; kernel[11] = 26; kernel[12] = 41; kernel[13] = 26; kernel[14] = 7;
-		//kernel[15] = 4; kernel[16] = 16; kernel[17] = 26; kernel[18] = 16; kernel[19] = 4;
-		//kernel[20] = 1; kernel[21] = 4; kernel[22] = 7; kernel[23] = 4; kernel[24] = 1;
 		
 		for(int i = 0; i < SIZE; i++){
-			kernel[i] = 1;
+			kernel[i] = 0;
 		}
-		//kernel[4] = 1.0;
-
+		kernel[4] = 1.0;
+		
 		vec4 color = vec4(
-			conv(kernel, imageData.r, 9/*273.0*/, 0.0),
-			conv(kernel, imageData.g, 9/*273.0*/, 0.0),
-			conv(kernel, imageData.b, 9/*273.0*/, 0.0),
+			conv(kernel, imageData.r, 1, 0.0),
+			conv(kernel, imageData.g, 1, 0.0),
+			conv(kernel, imageData.b, 1, 0.0),
 			1
 		);
+		*/
+		int frame = frameBuffer.frame;
+		vec3 pixelColor;
+		//if(frame > 0)
+		//{
+		//	pixelColor = imageLoad(inputImage[l], ivec2(gl_GlobalInvocationID.xy)).rgb;
+		//	imageStore(outputImage[l], ivec2(gl_GlobalInvocationID.xy), vec4(pixelColor, 1.0));
+		//}
+		//else
+		{
+			vec3 center = imageLoad(inputImage[l], ivec2(gl_GlobalInvocationID.xy)).rgb;
+			vec3 minColor = center;
+			vec3 maxColor = center;
 
-		imageStore(outputImage[l], ivec2(gl_GlobalInvocationID.xy), color);
+			for(int y = -1; y <= 1; y++)
+			{
+				for(int x = -1; x <= 1; x++)
+				{
+					if(x == 0 && y == 0)
+						continue;
+
+					ivec2 offsetUV = ivec2(gl_GlobalInvocationID.x + x, gl_GlobalInvocationID.y + y);
+					vec3 color = imageLoad(inputImage[l], offsetUV).rgb;
+					minColor = min(minColor, color);
+					maxColor = max(maxColor, color);
+				}
+			}
+
+			vec3 old = imageLoad(outputImage[l], ivec2(gl_GlobalInvocationID.xy)).rgb;
+			old = max(minColor, old);
+			old = min(maxColor, old);
+
+			float a = 0.2f;
+			pixelColor = mix(old, center, a);
+
+			imageStore(outputImage[l], ivec2(gl_GlobalInvocationID.xy), vec4(pixelColor, 1.0));
+		}
 	}
 }

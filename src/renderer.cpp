@@ -656,6 +656,8 @@ void Renderer::render_gui()
 		}
 	}
 
+	ImGui::DragInt("Shadow Samples", &VulkanEngine::engine->_samples, 1.0f, 1, 64);
+
 	for (auto& light : _scene->_lights)
 	{
 		if (ImGui::TreeNode(&light, "Light")) {
@@ -674,7 +676,10 @@ void Renderer::render_gui()
 		if (ImGui::TreeNode(&entity, "Entity")) {
 			if (ImGui::Button("Select"))
 				gizmoEntity = entity;
-			ImGui::SliderFloat3("Position", &((glm::vec3)entity->m_matrix[3])[0], -200, 200);
+			//ImGui::SliderFloat3("Position", &((glm::vec3)entity->m_matrix[3])[0], -200, 200);
+			ImGui::SliderFloat3("Color", glm::value_ptr(entity->material->diffuseColor), 0., 1.);
+			ImGui::SliderFloat("Metallic", &entity->material->metallicFactor, 0., 1.);
+			ImGui::SliderFloat("Roughness", &entity->material->roughnessFactor, 0., 1.);
 			ImGui::TreePop();
 		}
 	}
@@ -2008,6 +2013,7 @@ void Renderer::create_shadow_descriptors()
 	VkDescriptorSetLayoutBinding lightBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);
 	VkDescriptorSetLayoutBinding idsBufferBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7);
 	VkDescriptorSetLayoutBinding motionImageBinding					= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8);	// Motion Gbuffer
+	VkDescriptorSetLayoutBinding sampleBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9);	// Samples buffer
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -2018,7 +2024,8 @@ void Renderer::create_shadow_descriptors()
 		matrixBufferBinding,
 		lightBufferBinding,
 		idsBufferBinding,
-		motionImageBinding
+		motionImageBinding,
+		sampleBufferBinding
 	});
 
 	// Allocate Descriptor
@@ -2046,10 +2053,7 @@ void Renderer::create_shadow_descriptors()
 	}
 
 	// Binding = 2 Camera data
-	VkDescriptorBufferInfo cameraBufferInfo{};
-	cameraBufferInfo.buffer = _rtCameraBuffer._buffer;
-	cameraBufferInfo.offset = 0;
-	cameraBufferInfo.range	= sizeof(RTCameraData);
+	VkDescriptorBufferInfo cameraBufferInfo = vkinit::descriptor_buffer_info(_rtCameraBuffer._buffer, sizeof(RTCameraData));
 
 	// Binding = 3 Vertex buffer
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
@@ -2076,17 +2080,11 @@ void Renderer::create_shadow_descriptors()
 		memcpy(vdata, vAttr.data(), vertexBufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
-		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer = vBuffer._buffer;
-		vertexBufferDescriptor.offset = 0;
-		vertexBufferDescriptor.range = vertexBufferSize;
+		VkDescriptorBufferInfo vertexBufferDescriptor = vkinit::descriptor_buffer_info(vBuffer._buffer, vertexBufferSize);
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
 		// Binding = 4 Index buffer
-		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer = obj->prefab->_mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset = 0;
-		indexBufferDescriptor.range = indexBufferSize;
+		VkDescriptorBufferInfo indexBufferDescriptor = vkinit::descriptor_buffer_info(obj->prefab->_mesh->_indexBuffer._buffer, indexBufferSize);
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		for (Node* root : obj->prefab->_root)
@@ -2096,16 +2094,10 @@ void Renderer::create_shadow_descriptors()
 	}
 
 	// Binding = 5 Matrix buffer
-	VkDescriptorBufferInfo matrixDescInfo;
-	matrixDescInfo.buffer = _matricesBuffer._buffer;
-	matrixDescInfo.offset = 0;
-	matrixDescInfo.range = sizeof(glm::mat4) * _scene->_matricesVector.size();
+	VkDescriptorBufferInfo matrixDescInfo = vkinit::descriptor_buffer_info(_matricesBuffer._buffer, sizeof(glm::mat4) * _scene->_matricesVector.size());
 
 	// Binding = 6 lights
-	VkDescriptorBufferInfo lightBufferInfo;
-	lightBufferInfo.buffer = _lightBuffer._buffer;
-	lightBufferInfo.offset = 0;
-	lightBufferInfo.range = sizeof(uboLight) * nLights;
+	VkDescriptorBufferInfo lightBufferInfo = vkinit::descriptor_buffer_info(_lightBuffer._buffer, sizeof(uboLight) * nLights);
 
 	// Binding = 7 IDs
 	if (!_idBuffer._buffer)
@@ -2116,14 +2108,17 @@ void Renderer::create_shadow_descriptors()
 	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
 	vmaUnmapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation);
 
-	VkDescriptorBufferInfo idDescInfo;
-	idDescInfo.buffer = _idBuffer._buffer;
-	idDescInfo.offset = 0;
-	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
+	VkDescriptorBufferInfo idDescInfo = vkinit::descriptor_buffer_info(_idBuffer._buffer, sizeof(glm::vec4) * idVector.size());
 
 	// Binding = 8 Motion
 	VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
 		_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion GBuffer
+
+	// Binding = 9 Samples
+	if (!_shadowSamplesBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _shadowSamplesBuffer);
+
+	VkDescriptorBufferInfo samplesDescInfo = vkinit::descriptor_buffer_info(_shadowSamplesBuffer._buffer, sizeof(unsigned int));
 
 	// WRITES ---
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_shadowDescSet, &descriptorSetAS, 0);
@@ -2135,6 +2130,7 @@ void Renderer::create_shadow_descriptors()
 	VkWriteDescriptorSet lightsBufferWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &lightBufferInfo, 6);
 	VkWriteDescriptorSet idsBufferWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _shadowDescSet, &idDescInfo, 7);
 	VkWriteDescriptorSet motionImageWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _shadowDescSet, &texDescriptorMotion, 8);
+	VkWriteDescriptorSet samplesWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _shadowDescSet, &samplesDescInfo, 9);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2145,7 +2141,8 @@ void Renderer::create_shadow_descriptors()
 		matrixBufferWrite,
 		lightsBufferWrite,
 		idsBufferWrite,
-		motionImageWrite
+		motionImageWrite,
+		samplesWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
@@ -2154,12 +2151,12 @@ void Renderer::create_shadow_descriptors()
 	//-------------
 	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0, nLights);
 	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1, nLights);
-	VkDescriptorSetLayoutBinding framebufferBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
+	VkDescriptorSetLayoutBinding frameLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
 	
 	std::vector<VkDescriptorSetLayoutBinding> denoiseBindings({
 		inputImageLayoutBinding,
 		resultImageLayoutBinding,
-		framebufferBinding
+		frameLayoutBinding
 	});
 
 	// Allocate Descriptor
@@ -2184,18 +2181,13 @@ void Renderer::create_shadow_descriptors()
 		outputImagesInfo.at(i).imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	}
 
-	if (!_denoiseFrameBuffer._buffer)
-		VulkanEngine::engine->create_buffer(sizeof(glm::vec4), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _denoiseFrameBuffer);
-
-	// Binding = 3 FrameBuffer
-	VkDescriptorBufferInfo frameBufferInfo{};
-	frameBufferInfo.buffer = _denoiseFrameBuffer._buffer;
-	frameBufferInfo.offset = 0;
-	frameBufferInfo.range = sizeof(glm::vec4);
+	// Binding = 2 Frame Count Buffer
+	VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _frameCountBuffer);
+	VkDescriptorBufferInfo frameDescInfo = vkinit::descriptor_buffer_info(_frameCountBuffer._buffer, sizeof(int));
 
 	VkWriteDescriptorSet inputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, inputImagesInfo.data(), 0, nLights);
 	VkWriteDescriptorSet outputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, outputImagesInfo.data(), 1, nLights);
-	VkWriteDescriptorSet frameBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _sPostDescSet, &frameBufferInfo, 2);
+	VkWriteDescriptorSet frameBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _sPostDescSet, &frameDescInfo, 2);
 
 	std::vector<VkWriteDescriptorSet> writeDenoiseDescriptorSets = {
 		inputImageWrite,
@@ -2257,6 +2249,7 @@ void Renderer::create_rt_descriptors()
 	VkDescriptorSetLayoutBinding texturesBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9, nTextures);
 	VkDescriptorSetLayoutBinding skyboxBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 10, 2);
 	VkDescriptorSetLayoutBinding textureBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11, nLights);
+	VkDescriptorSetLayoutBinding sampleBufferBinding				= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12);
 
 	std::vector<VkDescriptorSetLayoutBinding> bindings({
 		accelerationStructureLayoutBinding,
@@ -2270,7 +2263,8 @@ void Renderer::create_rt_descriptors()
 		matIdxBufferBinding,
 		texturesBufferBinding,
 		skyboxBufferBinding,
-		textureBufferBinding
+		textureBufferBinding,
+		sampleBufferBinding
 		});
 
 	// Allocate Descriptor
@@ -2411,6 +2405,12 @@ void Renderer::create_rt_descriptors()
 		shadowImagesDesc[i] = { nullptr, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
 	}
 
+	// Binding = 12 Sample buffer
+	if (!_shadowSamplesBuffer._buffer)
+		VulkanEngine::engine->create_buffer(sizeof(int), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, _shadowSamplesBuffer);
+
+	VkDescriptorBufferInfo samplesDescInfo = vkinit::descriptor_buffer_info(_shadowSamplesBuffer._buffer, sizeof(unsigned int));
+
 	// WRITES ---
 	VkWriteDescriptorSet resultImageWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet uniformBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &_rtDescriptorBufferInfo, 2);
@@ -2423,6 +2423,7 @@ void Renderer::create_rt_descriptors()
 	VkWriteDescriptorSet textureBufferWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, imageInfos.data(), 9, nTextures);
 	VkWriteDescriptorSet skyboxBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _rtDescriptorSet, skyboxImagesDesc, 10, 2);
 	VkWriteDescriptorSet shadowBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _rtDescriptorSet, shadowImagesDesc.data(), 11, nLights);
+	VkWriteDescriptorSet sampleWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _rtDescriptorSet, &samplesDescInfo, 12);
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
 		accelerationStructureWrite,
@@ -2436,7 +2437,8 @@ void Renderer::create_rt_descriptors()
 		matIdxBufferWrite,
 		textureBufferWrite,
 		skyboxBufferWrite,
-		shadowBufferWrite
+		shadowBufferWrite,
+		sampleWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, VK_NULL_HANDLE);
