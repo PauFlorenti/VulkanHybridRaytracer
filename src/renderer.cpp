@@ -607,6 +607,8 @@ void Renderer::rasterize_hybrid()
 
 void Renderer::render_gui()
 {
+	bool changed = false;
+
 	// Imgui new frame
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplSDL2_NewFrame(VulkanEngine::engine->_window->_handle);
@@ -663,11 +665,11 @@ void Renderer::render_gui()
 		if (ImGui::TreeNode(&light, "Light")) {
 			if (ImGui::Button("Select"))
 				gizmoEntity = light;
-			ImGui::SliderFloat3("Position", &((glm::vec3)light->m_matrix[3])[0], -200, 200);
-			ImGui::ColorEdit3("Color", &light->color.x);
-			ImGui::SliderFloat("Intensity", &light->intensity, 0, 1000);
-			ImGui::SliderFloat("Max Distance", &light->maxDistance, 0, 500);
-			ImGui::SliderFloat("Radius", &light->radius, 0, 10);
+			changed |= ImGui::SliderFloat3("Position", &((glm::vec3)light->m_matrix[3])[0], -200, 200);
+			changed |= ImGui::ColorEdit3("Color", &light->color.x);
+			changed |= ImGui::SliderFloat("Intensity", &light->intensity, 0, 1000);
+			changed |= ImGui::SliderFloat("Max Distance", &light->maxDistance, 0, 500);
+			changed |= ImGui::SliderFloat("Radius", &light->radius, 0, 10);
 			ImGui::TreePop();
 		}
 	}
@@ -677,9 +679,9 @@ void Renderer::render_gui()
 			if (ImGui::Button("Select"))
 				gizmoEntity = entity;
 			//ImGui::SliderFloat3("Position", &((glm::vec3)entity->m_matrix[3])[0], -200, 200);
-			ImGui::SliderFloat3("Color", glm::value_ptr(entity->material->diffuseColor), 0., 1.);
-			ImGui::SliderFloat("Metallic", &entity->material->metallicFactor, 0., 1.);
-			ImGui::SliderFloat("Roughness", &entity->material->roughnessFactor, 0., 1.);
+			changed |= ImGui::SliderFloat3("Color", glm::value_ptr(entity->material->diffuseColor), 0., 1.);
+			changed |= ImGui::SliderFloat("Metallic", &entity->material->metallicFactor, 0., 1.);
+			changed |= ImGui::SliderFloat("Roughness", &entity->material->roughnessFactor, 0., 1.);
 			ImGui::TreePop();
 		}
 	}
@@ -689,6 +691,7 @@ void Renderer::render_gui()
 		return;
 
 	glm::mat4& matrix = gizmoEntity->m_matrix;
+	glm::mat4 aux = matrix;
 
 	ImGuizmo::BeginFrame();
 
@@ -714,6 +717,7 @@ void Renderer::render_gui()
 	ImGui::InputFloat3("Rt", matrixRotation, 3);
 	ImGui::InputFloat3("Sc", matrixScale, 3);
 	ImGuizmo::RecomposeMatrixFromComponents(matrixTranslation, matrixRotation, matrixScale, &matrix[0][0]);
+
 
 	if (mCurrentGizmoOperation != ImGuizmo::SCALE)
 	{
@@ -750,6 +754,14 @@ void Renderer::render_gui()
 	ImGuizmo::Manipulate(&_scene->_camera->getView()[0][0], &projection[0][0], mCurrentGizmoOperation, mCurrentGizmoMode, &matrix[0][0], NULL, useSnap ? &snap.x : NULL);
 
 	ImGui::EndFrame();
+
+	// If matrix is different, then turn changed to true
+	if (memcmp(&matrix[0][0], &aux[0][0], sizeof(glm::mat4)) != 0) {
+		changed = true;
+	}
+
+	if (changed)
+		VulkanEngine::engine->resetFrame();
 }
 
 void Renderer::init_framebuffers()

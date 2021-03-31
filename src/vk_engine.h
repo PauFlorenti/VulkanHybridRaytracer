@@ -200,6 +200,10 @@ public:
 
 	void recreate_swapchain();
 
+	void updateFrame();
+
+	void resetFrame();
+
 private:
 
 	void init_vulkan();
@@ -219,8 +223,6 @@ private:
 	// VKRay features passed to the logical device as a pNext pointer
 	void get_enabled_features();
 
-	void updateFrame();
-	void resetFrame();
 	void updateCameraMatrices();
 
 };
