@@ -188,34 +188,25 @@ void main()
       }
     }
 
-    motion.y = 1.0 - motion.y;
-    vec2 reprojectedUV = gl_LaunchIDEXT.xy - motion;
-    /*
-    float a     = 0.2;
-    vec3 cLast  = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
-    //vec3 cLast = imageLoad(shadowImage[i], ivec2(reprojectedUV)).rgb;
-    //vec3 c      = mix(cLast, vec3(shadowFactor), a);
-    vec3 c = vec3(shadowFactor);
-    imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
-    */
-    //vec3 c = vec3(shadowFactor);
-    //imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1));
-    
-    
+    // If scene has not changed, accumulate from last frame for 64 frames.
     if(prd.frame > 0)
     {
       float a = 1.0f / float(prd.frame + 1);
       if(prd.frame > 64)
         return;
       vec3 cLast = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
-      //a = 0.2;
-      //vec3 cLast = imageLoad(shadowImage[i], ivec2(reprojectedUV)).rgb;
       vec3 c = mix(cLast, vec3(shadowFactor), a);
       imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
     }
-    else{
+    else
+    {
+      // Use the motion vector to calculate the lasts frame UV
+      motion.y = 1.0 - motion.y;
+      vec2 reprojectedUV = gl_LaunchIDEXT.xy - motion;
+
+      // Mix the last frame with the new one
       vec3 cLast = imageLoad(shadowImage[i], ivec2(reprojectedUV)).rgb;
-      vec3 c = mix(cLast, vec3(shadowFactor), 0.3);
+      vec3 c = mix(cLast, vec3(shadowFactor), 0.5);
       imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
     }
   }

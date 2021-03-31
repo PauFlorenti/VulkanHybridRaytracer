@@ -25,13 +25,15 @@ void Scene::create_scene()
 	// -------------
 	Light* light		= new Light();
 	light->m_matrix		= glm::translate(glm::mat4(1), glm::vec3(10, 12, -5));
+	light->color		= glm::vec3{ 1.0f, 0.8f, 0.5f };
 	light->intensity	= 500.0f;
-	light->radius = 0.1f;
+	light->radius		= 0.1f;
 
 	Light* light2		= new Light();
 	light2->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(-10, 15, -5));
+	light2->color		= glm::vec3{ 0.5f, 1.0f, 1.0f };
 	light2->intensity	= 400.0f;
-	light2->radius = 0.1f;
+	light2->radius		= 0.1f;
 
 	_lights.push_back(light);
 	_lights.push_back(light2);
