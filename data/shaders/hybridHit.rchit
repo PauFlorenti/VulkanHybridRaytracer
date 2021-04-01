@@ -16,6 +16,7 @@ layout (set = 0, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
 layout (set = 0, binding = 7, scalar) buffer Vertices { Vertex v[]; } vertices[];
 layout (set = 0, binding = 8) buffer Indices { int i[]; } indices[];
 layout (set = 0, binding = 9) uniform sampler2D[] textures;
+layout (set = 0, binding = 10) uniform sampler2D[] environmentTexture;
 layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
 layout (set = 0, binding = 12) buffer sceneBuffer { vec4 idx[]; } objIndices;
 layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m[]; } matrices;
@@ -23,7 +24,6 @@ layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m[]; } matrices;
 void main()
 {
   // Do all vertices, indices and barycentrics calculations
-  
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
   
   vec4 objIdx = objIndices.idx[gl_InstanceCustomIndexEXT];
@@ -41,31 +41,38 @@ void main()
   Vertex v1     = vertices[instanceID].v[ind.y];
   Vertex v2     = vertices[instanceID].v[ind.z];
 
+  const mat4 model      = matrices.m[transformationID];
 
   // Use above results to calculate normal vector
   // Calculate worldPos by using ray information
-  const mat4 model      = matrices.m[transformationID];
   const vec3 normal     = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   const vec2 uv         = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
   const vec3 N          = normalize(model * vec4(normal, 0)).xyz;
-  const vec3 worldPos   = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
   const vec3 V          = normalize(-gl_WorldRayDirectionEXT);
+  const float NdotV     = clamp(dot(N, V), 0.0, 1.0);
+  const vec3 worldPos   = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
 
-  const Material mat    = materials.mat[materialID];
-  const int shadingMode = int(mat.shadingMetallicRoughness.x);
+  // Init values used for lightning
+	vec3 Lo               = vec3(0);
+	float attenuation     = 1.0;
+  float light_intensity = 1.0;
 
+  // Init all material values
+  const Material mat            = materials.mat[materialID];
+  const int shadingMode         = int(mat.shadingMetallicRoughness.x);
   const vec3 albedo             = mat.textures.x > -1 ? texture(textures[int(mat.textures.x)], uv).xyz : mat.diffuse.xyz;
   const vec3 emissive           = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);
   const vec3 roughnessMetallic  = mat.textures.w > -1 ? texture(textures[int(mat.textures.w)], uv).xyz : vec3(0, mat.shadingMetallicRoughness.z, mat.shadingMetallicRoughness.y);
+
   const float roughness         = roughnessMetallic.y;
   const float metallic          = roughnessMetallic.z;
+  vec3 F0   = mix(vec3(0.04), albedo, metallic);
 
-  // Init values used for lightning
-	vec3 color            = vec3(0);
-	float attenuation     = 1.0;
-  float light_intensity = 1.0;
+  // Environment 
+  vec2 environmentUV = vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
+  vec3 irradiance = texture(environmentTexture[1], environmentUV).xyz;
+
   vec4 direction = vec4(1, 1, 1, 0);
-
   vec4 origin = vec4(worldPos, 0);
 
   for(int i = 0; i < lightsBuffer.lights.length(); i++)
@@ -77,10 +84,11 @@ void main()
 		const float light_max_distance 	= light.pos.w;
 		const float light_distance 		  = length(L);
     L                               = normalize(L);
+		const float light_intensity 		= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
     const vec3 H                    = normalize(V + L);
 		const float NdotL 				      = clamp(dot(N, L), 0.0, 1.0);
-		const float light_intensity 		= isDirectional ? 1.0f : (light.color.w / (light_distance * light_distance));
-    float shadowFactor              = 0.1;
+    const float NdotH               = clamp(dot(N, H), 0.0, 1.0);
+    float shadowFactor              = 0.0;
 
     // Check if light has impact
     if(NdotL > 0)
@@ -118,8 +126,6 @@ void main()
     if(shadingMode == 0)  // DIFUS
     {
       vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
-      vec3 F0 = vec3(0.04);
-      F0 = mix(F0, albedo, metallic);
       vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
       float NDF = DistributionGGX(N, H, roughness);
       float G = GeometrySmith(N, V, L, roughness);
@@ -133,7 +139,7 @@ void main()
 
       kD *= 1.0 - metallic;
 
-      color    += (kD * albedo / PI + specular) * radiance * NdotL;
+      Lo    += (kD * albedo / PI + specular) * radiance * NdotL;
       direction = vec4(1, 1, 1, 0);
     }
     else if(shadingMode == 3) // MIRALL
@@ -142,7 +148,7 @@ void main()
       const bool isScattered  = dot(reflected, N) > 0;
 
       difColor = vec3(1);//isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      color += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      Lo += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
       direction = vec4(reflected, isScattered ? 1 : 0);
     }
     else if(shadingMode == 4) // VIDRE
@@ -152,7 +158,7 @@ void main()
       const vec3 refrNormal = NdotV > 0.0 ? -N : N;
       const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-      color += mat.diffuse.xyz * light_intensity * light.color.xyz;
+      Lo += mat.diffuse.xyz * light_intensity * light.color.xyz;
       
       float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
       direction = radicand < 0.0 ? 
@@ -160,6 +166,14 @@ void main()
                   vec4(refract( normalize(gl_WorldRayDirectionEXT), refrNormal, refrEta ), 1);
     }
   }
+
+  // Ambient from IBL
+  vec3 F        = FresnelSchlick(NdotV, F0);
+  vec3 kD       = (1.0 - F) * (1.0 - metallic);
+  vec3 diffuse  = kD * albedo * irradiance;
+  vec3 ambient = diffuse;
+
+  vec3 color = Lo + ambient;
   color += emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, origin, prd.seed);
 }

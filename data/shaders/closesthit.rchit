@@ -151,7 +151,6 @@ void main()
 
         Lo += (kD * albedo / PI + specular) * radiance * NdotL;
         direction = vec4(1, 1, 1, 0);
-        //origin.w = 1;
       }
       else if(shadingMode == 3) // MIRALL
       {

@@ -98,11 +98,12 @@ void Scene::create_scene()
 		glm::scale(glm::mat4(1), glm::vec3(15));
 	floor->material = Material::_materials[p_quad->_root[0]->_primitives[0]->materialID];
 	
-	//Object* mirror = new Object();
-	//mirror->prefab = p_mirror;
-	//mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -10)) * 
-	//	glm::scale(glm::mat4(1), glm::vec3(8, 4, 1));
-	
+	Object* mirror = new Object();
+	mirror->prefab = p_mirror;
+	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -10)) * 
+		glm::scale(glm::mat4(1), glm::vec3(8, 4, 1));
+	mirror->material = Material::_materials[p_mirror->_root[0]->_primitives[0]->materialID];
+
 	Object* cube = new Object();
 	cube->prefab = p_mirror;
 	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
@@ -125,7 +126,7 @@ void Scene::create_scene()
 	//_entities.push_back(sphere2);
 	//_entities.push_back(duck);
 	//_entities.push_back(cornell);
-	//_entities.push_back(mirror);
+	_entities.push_back(mirror);
 	_entities.push_back(helmet);
 	//_entities.push_back(car);
 	_entities.push_back(lucy);
