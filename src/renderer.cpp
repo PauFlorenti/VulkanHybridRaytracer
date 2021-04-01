@@ -1077,18 +1077,18 @@ void Renderer::init_deferred_descriptors()
 		vkAllocateDescriptorSets(*device, &allocInfo, &_frames[i].deferredDescriptorSet);
 
 		// Binginds 0 to 3 G-Buffers
-		VkDescriptorImageInfo texDescriptorPosition = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Position
-		VkDescriptorImageInfo texDescriptorNormal = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
-		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
-		VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion
-		VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[4].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Material
-		VkDescriptorImageInfo texDescriptorEmissive = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _deferredTextures[5].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Material
+		VkDescriptorImageInfo texDescriptorPosition = vkinit::descriptor_image_info(
+			_deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Position
+		VkDescriptorImageInfo texDescriptorNormal = vkinit::descriptor_image_info(
+			_deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Normal
+		VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_info(
+			_deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Albedo
+		VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_info(
+			_deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Motion
+		VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_info(
+			_deferredTextures[4].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Material
+		VkDescriptorImageInfo texDescriptorEmissive = vkinit::descriptor_image_info(
+			_deferredTextures[5].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Material
 
 		// Binding = 4 Light buffer
 		VkDescriptorBufferInfo lightBufferDesc;
@@ -2069,12 +2069,12 @@ void Renderer::create_shadow_descriptors()
 	VkDescriptorBufferInfo samplesDescInfo = vkinit::descriptor_buffer_info(_shadowSamplesBuffer._buffer, sizeof(unsigned int));
 
 	// Binding = 5 Gbuffers
-	VkDescriptorImageInfo positionDescInfo = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo normalDescInfo = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	VkDescriptorImageInfo motionDescInfo = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion GBuffer
+	VkDescriptorImageInfo positionDescInfo = vkinit::descriptor_image_info(
+		_deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);
+	VkDescriptorImageInfo normalDescInfo = vkinit::descriptor_image_info(
+		_deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);
+	VkDescriptorImageInfo motionDescInfo = vkinit::descriptor_image_info(
+		_deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Motion GBuffer
 
 	std::vector<VkDescriptorImageInfo> gbuffersDescInfo = {positionDescInfo, normalDescInfo, motionDescInfo};
 
@@ -2222,13 +2222,10 @@ void Renderer::create_rt_descriptors()
 		});
 
 	// Allocate Descriptor
-	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = {};
-	descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-	descriptorSetLayoutCreateInfo.pBindings = bindings.data();
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo = vkinit::descriptor_set_layout_create_info(static_cast<uint32_t>(bindings.size()), bindings);
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &descriptorSetLayoutCreateInfo, nullptr, &_rtDescriptorSetLayout));
 
-	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_rtDescriptorSetLayout, 1);
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo = vkinit::descriptor_set_allocate_info(_rtDescriptorPool, &_rtDescriptorSetLayout);
 	VK_CHECK(vkAllocateDescriptorSets(*device, &descriptorSetAllocateInfo, &_rtDescriptorSet));
 
 	// Binding = 0 AS
@@ -2246,15 +2243,10 @@ void Renderer::create_rt_descriptors()
 	accelerationStructureWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
 
 	// Binding = 1 Storage Image
-	VkDescriptorImageInfo storageImageDescriptor{};
-	storageImageDescriptor.imageView			= _rtImage.imageView;
-	storageImageDescriptor.imageLayout			= VK_IMAGE_LAYOUT_GENERAL;
+	VkDescriptorImageInfo storageImageDescriptor = vkinit::descriptor_image_info(_rtImage.imageView, VK_IMAGE_LAYOUT_GENERAL);
 
 	// Binding = 2 Camera 
-	VkDescriptorBufferInfo _rtDescriptorBufferInfo{};
-	_rtDescriptorBufferInfo.buffer				= _rtCameraBuffer._buffer;
-	_rtDescriptorBufferInfo.offset				= 0;
-	_rtDescriptorBufferInfo.range				= sizeof(RTCameraData);
+	VkDescriptorBufferInfo _rtDescriptorBufferInfo = vkinit::descriptor_buffer_info(_rtCameraBuffer._buffer, sizeof(RTCameraData));
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
@@ -2300,16 +2292,10 @@ void Renderer::create_rt_descriptors()
 	}
 
 	// Binding = 5 Matrix buffer
-	VkDescriptorBufferInfo matrixDescInfo;
-	matrixDescInfo.buffer = _matricesBuffer._buffer;
-	matrixDescInfo.offset = 0;
-	matrixDescInfo.range = sizeof(glm::mat4) * _scene->_matricesVector.size();
+	VkDescriptorBufferInfo matrixDescInfo = vkinit::descriptor_buffer_info(_matricesBuffer._buffer, sizeof(glm::mat4) * _scene->_matricesVector.size());
 
 	// Binding = 6 lights
-	VkDescriptorBufferInfo lightBufferInfo;
-	lightBufferInfo.buffer		= _lightBuffer._buffer;
-	lightBufferInfo.offset		= 0;
-	lightBufferInfo.range		= sizeof(uboLight) * nLights;
+	VkDescriptorBufferInfo lightBufferInfo = vkinit::descriptor_buffer_info(_lightBuffer._buffer, sizeof(uboLight) * nLights);
 
 	// Binding = 7 ID buffer
 	if (!_idBuffer._buffer)
@@ -2320,16 +2306,10 @@ void Renderer::create_rt_descriptors()
 	memcpy(idData,idVector.data(), sizeof(glm::vec4) * idVector.size());
 	vmaUnmapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation);
 
-	VkDescriptorBufferInfo idDescInfo;
-	idDescInfo.buffer = _idBuffer._buffer;
-	idDescInfo.offset = 0;
-	idDescInfo.range = sizeof(glm::vec4) * idVector.size();
+	VkDescriptorBufferInfo idDescInfo = vkinit::descriptor_buffer_info(_idBuffer._buffer, sizeof(glm::vec4) * idVector.size());
 
 	// Binding = 8 Materials
-	VkDescriptorBufferInfo materialBufferInfo;
-	materialBufferInfo.buffer = _matBuffer._buffer;
-	materialBufferInfo.offset = 0;
-	materialBufferInfo.range = sizeof(GPUMaterial) * nMaterials;
+	VkDescriptorBufferInfo materialBufferInfo = vkinit::descriptor_buffer_info(_matBuffer._buffer, sizeof(GPUMaterial) * nMaterials);
 
 	// Binding = 9 Textures
 	VkSamplerCreateInfo samplerInfo = vkinit::sampler_create_info(VK_FILTER_NEAREST);
@@ -2339,11 +2319,7 @@ void Renderer::create_rt_descriptors()
 	std::vector<VkDescriptorImageInfo> imageInfos;
 	for (auto const& texture : Texture::_textures)
 	{
-		VkDescriptorImageInfo imageBufferInfo = {};
-		imageBufferInfo.sampler = sampler;
-		imageBufferInfo.imageView = texture.second->imageView;
-		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
+		VkDescriptorImageInfo imageBufferInfo = vkinit::descriptor_image_info(texture.second->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, sampler);
 		imageInfos.push_back(imageBufferInfo);
 	}
 
@@ -2958,8 +2934,8 @@ void Renderer::create_post_descriptor()
 
 		vkAllocateDescriptorSets(*device, &allocInfo, &_frames[i].postDescriptorSet);
 
-		VkDescriptorImageInfo postDescriptor = vkinit::descriptor_image_create_info(
-			_offscreenSampler, _rtImage.imageView, VK_IMAGE_LAYOUT_GENERAL);	// final image from rtx
+		VkDescriptorImageInfo postDescriptor = vkinit::descriptor_image_info(
+			_rtImage.imageView, VK_IMAGE_LAYOUT_GENERAL, _offscreenSampler);	// final image from rtx
 
 		std::vector<VkWriteDescriptorSet> writes = {
 			vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _frames[i].postDescriptorSet, &postDescriptor, 0),
@@ -3033,50 +3009,37 @@ void Renderer::create_hybrid_descriptors()
 	// binding = 0 TLAS
 	// binding = 1 Storage image
 	// binding = 2 Camera buffer
-	// binding = 3 Position Gbuffer
-	// binding = 4 Normal Gbuffer
-	// binding = 5 Albedo Gbuffer
-	// binding = 6 Lights buffer
-	// binding = 7 Vertices buffer
-	// binding = 8 Indices buffer
-	// binding = 9 Textures buffer
-	// binding = 10 Skybox buffer
-	// binding = 11 Materials buffer
-	// binding = 12 Scene indices
-	// binding = 13 Matrices buffer
-	// binding = 14 Shadow image
-	// binding = 15 Motion Gbuffer
-	// binding = 16 Material Gbuffer
-	// binding = 17 Emissive Gbuffer
+	// binding = 3 Gbuffers
+	// binding = 4 Lights buffer
+	// binding = 5 Vertices buffer
+	// binding = 6 Indices buffer
+	// binding = 7 Textures buffer
+	// binding = 8 Skybox buffer
+	// binding = 9 Materials buffer
+	// binding = 10 Scene indices
+	// binding = 11 Matrices buffer
+	// binding = 12 Shadow image
 
-	VkDescriptorSetLayoutBinding TLASBinding			= 
-		vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);			// TLAS
+	VkDescriptorSetLayoutBinding TLASBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 0);			// TLAS
 	VkDescriptorSetLayoutBinding storageImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 1);			// storage image
 	VkDescriptorSetLayoutBinding cameraBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 2);			// Camera buffer
-	VkDescriptorSetLayoutBinding positionImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 3);	// Position	image
-	VkDescriptorSetLayoutBinding normalImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 4);	// Normals	image
-	VkDescriptorSetLayoutBinding albedoImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 5);	// Albedo	image
-	VkDescriptorSetLayoutBinding lightsBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6);	// Lights
-	VkDescriptorSetLayoutBinding vertexBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 7, nInstances);	// Vertices
-	VkDescriptorSetLayoutBinding indexBufferBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8, nInstances);	// Indices
-	VkDescriptorSetLayoutBinding texturesBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 9, nTextures); // Textures buffer
+	VkDescriptorSetLayoutBinding gBuffersBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 3, 6);
+	VkDescriptorSetLayoutBinding lightsBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 4);	// Lights
+	VkDescriptorSetLayoutBinding vertexBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 5, nInstances);	// Vertices
+	VkDescriptorSetLayoutBinding indexBufferBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 6, nInstances);	// Indices
+	VkDescriptorSetLayoutBinding texturesBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 7, nTextures); // Textures buffer
+	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 8); // Scene indices
+	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 9);	// Materials buffer
 	VkDescriptorSetLayoutBinding skyboxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR, 10, 2);
-	VkDescriptorSetLayoutBinding materialBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Materials buffer
-	VkDescriptorSetLayoutBinding matIdxBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 12); // Scene indices
-	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 13);	// Matrices
-	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 14, nLights);	// Shadow image
-	VkDescriptorSetLayoutBinding motionImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 15);	// Motion Gbuffer
-	VkDescriptorSetLayoutBinding materialImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 16); // Material Gbuffer
-	VkDescriptorSetLayoutBinding emissiveImageBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 17); // Emissive Gbuffer
+	VkDescriptorSetLayoutBinding matrixBufferBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, 11);	// Matrices
+	VkDescriptorSetLayoutBinding shadowImageBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR, 12, nLights);	// Shadow image
 
 	std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings =
 	{
 		TLASBinding,
 		storageImageBinding,
 		cameraBufferBinding,
-		positionImageBinding,
-		normalImageBinding,
-		albedoImageBinding,
+		gBuffersBinding,
 		lightsBufferBinding,
 		vertexBufferBinding,
 		indexBufferBinding,
@@ -3085,65 +3048,46 @@ void Renderer::create_hybrid_descriptors()
 		materialBufferBinding,
 		matIdxBufferBinding,
 		skyboxBufferBinding,
-		shadowImageBinding,
-		motionImageBinding,
-		materialImageBinding,
-		emissiveImageBinding
+		shadowImageBinding
 	};
 
-	VkDescriptorSetLayoutCreateInfo setInfo = {};
-	setInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	setInfo.pNext			= nullptr;
-	setInfo.bindingCount	= static_cast<uint32_t>(setLayoutBindings.size());
-	setInfo.pBindings		= setLayoutBindings.data();
-
+	VkDescriptorSetLayoutCreateInfo setInfo = vkinit::descriptor_set_layout_create_info(static_cast<uint32_t>(setLayoutBindings.size()), setLayoutBindings);
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &setInfo, nullptr, &_hybridDescSetLayout));
 
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.pNext					= nullptr;
-	allocInfo.descriptorPool		= _descriptorPool;
-	allocInfo.descriptorSetCount	= 1;
-	allocInfo.pSetLayouts			= &_hybridDescSetLayout;
-
+	VkDescriptorSetAllocateInfo allocInfo = vkinit::descriptor_set_allocate_info(_descriptorPool, &_hybridDescSetLayout);
 	vkAllocateDescriptorSets(*device, &allocInfo, &_hybridDescSet);
 
-	// TLAS write
+	// Binding = 0 TLAS write
 	VkWriteDescriptorSetAccelerationStructureKHR descriptorAccelerationStructureInfo{};
 	descriptorAccelerationStructureInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 	descriptorAccelerationStructureInfo.accelerationStructureCount	= 1;
 	descriptorAccelerationStructureInfo.pAccelerationStructures		= &_topLevelAS.handle;
 
-	// Camera write
-	VkDescriptorBufferInfo cameraBufferInfo{};
-	cameraBufferInfo.buffer = _rtCameraBuffer._buffer;
-	cameraBufferInfo.offset = 0;
-	cameraBufferInfo.range = sizeof(RTCameraData);
+	// Binding = 1 Camera write
+	VkDescriptorBufferInfo cameraBufferInfo = vkinit::descriptor_buffer_info(_rtCameraBuffer._buffer, sizeof(RTCameraData));
 
-	// Output image write
-	VkDescriptorImageInfo storageImageDescriptor{};
-	storageImageDescriptor.imageView	= _rtImage.imageView;
-	storageImageDescriptor.imageLayout	= VK_IMAGE_LAYOUT_GENERAL;
+	// Binding = 2 Output image write
+	VkDescriptorImageInfo storageImageDescriptor = vkinit::descriptor_image_info(_rtImage.imageView, VK_IMAGE_LAYOUT_GENERAL);
 
+	// Binding = 3
 	// Input deferred images write
-	VkDescriptorImageInfo texDescriptorPosition = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Position
-	VkDescriptorImageInfo texDescriptorNormal = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Normal
-	VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Albedo
-	VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Motion
-	VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[4].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Material
-	VkDescriptorImageInfo texDescriptorEmissive = vkinit::descriptor_image_create_info(
-		_offscreenSampler, _deferredTextures[5].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);	// Emissive
+	VkDescriptorImageInfo texDescriptorPosition = vkinit::descriptor_image_info(
+		_deferredTextures[0].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Position
+	VkDescriptorImageInfo texDescriptorNormal = vkinit::descriptor_image_info(
+		_deferredTextures[1].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Normal
+	VkDescriptorImageInfo texDescriptorAlbedo = vkinit::descriptor_image_info(
+		_deferredTextures[2].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Albedo
+	VkDescriptorImageInfo texDescriptorMotion = vkinit::descriptor_image_info(
+		_deferredTextures[3].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Motion
+	VkDescriptorImageInfo texDescriptorMaterial = vkinit::descriptor_image_info(
+		_deferredTextures[4].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Material
+	VkDescriptorImageInfo texDescriptorEmissive = vkinit::descriptor_image_info(
+		_deferredTextures[5].imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, _offscreenSampler);	// Emissive
 
-	// lights write
-	VkDescriptorBufferInfo lightDescBuffer;
-	lightDescBuffer.buffer = _lightBuffer._buffer;
-	lightDescBuffer.offset = 0;
-	lightDescBuffer.range  = sizeof(uboLight) * nLights;
+	std::vector<VkDescriptorImageInfo> gbuffersDescInfo = { texDescriptorPosition, texDescriptorNormal, texDescriptorAlbedo, texDescriptorMotion, texDescriptorMaterial, texDescriptorEmissive };
+
+	// Binding = 4 Lights buffer descriptor
+	VkDescriptorBufferInfo lightDescBuffer = vkinit::descriptor_buffer_info(_lightBuffer._buffer, sizeof(uboLight) * nLights);
 
 	std::vector<VkDescriptorBufferInfo> vertexDescInfo;
 	std::vector<VkDescriptorBufferInfo> indexDescInfo;
@@ -3166,16 +3110,12 @@ void Renderer::create_hybrid_descriptors()
 		memcpy(vdata, vAttr.data(), bufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
-		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer	= vBuffer._buffer;
-		vertexBufferDescriptor.offset	= 0;
-		vertexBufferDescriptor.range	= bufferSize;
+		// Binding = 5 Vertices Info
+		VkDescriptorBufferInfo vertexBufferDescriptor = vkinit::descriptor_buffer_info(vBuffer._buffer, bufferSize);
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
-		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer	= obj->prefab->_mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset	= 0;
-		indexBufferDescriptor.range		= sizeof(uint32_t) * obj->prefab->_mesh->_indices.size();
+		// Binding = 6 Indices Info
+		VkDescriptorBufferInfo indexBufferDescriptor = vkinit::descriptor_buffer_info(obj->prefab->_mesh->_indexBuffer._buffer, sizeof(uint32_t) * obj->prefab->_mesh->_indices.size());
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		for (Node* root : obj->prefab->_root)
@@ -3183,23 +3123,8 @@ void Renderer::create_hybrid_descriptors()
 			root->fill_index_buffer(idVector);
 		}
 	}
-
-	VkDescriptorBufferInfo matrixDescInfo;
-	matrixDescInfo.buffer		= _matricesBuffer._buffer;
-	matrixDescInfo.offset		= 0;
-	matrixDescInfo.range		= sizeof(glm::mat4) * _scene->_matricesVector.size();
-
-	VkDescriptorBufferInfo idDescInfo;
-	idDescInfo.buffer			= _idBuffer._buffer;
-	idDescInfo.offset			= 0;
-	idDescInfo.range			= sizeof(glm::vec4) * idVector.size();
-
-	VkDescriptorBufferInfo materialBufferInfo;
-	materialBufferInfo.buffer	= _matBuffer._buffer;
-	materialBufferInfo.offset	= 0;
-	materialBufferInfo.range	= sizeof(GPUMaterial) * nMaterials;
-
-	// Textures info
+	
+	// Binding = 7 Textures info
 	VkDescriptorSetAllocateInfo textureAllocInfo = {};
 	textureAllocInfo.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	textureAllocInfo.pNext				= nullptr;
@@ -3216,52 +3141,51 @@ void Renderer::create_hybrid_descriptors()
 	std::vector<VkDescriptorImageInfo> imageInfos;
 	for (auto const& texture : Texture::_textures)
 	{
-		VkDescriptorImageInfo imageBufferInfo = {};
-		imageBufferInfo.sampler		= sampler;
-		imageBufferInfo.imageView	= texture.second->imageView;
-		imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
+		VkDescriptorImageInfo imageBufferInfo = vkinit::descriptor_image_info(texture.second->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, sampler);
 		imageInfos.push_back(imageBufferInfo);
 	}
 
-	// Binding = 10 Skybox
+	// Binding = 8 Skybox
 	VkDescriptorImageInfo skyboxImagesDesc[2];
 	skyboxImagesDesc[0] = { sampler, Texture::GET("LA_Downtown_Helipad_GoldenHour_8k.jpg")->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
 	skyboxImagesDesc[1] = { sampler, Texture::GET("LA_Downtown_Helipad_GoldenHour_Env.hdr")->imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
 
-	// Binding = 14 Shadow image
+	// Binding = 9 Material info
+	VkDescriptorBufferInfo materialBufferInfo = vkinit::descriptor_buffer_info(_matBuffer._buffer, sizeof(GPUMaterial) * nMaterials);
+
+	// Binding = 10 ID info
+	VkDescriptorBufferInfo idDescInfo = vkinit::descriptor_buffer_info(_idBuffer._buffer, sizeof(glm::vec4) * idVector.size());
+
+	// Binding = 11 Matrices info
+	VkDescriptorBufferInfo matrixDescInfo = vkinit::descriptor_buffer_info(_matricesBuffer._buffer, sizeof(glm::mat4) * _scene->_matricesVector.size());
+
+	// Binding = 12 Shadow image
 	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
 	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
 	{
 		shadowImagesDesc[i] = { sampler, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
 	}
 
+	// Writes list
 	VkWriteDescriptorSet accelerationStructureWrite = vkinit::write_descriptor_acceleration_structure(_hybridDescSet, &descriptorAccelerationStructureInfo, 0);
 	VkWriteDescriptorSet storageImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, &storageImageDescriptor, 1);
 	VkWriteDescriptorSet cameraWrite			= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _hybridDescSet, &cameraBufferInfo, 2);
-	VkWriteDescriptorSet positionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorPosition, 3);
-	VkWriteDescriptorSet normalImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorNormal, 4);
-	VkWriteDescriptorSet albedoImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorAlbedo, 5);
-	VkWriteDescriptorSet lightWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &lightDescBuffer, 6);
-	VkWriteDescriptorSet vertexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, vertexDescInfo.data(), 7, nInstances);
-	VkWriteDescriptorSet indexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, indexDescInfo.data(), 8, nInstances);
-	VkWriteDescriptorSet texturesBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, imageInfos.data(), 9, nTextures);
+	VkWriteDescriptorSet gbuffersWrite			= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, gbuffersDescInfo.data(), 3, gbuffersDescInfo.size());
+	VkWriteDescriptorSet lightWrite				= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &lightDescBuffer, 4);
+	VkWriteDescriptorSet vertexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, vertexDescInfo.data(), 5, nInstances);
+	VkWriteDescriptorSet indexBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, indexDescInfo.data(), 6, nInstances);
+	VkWriteDescriptorSet texturesBufferWrite	= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, imageInfos.data(), 7, nTextures);
+	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 8);
+	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &materialBufferInfo, 9);
 	VkWriteDescriptorSet skyboxBufferWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, skyboxImagesDesc, 10, 2);
-	VkWriteDescriptorSet materialBufferWrite	= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &materialBufferInfo, 11);
-	VkWriteDescriptorSet matIdxBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &idDescInfo, 12);
-	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 13);
-	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, shadowImagesDesc.data(), 14, nLights);
-	VkWriteDescriptorSet motionImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMotion, 15);
-	VkWriteDescriptorSet materialImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorMaterial, 16);
-	VkWriteDescriptorSet emissiveImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _hybridDescSet, &texDescriptorEmissive, 17);
+	VkWriteDescriptorSet matrixBufferWrite		= vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, _hybridDescSet, &matrixDescInfo, 11);
+	VkWriteDescriptorSet shadowImageWrite		= vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _hybridDescSet, shadowImagesDesc.data(), 12, nLights);
 	
 	std::vector<VkWriteDescriptorSet> writes = {
 		accelerationStructureWrite,	// 0 TLAS
 		storageImageWrite,
 		cameraWrite, 
-		positionImageWrite,
-		normalImageWrite,
-		albedoImageWrite,
+		gbuffersWrite,
 		lightWrite,
 		vertexBufferWrite,
 		indexBufferWrite,
@@ -3271,9 +3195,6 @@ void Renderer::create_hybrid_descriptors()
 		matIdxBufferWrite,
 		skyboxBufferWrite,
 		shadowImageWrite,
-		motionImageWrite,
-		materialImageWrite,
-		emissiveImageWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);

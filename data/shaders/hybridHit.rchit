@@ -12,14 +12,14 @@ layout (location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
 layout (set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout (set = 0, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
-layout (set = 0, binding = 7, scalar) buffer Vertices { Vertex v[]; } vertices[];
-layout (set = 0, binding = 8) buffer Indices { int i[]; } indices[];
-layout (set = 0, binding = 9) uniform sampler2D[] textures;
+layout (set = 0, binding = 4) buffer Lights { Light lights[]; } lightsBuffer;
+layout (set = 0, binding = 5, scalar) buffer Vertices { Vertex v[]; } vertices[];
+layout (set = 0, binding = 6) buffer Indices { int i[]; } indices[];
+layout (set = 0, binding = 7) uniform sampler2D[] textures;
+layout (set = 0, binding = 8) buffer sceneBuffer { vec4 idx[]; } objIndices;
+layout (set = 0, binding = 9) buffer MaterialBuffer { Material mat[]; } materials;
 layout (set = 0, binding = 10) uniform sampler2D[] environmentTexture;
-layout (set = 0, binding = 11) buffer MaterialBuffer { Material mat[]; } materials;
-layout (set = 0, binding = 12) buffer sceneBuffer { vec4 idx[]; } objIndices;
-layout (set = 0, binding = 13, scalar) buffer Matrices { mat4 m[]; } matrices;
+layout (set = 0, binding = 11, scalar) buffer Matrices { mat4 m[]; } matrices;
 
 void main()
 {
@@ -47,7 +47,7 @@ void main()
   // Calculate worldPos by using ray information
   const vec3 normal     = v0.normal.xyz * barycentricCoords.x + v1.normal.xyz * barycentricCoords.y + v2.normal.xyz * barycentricCoords.z;
   const vec2 uv         = v0.uv.xy * barycentricCoords.x + v1.uv.xy * barycentricCoords.y + v2.uv.xy * barycentricCoords.z;
-  const vec3 N          = normalize(model * vec4(normal, 0)).xyz;
+  const vec3 N          = normalize(mat3(transpose(inverse(model))) * normal).xyz;
   const vec3 V          = normalize(-gl_WorldRayDirectionEXT);
   const float NdotV     = clamp(dot(N, V), 0.0, 1.0);
   const vec3 worldPos   = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;

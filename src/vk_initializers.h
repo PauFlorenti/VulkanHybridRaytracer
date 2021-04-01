@@ -90,9 +90,9 @@ namespace vkinit {
 
 	VkDescriptorPoolCreateInfo descriptor_pool_create_info(const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags = 0);
 
-	VkDescriptorSetAllocateInfo descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* pSetLayouts, uint32_t descriptorSetCount);
+	VkDescriptorSetAllocateInfo descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* pSetLayouts, uint32_t descriptorSetCount = 1);
 
-	VkDescriptorImageInfo descriptor_image_create_info(VkSampler sampler, VkImageView imageview, VkImageLayout layout);
+	VkDescriptorImageInfo descriptor_image_info(VkImageView view, VkImageLayout layout, VkSampler sampler = nullptr);
 
 	VkPipelineColorBlendStateCreateInfo color_blend_state_create_info(uint32_t attachmentCount, VkPipelineColorBlendAttachmentState* pAttachments);
 

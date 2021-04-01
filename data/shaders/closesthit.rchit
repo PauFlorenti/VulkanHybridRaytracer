@@ -157,8 +157,7 @@ void main()
         const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
         const bool isScattered  = dot(reflected, N) > 0;
 
-        difColor = vec3(1);
-        Lo += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+        Lo += NdotL > 0.0 ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
         direction = vec4(reflected, isScattered ? 1 : 0);
       }
       else if(shadingMode == 4) // VIDRE

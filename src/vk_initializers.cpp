@@ -370,7 +370,7 @@ VkDescriptorPoolCreateInfo vkinit::descriptor_pool_create_info(const std::vector
 	return info;
 }
 
-VkDescriptorSetAllocateInfo vkinit::descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* descriptorSetLayout, uint32_t descriptorSetCount)
+VkDescriptorSetAllocateInfo vkinit::descriptor_set_allocate_info(VkDescriptorPool descriptorPool, const VkDescriptorSetLayout* descriptorSetLayout, uint32_t descriptorSetCount /*=1*/)
 {
 	VkDescriptorSetAllocateInfo info{};
 	info.sType				= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -382,7 +382,7 @@ VkDescriptorSetAllocateInfo vkinit::descriptor_set_allocate_info(VkDescriptorPoo
 	return info;
 }
 
-VkDescriptorImageInfo vkinit::descriptor_image_create_info(VkSampler sampler, VkImageView view, VkImageLayout layout)
+VkDescriptorImageInfo vkinit::descriptor_image_info(VkImageView view, VkImageLayout layout, VkSampler sampler)
 {
 	VkDescriptorImageInfo info = {};
 	info.sampler		= sampler;
