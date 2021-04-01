@@ -1,48 +1,115 @@
 #version 460
 #extension GL_EXT_ray_tracing : require
 #extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_nonuniform_qualifier : enable
 
 #include "helpers.glsl"
 
-layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 2, set = 0) uniform CameraProperties 
+layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
+layout(binding = 1, rgba8) uniform image2D[] shadowImage;
+layout(binding = 2) uniform CameraProperties 
 {
 	mat4 viewInverse;
 	mat4 projInverse;
 	float frame;
 } cam;
+layout(binding = 3, std140) buffer Lights { Light lights[]; } lightsBuffer;
+layout(binding = 4) uniform SampleBuffer {int samples;} samplesBuffer;
+layout(binding = 5) uniform sampler2D[3] gbuffers;
+layout(binding = 6) buffer MaterialBuffer { Material mat[]; } materials;
 
 struct shadowPayload{
 	uint seed;
 	float frame;
 };
 
-layout(location = 0) rayPayloadEXT shadowPayload prd;
+layout(location = 0) rayPayloadEXT bool shadowed;
 
 void main() 
 {
-	prd.frame = cam.frame;
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, uint(prd.frame));
+	int frame = int(cam.frame);
+	uint seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, uint(frame));
 
-	for(int nS = 0; nS < NSAMPLES; nS++)
+	const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+	const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
+
+	vec3 position 	= texture(gbuffers[0], inUV).xyz;
+	vec3 normal 	= texture(gbuffers[1], inUV).rgb * 2.0 - vec3(1.0);
+	vec2 motion 	= texture(gbuffers[2], inUV).xy * 2.0 - vec2(1.0);
+	float matIdx 	= texture(gbuffers[0], inUV).w;
+	int mode 		= int(materials.mat[int(matIdx)].shadingMetallicRoughness.x);
+	vec3 N = normalize(normal);
+
+	if(mode == 4)
 	{
-		float r1 				= rnd(prd.seed);
-		float r2 				= rnd(prd.seed);
-		vec2 pixel_offset 		= nS == 0 ? vec2(0.5) : vec2(r1, r2);
-		const vec2 pixelCenter 	= vec2(gl_LaunchIDEXT.xy) + pixel_offset;	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
-		const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
-		vec2 d 					= inUV * 2.0 - 1.0;
+		for(int i = 0; i < lightsBuffer.lights.length(); i++)
+		{
+			imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(1, 0, 0, 1));
+		}
+		return;
+	}
 
-		// Using the pixel coordinates we can apply the inverse transformation of the view and procjection matrices of the camera to obtain
-		// the origin and target of the ray
-		vec4 origin		= cam.viewInverse * vec4(0,0,0,1);
-		vec4 target		= cam.projInverse * vec4(d.x, d.y, 1, 1) ;
-		vec4 direction	= cam.viewInverse * vec4(normalize(target.xyz), 0);
+	for(int i = 0; i < lightsBuffer.lights.length(); i++)
+	{
+		// Init basic light information
+    	Light light                     = lightsBuffer.lights[i];
+    	const bool isDirectional        = light.pos.w < 0;
+		vec3 L                          = isDirectional ? light.pos.xyz : (light.pos.xyz - position);
+		const float light_max_distance  = light.pos.w;
+		const float light_distance      = length(L);
+    	L                               = normalize(L);
+		const float NdotL               = clamp(dot(N, L), 0.0, 1.0);
+		const float light_intensity     = isDirectional ? 1.0 : (light.color.w / (light_distance * light_distance));
+    	float shadowFactor              = 0.0;
+    	int shadowSamples               = samplesBuffer.samples;
 
-		float tmin 		= 0.001;
-		float tmax 		= 10000.0;
+		if( NdotL > 0)
+		{
+			for(int s = 0; s < shadowSamples; s++)
+			{
+				shadowed = true;
+				float angle 	= rnd(seed) * 2.0f * PI;
+				float point 	= light.radius * sqrt(rnd(seed));
+				vec2 diskPoint 	= vec2(point * cos(angle), point * sin(angle));
+				vec3 tangent 	= normalize(cross(L, vec3(0, 1, 0)));
+				vec3 bitangent 	= normalize(cross(tangent, L));
+				vec3 target 	= position + L + diskPoint.x * tangent + diskPoint.y * bitangent;
 
-		// Call the function to start tracing rays.
-		traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction.xyz * 1e-2, tmin, direction.xyz, tmax, 0);
+				const vec3 dir 		= normalize(target - position);
+				const uint flags  	= gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+        		float tmin = 0.001, tmax = light_distance + 1;
+        
+        		// Shadow ray cast
+        		traceRayEXT(topLevelAS, flags, 0xFF, 0, 0, 0, 
+        		  position + dir * 1e-2, tmin, dir, tmax, 0);
+
+        		if(!shadowed){
+        		  shadowFactor++;
+        		}
+			}
+			shadowFactor /= shadowSamples;
+		}
+
+		if(frame > 0)
+		{
+			float a = 1.0f / float(frame + 1);
+			if( frame > 64)
+				return;
+			
+			vec3 old = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
+			vec3 color = mix(old, vec3(shadowFactor), a);
+			imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1.));
+		}
+		else
+		{
+			// Calculate motion vector
+			motion.y = 1.0 - motion.y;
+			vec2 reprojectedUV = gl_LaunchIDEXT.xy - motion;
+
+			// Mix reprojected old color with new color
+			vec3 old = imageLoad(shadowImage[i], ivec2(reprojectedUV)).rgb;
+			vec3 color = mix(old, vec3(shadowFactor), 0.5);
+			imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(color, 1));
+		}
 	}
 }

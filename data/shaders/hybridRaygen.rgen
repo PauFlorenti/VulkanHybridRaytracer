@@ -197,5 +197,6 @@ void main()
 
 	vec3 lastColor = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).rgb;
 	finalColor = mix(finalColor, lastColor, 0.5);
+	//finalColor = imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).xyz;
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
 }

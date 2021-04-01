@@ -16,14 +16,14 @@ layout(location = 1) rayPayloadEXT bool shadowed;
 hitAttributeEXT vec3 attribs;
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, set = 0, rgba8) uniform image2D[] shadowImage;
-layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
-layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
-layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
-layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
-layout(set = 0, binding = 7) buffer sceneBuffer { vec4 idx[]; } objIndices;
-layout(set = 0, binding = 8) uniform sampler2D motionTexture;
-layout(set = 0, binding = 9) uniform SampleBuffer {int samples;} samplesBuffer;
+//layout(binding = 1, set = 0, rgba8) uniform image2D[] shadowImage;
+//layout(set = 0, binding = 3, scalar) buffer Vertices { Vertex v[]; } vertices[];
+//layout(set = 0, binding = 4) buffer Indices { int i[]; } indices[];
+//layout(set = 0, binding = 5, scalar) buffer Matrices { mat4 m[]; } matrices;
+//layout(set = 0, std140, binding = 6) buffer Lights { Light lights[]; } lightsBuffer;
+//layout(set = 0, binding = 7) buffer sceneBuffer { vec4 idx[]; } objIndices;
+//layout(set = 0, binding = 8) uniform sampler2D motionTexture;
+//layout(set = 0, binding = 9) uniform SampleBuffer {int samples;} samplesBuffer;
 
 const vec2 BlueNoiseInDisk[64] = vec2[64](
     vec2(0.478712,0.875764),
@@ -95,6 +95,7 @@ const vec2 BlueNoiseInDisk[64] = vec2[64](
 void main()
 {
   // Do all vertices, indices and barycentrics calculations
+  /*
   const vec3 barycentricCoords = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
 
   vec4 objIdx = objIndices.idx[gl_InstanceCustomIndexEXT];
@@ -210,4 +211,5 @@ void main()
       imageStore(shadowImage[i], ivec2(gl_LaunchIDEXT.xy), vec4(c, 1)); 
     }
   }
+  */
 }

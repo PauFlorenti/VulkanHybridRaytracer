@@ -36,7 +36,7 @@ void Scene::create_scene()
 	light2->radius		= 0.1f;
 
 	_lights.push_back(light);
-	_lights.push_back(light2);
+	//_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------
