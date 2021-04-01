@@ -2253,7 +2253,6 @@ void Renderer::create_rt_descriptors()
 	std::vector<glm::vec4> idVector;
 	for (Object* obj : _scene->_entities)
 	{
-		// Binding = 3 Vertex buffer
 		std::vector<Vertex> vertices = obj->prefab->_mesh->_vertices;
 		std::vector<uint32_t> indices = obj->prefab->_mesh->_indices;
 		size_t vertexBufferSize = sizeof(rtVertexAttribute) * vertices.size();
@@ -2272,17 +2271,12 @@ void Renderer::create_rt_descriptors()
 		memcpy(vdata, vAttr.data(), vertexBufferSize);
 		vmaUnmapMemory(VulkanEngine::engine->_allocator, vBuffer._allocation);
 
-		VkDescriptorBufferInfo vertexBufferDescriptor{};
-		vertexBufferDescriptor.buffer = vBuffer._buffer;
-		vertexBufferDescriptor.offset = 0;
-		vertexBufferDescriptor.range = vertexBufferSize;
+		// Binding = 3 Vertices buffer
+		VkDescriptorBufferInfo vertexBufferDescriptor = vkinit::descriptor_buffer_info(vBuffer._buffer, vertexBufferSize);
 		vertexDescInfo.push_back(vertexBufferDescriptor);
 
-		// Binding = 4 Index buffer
-		VkDescriptorBufferInfo indexBufferDescriptor{};
-		indexBufferDescriptor.buffer = obj->prefab->_mesh->_indexBuffer._buffer;
-		indexBufferDescriptor.offset = 0;
-		indexBufferDescriptor.range = indexBufferSize;
+		// Binding = 4 Indices buffer
+		VkDescriptorBufferInfo indexBufferDescriptor = vkinit::descriptor_buffer_info(obj->prefab->_mesh->_indexBuffer._buffer, indexBufferSize);
 		indexDescInfo.push_back(indexBufferDescriptor);
 
 		for (Node* root : obj->prefab->_root)
@@ -2303,7 +2297,7 @@ void Renderer::create_rt_descriptors()
 
 	void* idData;
 	vmaMapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation, &idData);
-	memcpy(idData,idVector.data(), sizeof(glm::vec4) * idVector.size());
+	memcpy(idData, idVector.data(), sizeof(glm::vec4) * idVector.size());
 	vmaUnmapMemory(VulkanEngine::engine->_allocator, _idBuffer._allocation);
 
 	VkDescriptorBufferInfo idDescInfo = vkinit::descriptor_buffer_info(_idBuffer._buffer, sizeof(glm::vec4) * idVector.size());
