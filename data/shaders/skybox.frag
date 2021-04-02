@@ -8,6 +8,8 @@ layout(location = 0) out vec4 outPosition;
 layout(location = 1) out vec4 outNormal;
 layout(location = 2) out vec4 outFragColor;
 layout(location = 3) out vec4 outMotion;
+layout(location = 4) out vec4 outMaterial;
+layout(location = 5) out vec4 outEmissive;
 
 void main()
 {
@@ -15,4 +17,6 @@ void main()
     outNormal       = vec4(0);
     outFragColor    = texture(sky, inUV);
     outMotion       = vec4(0);
+    outMaterial     = vec4(0);
+    outEmissive     = vec4(0);
 }
