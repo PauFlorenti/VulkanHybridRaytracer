@@ -487,8 +487,14 @@ void Renderer::raytrace()
 
 	// RTX Pass
 	VkSubmitInfo submit{};
-	submit.pWaitSemaphores = &get_current_frame()._presentSemaphore; _denoiseSemaphore;
+	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.pNext				= nullptr;
+	submit.pWaitDstStageMask	= waitStages;
+	submit.waitSemaphoreCount	= 1;
+	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore; _denoiseSemaphore;
+	submit.signalSemaphoreCount = 1;
 	submit.pSignalSemaphores	= &_rtSemaphore;
+	submit.commandBufferCount	= 1;
 	submit.pCommandBuffers		= &_rtCommandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
