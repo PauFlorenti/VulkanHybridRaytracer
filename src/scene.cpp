@@ -41,42 +41,42 @@ void Scene::create_scene()
 	// Create own Materials
 	// --------------------
 	Material* m_mirror = new Material();
-	m_mirror->shadingModel = 3;
+	m_mirror->shadingModel	= 3;
 	Material* m_glass = new Material();
-	m_glass->diffuseColor = glm::vec4{ 0.7f, 0.7f, 1.0f, 1 };
-	m_glass->shadingModel = 4;
+	m_glass->diffuseColor	= glm::vec4{ 0.7f, 0.7f, 1.0f, 1 };
+	m_glass->shadingModel	= 4;
 	m_glass->ior = 1.125;// 1.2f;
 	Material* m_gold = new Material();
-	m_gold->diffuseColor = glm::vec4{ 1.0, 0.71, 0.29, 1.0 };
-	m_gold->metallicFactor = 0.5f;
+	m_gold->diffuseColor	= glm::vec4{ 1.0, 0.71, 0.29, 1.0 };
+	m_gold->metallicFactor	= 0.5f;
 	m_gold->roughnessFactor = 0.1f;
 	Material* m_red = new Material();
-	m_red->diffuseColor = glm::vec4{ 0.9, 0.1, 0.05, 1.0 };
-	m_red->metallicFactor = 0.0;
-	m_red->roughnessFactor = 0.0;
+	m_red->diffuseColor		= glm::vec4{ 0.9, 0.1, 0.05, 1.0 };
+	m_red->metallicFactor	= 0.0;
+	m_red->roughnessFactor	= 0.0;
 	Material* m_floor = new Material();
 	m_floor->metallicFactor = 0.1f;
 
 	// Create prefabs
 	// --------------
 	//Prefab* p_sphere	= Prefab::GET("sphere.obj");
-	Prefab* p_quad		= Prefab::GET("quad", Mesh::get_quad());
+	Prefab* p_quad			= Prefab::GET("quad", Mesh::get_quad());
 	p_quad->_root[0]->addMaterial(m_floor);
-	Prefab* p_mirror	= Prefab::GET("cube", Mesh::get_cube());
+	Prefab* p_mirror		= Prefab::GET("cube", Mesh::get_cube());
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
-	Prefab* p_glass_sphere = Prefab::GET("sphere.obj");
+	Prefab* p_glass_sphere	= Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere = Prefab::GET("sphere.obj");
+	Prefab* p_gold_sphere	= Prefab::GET("sphere.obj");
 	p_gold_sphere->_root[0]->addMaterial(m_gold);
-	Prefab* p_red_sphere = Prefab::GET("sphere.obj");
+	Prefab* p_red_sphere	= Prefab::GET("sphere.obj");
 	p_red_sphere->_root[0]->addMaterial(m_red);
-	//Prefab* p_cornell	= Prefab::GET("cornellBox.gltf");
-	Prefab* p_helmet	= Prefab::GET("DamagedHelmet.gltf");
-	//Prefab* p_lantern	= Prefab::GET("Lantern.gltf");
-	//Prefab* p_car		= Prefab::GET("scene.gltf");
-	Prefab* p_lucy		= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
+	//Prefab* p_cornell		= Prefab::GET("cornellBox.gltf");
+	Prefab* p_helmet		= Prefab::GET("DamagedHelmet.gltf");
+	//Prefab* p_lantern		= Prefab::GET("Lantern.gltf");
+	//Prefab* p_car			= Prefab::GET("scene.gltf");
+	Prefab* p_lucy			= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
 	p_lucy->_root[0]->addMaterial(m_glass);
 	//Prefab* p_sponza = Prefab::GET("Sponza.gltf");
 

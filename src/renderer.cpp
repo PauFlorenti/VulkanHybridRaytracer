@@ -485,28 +485,8 @@ void Renderer::raytrace()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
-	// Shadow pass
-	VkSubmitInfo submit{};
-	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submit.pNext				= nullptr;
-	submit.pWaitDstStageMask	= waitStages;
-	submit.waitSemaphoreCount	= 1;
-	submit.pWaitSemaphores		= &get_current_frame()._presentSemaphore;
-	submit.signalSemaphoreCount	= 1;
-	submit.pSignalSemaphores	= &_shadowSemaphore;
-	submit.commandBufferCount	= 1;
-	submit.pCommandBuffers		= &_shadowCommandBuffer;
-
-	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-
-	// Compute pass
-	submit.pWaitSemaphores		= &_shadowSemaphore;
-	submit.pSignalSemaphores	= &_denoiseSemaphore;
-	submit.pCommandBuffers		= &_denoiseCommandBuffer;
-
-	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-
 	// RTX Pass
+	VkSubmitInfo submit{};
 	submit.pWaitSemaphores = &get_current_frame()._presentSemaphore; _denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_rtCommandBuffer;
