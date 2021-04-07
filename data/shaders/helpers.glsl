@@ -5,7 +5,7 @@
 const float PI = 3.14159265;
 const int NSAMPLES = 1;
 const int SHADOWSAMPLES = 64;
-const int MAX_RECURSION = 5;
+const int MAX_RECURSION = 8;
 
 // STRUCTS --------------------
 struct Vertex
@@ -76,80 +76,13 @@ vec3 computeAmbient(vec3 N, vec3 V, vec3 albedo, vec3 irradiance, vec3 F0)
     return (kD * diffuse);
 }
 
-mat3 rotMat(const vec3 axis, const float angle)
+vec3 sampleDisk(Light light, vec3 position, vec3 L, uint seed)
 {
-    float c = cos(angle);
-    float s = sin(angle);
-
-    float t = 1 - c;
-    float x = axis.x;
-    float y = axis.y;
-    float z = axis.z;
-
-    return mat3(
-        t * x * x + c,      t * x * y - s * z,  t * x * z + s * y,
-        t * x * y + s * z,  t * y * y + c,      t * y * z - s * x,
-        t * x * z - s * y,  t * y * z + s * x,  t * z * z + c
-    );
-}
-
-mat4 rotationMatrix(vec3 axis, float angle)
-{
-    axis = normalize(axis);
-    float s = sin(angle);
-    float c = cos(angle);
-    float oc = 1.0 - c;
-    
-    return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
-                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
-                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
-                0.0,                                0.0,                                0.0,                                1.0);
-}
-
-vec3 sampleCone(inout uint seed, const vec3 direction, const float angle)
-{
-    float cosAngle = cos(angle); //1
-
-    // This range to [cosTheta, 1]. In case rnd is 1, z will be 1, whereas if rnd is 0, z will be cosTheta.
-    float z = rnd(seed) * (1.0 - cosAngle) + cosAngle; // 1
-
-    float phi = rnd(seed) * 2.0 * PI;
-    float x = sqrt(1.0 - z * z) * cos(phi); // 0
-    float y = sqrt(1.0 - z * z) * sin(phi); // 0
-    vec3 north = vec3(0.0, 0.0, 1.0);
-
-    vec3 axis = normalize(cross(north, normalize(direction)));
-    float rotAngle = acos(dot(normalize(direction), north));
-
-    mat4 rot = rotationMatrix(axis, rotAngle);
-
-    return vec3(rot * vec4(x, y, z, 1));//vec3(x, y, z);
-    /*
-    const float cosAngle = cos(angle);
-    const float a = rnd(seed);
-    const float cosTheta = (1.0 - a) + a * cosAngle;
-    const float sinTheta = sqrt(1 - cosTheta * cosTheta);
-    const float phi = rnd(seed) * 2 * PI;
-    
-    vec3 sampleDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-
-    const vec3 north = vec3(0, 0, 1);
-    const vec3 axis = normalize(cross(north, normalize(sampleDir)));
-    const float rotationAngle = acos(dot(normalize(sampleDir), north));
-    mat3 rot = rotMat(axis, rotationAngle);
-
-    return rot * sampleDir;
-    */
-}
-
-vec3 sampleSphere(inout uint seed, const vec3 center, const float r)
-{
-    const float theta = 2 * PI * rnd(seed);
-    const float phi = acos(1 - 2 * rnd(seed));
-
-    const float x = sin(phi) * cos(theta);
-    const float y = sin(phi) * sin(theta);
-    const float z = cos(phi);
-
-    return center + (r * vec3(x, y, z));
+    float radius = light.radius * sqrt(rnd(seed));
+    float angle = rnd(seed) * 2.0f * PI;
+    vec2 point = vec2(radius * cos(angle), radius * sin(angle));
+    vec3 tangent = normalize(cross(L, vec3(0, 1, 0)));
+    vec3 bitangent = normalize(cross(tangent, L));
+    vec3 target = position + L + point.x * tangent + point.y * bitangent;
+    return normalize(target - position);
 }

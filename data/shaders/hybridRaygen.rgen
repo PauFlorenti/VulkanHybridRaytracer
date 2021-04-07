@@ -26,8 +26,8 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 
 void main()
 {
-
-	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, cam.frame);
+	uint frame = cam.frame;
+	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
 
     const vec2 pixelCenter	= vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
 	const vec2 inUV 		= pixelCenter/vec2(gl_LaunchSizeEXT.xy);	//gl_LaunchSizeExt is the image size provided in the traceRayEXT function
@@ -60,7 +60,7 @@ void main()
   	vec3 irradiance = texture(environmentTexture[1], environmentUV).xyz;
 
 	float tmin 				= 0.001;
-	float tmax 				= 10000.0;
+	float tmax 				= 1000.0;
 
 	vec3 finalColor 		= vec3(0);
 	vec3 origin 			= vec3(0);
@@ -97,13 +97,15 @@ void main()
 				attenuation = max(attenuation, 0.0);
 				attenuation = isDirectional ? 0.3 : (attenuation * attenuation);
 			}
-			
-			tmax = 10000.0;
+		}
+		tmax = 1000.0;
 
-			// Calculate illumination
-			//-----------------------
-			// In case material is diffuse, no need to ray trace at the moment
-			if( shadingMode == 0)
+		// Calculate illumination
+		//-----------------------
+		// In case material is diffuse, no need to ray trace at the moment
+		if( shadingMode == 0 )
+		{
+			if(NdotL > 0.0)
 			{
 				vec3 radiance 	= light.color.xyz * light_intensity * attenuation * shadowFactor;
 				const vec3 H 	= normalize(V + L);
@@ -111,39 +113,42 @@ void main()
 				float D 		= DistributionGGX(N, H, roughness);
 				float G 		= GeometrySmith(N, V, L, roughness);
 
-				vec3 numerator = D * G * F;
-				float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
-				vec3 specular = numerator / max(denominator, 0.001);
+				vec3 numerator 		= D * G * F;
+				float denominator 	= 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
+				vec3 specular 		= numerator / max(denominator, 0.001);
 
 				vec3 kS = F;
 				vec3 kD = vec3(1.0) - F;
 
 				kD *= 1.0 - metallic;
 				rayColor *= (kD * albedo / PI + specular) * radiance * NdotL;
-				//traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
-				//rayColor += prd.colorAndDist.xyz * 0.1;
 			}
-			else if(shadingMode == 3)
-			{
-				direction 			= reflect(normalize(-V), N);
-				origin 				= position;
-				vec3 difColor 		= vec3(1);//computeDiffuse(mat, N, L);
-				rayColor *= difColor * light.color.xyz * light_intensity * attenuation * shadowFactor;
-				for(;depth < MAX_RECURSION; depth++)
-				{
-					traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
-					rayColor 		*= prd.colorAndDist.xyz;
-
-					if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
-					{
-						break;
-					}
-					origin 			= prd.origin.xyz;
-					direction 		= prd.direction.xyz;
-				}
+			else{
+				rayColor = vec3(0.0);
 			}
 			finalColor += rayColor;
 		}
+		
+		if( shadingMode == 3)
+		{
+			direction 			= reflect(normalize(-V), N);
+			origin 				= position;
+			rayColor *= NdotL > 0.0 ? light.color.xyz * light_intensity * attenuation * shadowFactor : irradiance;
+			for(;depth < MAX_RECURSION; depth++)
+			{
+				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
+				rayColor 		*= prd.colorAndDist.xyz;
+
+				if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
+				{
+					finalColor += rayColor;
+					break;
+				}
+				origin 			= prd.origin.xyz;
+				direction 		= prd.direction.xyz;
+			}
+		}
+		
 		if(shadingMode == 4)
 		{
 			float ior 				= mat.diffuse.w;
@@ -173,38 +178,13 @@ void main()
 				direction 		= prd.direction.xyz;
 			}
 		}
-		if(shadingMode == 3)
-		{
-			direction 			= reflect(normalize(-V), N);
-			origin 				= position;
-			vec3 difColor 		= vec3(1);
-			rayColor *= difColor * irradiance;
-			for(;depth < MAX_RECURSION; depth++)
-			{
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
-				rayColor 		*= prd.colorAndDist.xyz;
-
-				if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
-				{
-					finalColor += rayColor;
-					break;
-				}
-				origin 			= prd.origin.xyz;
-				direction 		= prd.direction.xyz;
-			}
-		}
 	}
 
-	//tmax = 10;
-	//traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, position.xyz + N, tmin, N, tmax, 0);
-	//if(prd.colorAndDist.w > 0)
-	//	irradiance += prd.colorAndDist.xyz;
-
 	// Ambient from IBL
-  	vec3 F = FresnelSchlick(NdotV, F0);
-  	vec3 kD = (1.0 - F) * (1.0 - metallic);
-  	vec3 diffuse = kD * albedo * irradiance;
-  	vec3 ambient = diffuse;
+  	vec3 F 			= FresnelSchlick(NdotV, F0);
+  	vec3 kD 		= (1.0 - F) * (1.0 - metallic);
+  	vec3 diffuse 	= kD * albedo * irradiance;
+  	vec3 ambient 	= diffuse;
 
 	finalColor += ambient + emissive;
 	
@@ -212,7 +192,7 @@ void main()
 		finalColor = albedo;
 
 	vec3 lastColor = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).rgb;
-	finalColor = mix(finalColor, lastColor, 0.5);
-	//finalColor = imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).xyz;
+	finalColor = mix(lastColor, finalColor, 0.2);
+	//finalColor = imageLoad(shadowImage[i], ivec2(gl_LaunchIDEXT.xy)).rgb;
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
 }

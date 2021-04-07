@@ -101,19 +101,22 @@ void main()
 			for(int a = 0; a < shadowSamples; a++)
 			{
         // Init as shadowed
-				shadowed 	        = true;
-        float pointRadius = light.radius * sqrt(rnd(prd.seed));
-        float angle       = rnd(prd.seed) * 2.0f * PI;
-        vec2 diskPoint    = vec2(pointRadius * cos(angle), pointRadius * sin(angle));
-        vec3 lTangent     = normalize(cross(L, vec3(0, 1, 0)));
-        vec3 lBitangent   = normalize(cross(lTangent, L));
-        vec3 target       = worldPos + L + diskPoint.x * lTangent + diskPoint.y * lBitangent;
-        vec3 dir          = normalize(target - worldPos);
-        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-        // Shadow ray cast
-				float tmin = 0.001, tmax  = light_distance + 1;
-				traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-          worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+        shadowed 	        = true;
+        if(light_distance < light_max_distance)
+        {
+          float pointRadius = light.radius * sqrt(rnd(prd.seed));
+          float angle       = rnd(prd.seed) * 2.0f * PI;
+          vec2 diskPoint    = vec2(pointRadius * cos(angle), pointRadius * sin(angle));
+          vec3 lTangent     = normalize(cross(L, vec3(0, 1, 0)));
+          vec3 lBitangent   = normalize(cross(lTangent, L));
+          vec3 target       = worldPos + L + diskPoint.x * lTangent + diskPoint.y * lBitangent;
+          vec3 dir          = normalize(target - worldPos);
+          const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+          float tmin = 0.001, tmax  = light_distance + 1;
+          // Shadow ray cast
+          traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+            worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+        }
 
 				if(!shadowed){
 					shadowFactor++;
@@ -133,8 +136,6 @@ void main()
         attenuation = attenuation * attenuation;
       }
 
-      vec3 difColor = vec3(0);
-
       if(shadingMode == 0)  // DIFUS
       {
         vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
@@ -149,7 +150,7 @@ void main()
         vec3 kS = F;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        Lo += NdotL > 0.0 ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
         direction = vec4(1, 1, 1, 0);
       }
       else if(shadingMode == 3) // MIRALL

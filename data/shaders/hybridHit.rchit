@@ -96,13 +96,17 @@ void main()
 			for(int a = 0; a < SHADOWSAMPLES; a++)
 			{
         // Init as shadowed
-				shadowed 	        = true;
-				const vec3 dir    = normalize(sampleSphere(prd.seed, light.pos.xyz, light.radius) - worldPos);
-        const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-        // Shadow ray cast
-				float tmin = 0.001, tmax  = light_distance + 1;
-				traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-          worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+        shadowed 	        = true;
+        if(light_distance < light_max_distance)
+        {
+          vec3 dir          = sampleDisk(light, worldPos, L, prd.seed);
+          const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+          float tmin = 0.001, tmax  = light_distance + 1;
+
+          // Shadow ray cast
+          traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+            worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+        }
 
 				if(!shadowed){
 					shadowFactor++;
@@ -139,7 +143,7 @@ void main()
 
       kD *= 1.0 - metallic;
 
-      Lo    += (kD * albedo / PI + specular) * radiance * NdotL;
+      Lo    += NdotL > 0.0 ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
       direction = vec4(1, 1, 1, 0);
     }
     else if(shadingMode == 3) // MIRALL
@@ -147,8 +151,7 @@ void main()
       const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
       const bool isScattered  = dot(reflected, N) > 0;
 
-      difColor = vec3(1);//isScattered ? computeDiffuse(mat, N, L) : vec3(1);
-      Lo += difColor * light_intensity * light.color.xyz * attenuation * shadowFactor;
+      Lo += NdotL > 0.0 ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
       direction = vec4(reflected, isScattered ? 1 : 0);
     }
     else if(shadingMode == 4) // VIDRE

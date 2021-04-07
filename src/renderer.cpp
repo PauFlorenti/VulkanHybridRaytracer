@@ -498,6 +498,7 @@ void Renderer::raytrace()
 	submit.pCommandBuffers		= &_rtCommandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Post pass
 	build_post_command_buffers();
@@ -507,6 +508,7 @@ void Renderer::raytrace()
 	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
 
 	result = vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence);
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	VkPresentInfoKHR present{};
 	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -552,6 +554,7 @@ void Renderer::rasterize_hybrid()
 	submit.pCommandBuffers		= &_offscreenComandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Shadow pass
 	submit.pWaitSemaphores		= &_offscreenSemaphore;
@@ -559,6 +562,7 @@ void Renderer::rasterize_hybrid()
 	submit.pCommandBuffers		= &_shadowCommandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Compute pass
 	submit.pWaitSemaphores		= &_shadowSemaphore;
@@ -566,18 +570,22 @@ void Renderer::rasterize_hybrid()
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Second pass raytrace
 	submit.pWaitSemaphores		= &_denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
+	// Post pass
 	build_post_command_buffers();
 	submit.pWaitSemaphores		= &_rtSemaphore;
 	submit.pSignalSemaphores	= &get_current_frame()._renderSemaphore;
 	submit.pCommandBuffers		= &get_current_frame()._mainCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	VkPresentInfoKHR present{};
 	present.sType				= VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -2461,7 +2469,7 @@ void Renderer::init_raytracing_pipeline()
 	rtPipelineCreateInfo.pStages						= shaderStages.data();
 	rtPipelineCreateInfo.groupCount						= static_cast<uint32_t>(shaderGroups.size());
 	rtPipelineCreateInfo.pGroups						= shaderGroups.data();
-	rtPipelineCreateInfo.maxPipelineRayRecursionDepth	= 10;
+	rtPipelineCreateInfo.maxPipelineRayRecursionDepth	= 4;
 	rtPipelineCreateInfo.layout							= _rtPipelineLayout;
 
 	VK_CHECK(vkCreateRayTracingPipelinesKHR(*device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rtPipelineCreateInfo, nullptr, &_rtPipeline));
@@ -2479,7 +2487,7 @@ void Renderer::init_raytracing_pipeline()
 	hybridPipelineInfo.pStages						= hybridShaderStages.data();
 	hybridPipelineInfo.groupCount					= static_cast<uint32_t>(hybridShaderGroups.size());
 	hybridPipelineInfo.pGroups						= hybridShaderGroups.data();
-	hybridPipelineInfo.maxPipelineRayRecursionDepth = 10;
+	hybridPipelineInfo.maxPipelineRayRecursionDepth = 4;
 	hybridPipelineInfo.layout						= _hybridPipelineLayout;
 
 	VK_CHECK(vkCreateRayTracingPipelinesKHR(*device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &hybridPipelineInfo, nullptr, &_hybridPipeline));
