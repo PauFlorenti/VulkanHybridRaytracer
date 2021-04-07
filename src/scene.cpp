@@ -97,7 +97,7 @@ void Scene::create_scene()
 	Object* mirror = new Object();
 	mirror->prefab = p_mirror;
 	mirror->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -10)) * 
-		glm::scale(glm::mat4(1), glm::vec3(8, 4, 1));
+		glm::scale(glm::mat4(1), glm::vec3(4, 4, 1));
 	mirror->material = Material::_materials[p_mirror->_root[0]->_primitives[0]->materialID];
 
 	Object* cube = new Object();

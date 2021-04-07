@@ -10,10 +10,10 @@ layout (location = 5) in vec4 inNdcPrev;
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
-layout (location = 2) out vec4 outAlbedo;
-layout (location = 3) out vec4 outMotion;
-layout (location = 4) out vec4 outMaterial;
-layout (location = 5) out vec4 outEmissive;
+layout (location = 2) out vec3 outAlbedo;
+layout (location = 3) out vec2 outMotion;
+layout (location = 4) out vec3 outMaterial;
+layout (location = 5) out vec3 outEmissive;
 
 // Set 1: texture array
 layout(set = 0, binding = 1) uniform sampler2D[] textures;
@@ -65,13 +65,13 @@ void main()
 
     outPosition = vec4( inWorldPos, materialIdx );
     outNormal   = vec4( N * 0.5 + vec3(0.5), 1 );
-    outAlbedo   = vec4( color, 1.0 );
-    outMaterial = vec4( material, 1.0 );
-    outEmissive = vec4( emissive, 1.0 );
+    outAlbedo   = vec3( color );
+    outMaterial = vec3( material );
+    outEmissive = vec3( emissive );
 
     // convert to clip space
     vec3 ndc            = inNdc.xyz / inNdc.w;
     vec3 ndcPrev        = inNdcPrev.xyz / inNdcPrev.w;
     vec2 motion         = ndc.xy - ndcPrev.xy;
-    outMotion           = vec4(motion * 0.5 + vec2(0.5), 0, 1);
+    outMotion           = vec2(motion * 0.5 + vec2(0.5));
 }

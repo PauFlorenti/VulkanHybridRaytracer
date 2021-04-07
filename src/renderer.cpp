@@ -255,7 +255,7 @@ void Renderer::init_offscreen_render_pass()
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &position);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &normal);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &albedo);
-	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16B16A16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &motion);
+	VulkanEngine::engine->create_attachment(VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &motion);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &material);
 	VulkanEngine::engine->create_attachment(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, &emissive);
 	VulkanEngine::engine->create_attachment(VulkanEngine::engine->_depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, &depth);
@@ -296,7 +296,7 @@ void Renderer::init_offscreen_render_pass()
 	attachmentDescs[0].format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	attachmentDescs[1].format = VK_FORMAT_R16G16B16A16_SFLOAT;
 	attachmentDescs[2].format = VK_FORMAT_R8G8B8A8_UNORM;
-	attachmentDescs[3].format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	attachmentDescs[3].format = VK_FORMAT_R16G16_SFLOAT;
 	attachmentDescs[4].format = VK_FORMAT_R8G8B8A8_UNORM;
 	attachmentDescs[5].format = VK_FORMAT_R8G8B8A8_UNORM;
 	attachmentDescs[6].format = VulkanEngine::engine->_depthFormat;
@@ -1604,6 +1604,9 @@ void Renderer::create_storage_image()
 	VkImageCreateInfo imageInfo = vkinit::image_create_info(VK_FORMAT_B8G8R8A8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
 	imageInfo.initialLayout		= VK_IMAGE_LAYOUT_UNDEFINED;
 
+	VkImageCreateInfo shadowImageInfo	= vkinit::image_create_info(VK_FORMAT_R8_UNORM, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, extent);
+	shadowImageInfo.initialLayout		= VK_IMAGE_LAYOUT_UNDEFINED;
+
 	VmaAllocationCreateInfo allocInfo{};
 	allocInfo.usage			= VMA_MEMORY_USAGE_GPU_ONLY;
 	allocInfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -1619,15 +1622,15 @@ void Renderer::create_storage_image()
 	for (decltype(_scene->_lights.size()) i = 0; i < _scene->_lights.size(); i++)
 	{
 		Texture image, denoisedImage;
-		vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo, 
+		vmaCreateImage(VulkanEngine::engine->_allocator, &shadowImageInfo, &allocInfo,
 			&image.image._image, &image.image._allocation, nullptr);
-		VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, image.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+		VkImageViewCreateInfo shadowImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_R8_UNORM, image.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 		VK_CHECK(vkCreateImageView(*device, &shadowImageViewInfo, nullptr, &image.imageView));
 		_shadowImages.emplace_back(image);
 	
-		vmaCreateImage(VulkanEngine::engine->_allocator, &imageInfo, &allocInfo,
+		vmaCreateImage(VulkanEngine::engine->_allocator, &shadowImageInfo, &allocInfo,
 			&denoisedImage.image._image, &denoisedImage.image._allocation, nullptr);
-		VkImageViewCreateInfo denoiseImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_B8G8R8A8_UNORM, denoisedImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
+		VkImageViewCreateInfo denoiseImageViewInfo = vkinit::image_view_create_info(VK_FORMAT_R8_UNORM, denoisedImage.image._image, VK_IMAGE_ASPECT_COLOR_BIT);
 		VK_CHECK(vkCreateImageView(*device, &denoiseImageViewInfo, nullptr, &denoisedImage.imageView));
 		_denoisedImages.emplace_back(denoisedImage);
 	}
@@ -3151,7 +3154,7 @@ void Renderer::create_hybrid_descriptors()
 	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
 	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
 	{
-		shadowImagesDesc[i] = { sampler, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
+		shadowImagesDesc[i] = { VK_NULL_HANDLE, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
 	}
 
 	// Writes list
