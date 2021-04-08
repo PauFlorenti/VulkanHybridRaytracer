@@ -80,12 +80,12 @@ void Scene::create_scene()
 	// ---------------
 	Object* sphere = new Object();
 	sphere->prefab = p_red_sphere;
-	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5));
+	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 1, -5));
 	sphere->material = Material::_materials[p_red_sphere->_root[0]->_primitives[0]->materialID];
 
 	Object* sphere2 = new Object();
 	sphere2->prefab = p_red_sphere;
-	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5));
+	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
 	
 	Object* floor = new Object();
 	floor->prefab = p_quad;
@@ -106,7 +106,7 @@ void Scene::create_scene()
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
-	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -5));
+	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 1, -5));
 	helmet->material = Material::_materials[p_helmet->_root[0]->_primitives[0]->materialID];
 
 	Object* lucy = new Object();
@@ -122,7 +122,7 @@ void Scene::create_scene()
 	_entities.push_back(floor);
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
-	//_entities.push_back(mirror);
+	_entities.push_back(mirror);
 	//_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
 	_entities.push_back(helmet);
