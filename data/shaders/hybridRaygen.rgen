@@ -126,29 +126,13 @@ void main()
 			else{
 				rayColor = vec3(0.0);
 			}
-			finalColor += rayColor;
 		}
-		
-		if( shadingMode == 3)
+		if( shadingMode == 3 )
 		{
 			direction 			= reflect(normalize(-V), N);
 			origin 				= position;
 			rayColor *= NdotL > 0.0 ? light.color.xyz * light_intensity * attenuation * shadowFactor : irradiance;
-			for(;depth < MAX_RECURSION; depth++)
-			{
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
-				rayColor 		*= prd.colorAndDist.xyz;
-
-				if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
-				{
-					finalColor += rayColor;
-					break;
-				}
-				origin 			= prd.origin.xyz;
-				direction 		= prd.direction.xyz;
-			}
 		}
-		
 		if(shadingMode == 4)
 		{
 			float ior 				= mat.diffuse.w;
@@ -164,20 +148,29 @@ void main()
 			float radicand = 1 + pow(refrEta, 2.0) * (cosAlpha * cosAlpha - 1);
 			direction = radicand < 0.0 ? reflect(I, N) : refract(I, refrNormal, refrEta);
 			rayColor *= mat.diffuse.xyz * light_intensity * light.color.xyz;
-			for(;depth < MAX_RECURSION; depth++)
-			{
-				traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
-				rayColor *= prd.colorAndDist.xyz;
+		}
 
-				if(prd.direction.w == 0 || prd.colorAndDist.w < 0)
-				{
-					finalColor += rayColor;
-					break;
-				}
-				origin 			= prd.origin.xyz;
-				direction 		= prd.direction.xyz;
+		// RECURSION IF NEEDED FOR BOUNCING
+		// --------------------------------
+		for(;depth < MAX_RECURSION; depth++)
+		{
+			if(shadingMode == 0)
+				break;
+
+			traceRayEXT(topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, 0, 0, 0, origin.xyz + direction * 1e-2, tmin, direction, tmax, 0);
+			rayColor *= prd.colorAndDist.xyz;
+			const float hitDistance = prd.colorAndDist.w;
+			const bool isScattered 	= prd.direction.w > 0;
+
+			if( hitDistance < 0 || !isScattered){
+				break;
+			}
+			else{
+				origin.xyz 		= prd.origin.xyz;
+				direction.xyz 	= prd.direction.xyz;
 			}
 		}
+		finalColor += rayColor;
 	}
 
 	// Ambient from IBL

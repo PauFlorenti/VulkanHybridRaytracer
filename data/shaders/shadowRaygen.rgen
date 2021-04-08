@@ -76,7 +76,7 @@ void main()
 
 					// Shadow ray cast
 					traceRayEXT(topLevelAS, flags, 0xFF, 0, 0, 0, 
-					position + dir * 1e-2, tmin, dir, tmax, 0);
+					position + dir * 1e-1, tmin, dir, tmax, 0);
 				}
 				else{
 					shadowed = false;
