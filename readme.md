@@ -5,6 +5,8 @@ This is a render engine in Vulkan with Ray tracing capabilities for the final pr
 
 The aim of the project is to propose a Hybrid Rendering pipeline and compare its results and optimization with a rasterization and raytraced pipelines.
 
+![alt text](https://github.com/Pinut97/vkPinut/blob/master/images/scene.JPG?raw=true)
+
 ### Raster
 The rasterization pipeline is based in deferred shading. A previous pass builds the g-buffers and the lightning pass will use those to shade the scene.
 
