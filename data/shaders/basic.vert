@@ -30,6 +30,7 @@ layout(set = 0, binding = 0) uniform CameraBuffer
 layout(push_constant) uniform constants
 {
 	mat4 matrix;
+	mat4 inv_matrix;
 }pushC;
 
 void main()
@@ -40,7 +41,7 @@ void main()
 
 	outPosition = vec3(pushC.matrix * vec4(inPosition, 1.0)).xyz;
     outColor  	= inColor;
-	outNormal 	= mat3(transpose(inverse(pushC.matrix))) * vec3(inNormal);
+	outNormal 	= mat3(transpose(pushC.inv_matrix)) * vec3(inNormal);
     outUV 		= inUV;
 	ndc 		= transformationMatrix * vec4(inPosition, 1.0);	// in homogeneous space
 	ndcPrev 	= previousTransformation * vec4(inPosition, 1.0);

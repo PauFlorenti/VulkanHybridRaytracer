@@ -591,6 +591,7 @@ void Prefab::drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Nod
 	if (node._primitives.size() > 0)
 	{
 		glm::mat4 node_matrix = model * node.getGlobalMatrix(false);
+		ModelMatrices m = {node_matrix, glm::inverse(node_matrix)};
 
 		for (Primitive* prim : node._primitives)
 		{
@@ -598,8 +599,8 @@ void Prefab::drawNode(VkCommandBuffer& cmd, VkPipelineLayout pipelineLayout, Nod
 
 			if (prim->indexCount > 0) 
 			{
-				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &node_matrix);
-				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4), sizeof(GPUMaterial), &mat);
+				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4) * 2, &m);
+				vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(glm::mat4) * 2, sizeof(GPUMaterial), &mat);
 				vkCmdDrawIndexed(cmd, prim->indexCount, 1, prim->firstIndex, 0, 0);
 			}
 		}

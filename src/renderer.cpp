@@ -1255,11 +1255,11 @@ void Renderer::init_deferred_pipelines()
 
 	VkPushConstantRange matrix_constant;
 	matrix_constant.offset								= 0;
-	matrix_constant.size								= sizeof(glm::mat4);
+	matrix_constant.size								= sizeof(glm::mat4) * 2;
 	matrix_constant.stageFlags							= VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkPushConstantRange material_constant;
-	material_constant.offset							= sizeof(glm::mat4);
+	material_constant.offset							= sizeof(glm::mat4) * 2;
 	material_constant.size								= sizeof(GPUMaterial);
 	material_constant.stageFlags						= VK_SHADER_STAGE_FRAGMENT_BIT;
 

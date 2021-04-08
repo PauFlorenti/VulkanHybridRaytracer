@@ -20,7 +20,7 @@ layout(set = 0, binding = 1) uniform sampler2D[] textures;
 
 layout(push_constant) uniform constants
 {
-	layout (offset = 64)vec4 color;
+	layout (offset = 128)vec4 color;
     vec4 textures;
     vec4 shadingMetallicRoughness;
 }pushC;

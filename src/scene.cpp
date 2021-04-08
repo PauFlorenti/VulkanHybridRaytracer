@@ -122,9 +122,9 @@ void Scene::create_scene()
 	_entities.push_back(floor);
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
-	_entities.push_back(mirror);
+	//_entities.push_back(mirror);
+	//_entities.push_back(lucy);
+	//_entities.push_back(lucy2);
 	_entities.push_back(helmet);
-	_entities.push_back(lucy);
-	_entities.push_back(lucy2);
 	//_entities.push_back(cube);
 }

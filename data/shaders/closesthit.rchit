@@ -168,7 +168,7 @@ void main()
         const vec3 refrNormal = NdotV > 0.0 ? -N : N;
         const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-        Lo += mat.diffuse.xyz * light_intensity * light.color.xyz;
+        Lo += NdotL > 0.0 ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
 
         float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
         direction = radicand < 0.0 ? 
