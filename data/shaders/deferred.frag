@@ -41,8 +41,8 @@ void main()
 
 	vec3 N 			= normalize(normal);
 	vec3 V 			= normalize(inCamPosition - position.xyz);
-	float NdotV 	= clamp(dot(N, V), 0.0, 1.0);
-	vec3 F0 		= mix(vec3(0.04), albedo, metallic);
+	float NdotV 	= max(dot(N, V), 0.0);
+	vec3 F0 		= mix(vec3(0.04), pow(albedo, vec3(2.2)), metallic);
 	vec2 envUV 		= vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
 	vec3 irradiance = texture(environmentTexture, envUV).xyz;
 
@@ -80,9 +80,9 @@ void main()
 		bool isDirectional 	= light.pos.w < 0;
 		vec3 L 				= isDirectional ? light.pos.xyz : (light.pos.xyz - position.xyz);
 		vec3 H 				= normalize(V + normalize(L));
-		float NdotL 		= clamp(dot(N, normalize(L)), 0.0, 1.0);
-		if(NdotL > 0.0)
-		{
+		float NdotL 		= max(dot(N, normalize(L)), 0.0);
+		//if(NdotL > 0.0)
+		//{
 			// Calculate the directional light
 			if(isDirectional)
 			{
@@ -101,22 +101,21 @@ void main()
 
 				vec3 radiance = light.color.xyz * light_intensity * attenuation;
 
-				vec3 F 		= FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
 				float NDF 	= DistributionGGX(N, H, roughness);
 				float G 	= GeometrySmith(N, V, L, roughness);
+				vec3 F 		= FresnelSchlick(max(dot(H, V), 0.0), F0);
+				vec3 kD = vec3(1.0) - F;
+				kD *= 1.0 - metallic;
 
 				vec3 numerator 		= NDF * G * F;
 				float denominator 	= 4.0 * NdotV * max(dot(N, L), 0.0);//NdotL;
 				vec3 specular 		= numerator / max(denominator, 0.001);
 
 				vec3 kS = F;
-				vec3 kD = vec3(1.0) - F;
 
-				kD *= 1.0 - metallic;
-
-				Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+				Lo += (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL;
 			}
-		}
+		//}
 	}
 	
 	if(!background){
@@ -135,11 +134,11 @@ void main()
 	outFragColor = vec4( color, 1.0f );
 }
 
-// Trowbridge-Reitz GGX - Normal Distribution Function
-float DistributionGGX(vec3 N, vec3 H, float a)
+float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
+  float a = roughness * roughness;
 	float a2 = a * a;
-	float NdotH = clamp(dot(N, H), 0.0, 1.0);
+	float NdotH = max(dot(N, H), 0.0);
 	float NdotH2 = NdotH * NdotH;
 
 	float denom = (NdotH2 * (a2 - 1.0) + 1.0);
@@ -149,22 +148,25 @@ float DistributionGGX(vec3 N, vec3 H, float a)
 }
 
 // Geometry Function
-float GeometrySchlickGGX(float NdotV, float k)
+float GeometrySchlickGGX(float NdotV, float roughness)
 {
+  float r = roughness + 1.0;
+  float k = (r * r) / 8.0;
+
 	float nom = NdotV;
 	float denom = NdotV * (1.0 - k) + k;
 
 	return nom/denom;
 }
 
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float k)
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 {
-	float NdotV = clamp(dot(N, V), 0.0, 1.0);
-	float NdotL = clamp(dot(N, L), 0.0, 1.0);
-	float ggx1 = GeometrySchlickGGX(NdotV, k);
-	float ggx2 = GeometrySchlickGGX(NdotL, k);
+	float NdotV = max(dot(N, V), 0.0);
+	float NdotL = max(dot(N, L), 0.0);
+	float ggx1 = GeometrySchlickGGX(NdotV, roughness);
+	float ggx2 = GeometrySchlickGGX(NdotL, roughness);
 
-	return ggx1 / ggx2;
+	return ggx1 * ggx2;
 }
 
 // Fresnel Equation
