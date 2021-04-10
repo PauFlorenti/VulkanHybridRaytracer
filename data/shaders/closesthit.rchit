@@ -150,7 +150,7 @@ void main()
         vec3 kS = F;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-        Lo += NdotL > 0.0 ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
+        Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
         direction = vec4(1, 1, 1, 0);
       }
       else if(shadingMode == 3) // MIRALL
@@ -168,7 +168,7 @@ void main()
         const vec3 refrNormal = NdotV > 0.0 ? -N : N;
         const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-        Lo += NdotL > 0.0 ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
+        Lo += (NdotL > 0.0 && light_intensity > 0.0) ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
 
         float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
         direction = radicand < 0.0 ? 

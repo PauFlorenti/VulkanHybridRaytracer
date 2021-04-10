@@ -89,7 +89,7 @@ void main()
 			// Calculate attenuation factor
 			// ----------------------------
 			if(light_intensity == 0){
-				attenuation = 0.1;
+				attenuation = 0.0;
 			}
 			else{
 				attenuation = light_max_distance - light_distance;
@@ -131,7 +131,7 @@ void main()
 		{
 			direction 			= reflect(normalize(-V), N);
 			origin 				= position;
-			rayColor *= NdotL > 0.0 ? light.color.xyz * light_intensity * attenuation * shadowFactor : irradiance;
+			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? light.color.xyz * light_intensity * attenuation * shadowFactor : irradiance;
 		}
 		if(shadingMode == 4)
 		{
@@ -147,7 +147,7 @@ void main()
 			
 			float radicand = 1 + pow(refrEta, 2.0) * (cosAlpha * cosAlpha - 1);
 			direction = radicand < 0.0 ? reflect(I, N) : refract(I, refrNormal, refrEta);
-			rayColor *= mat.diffuse.xyz * light_intensity * light.color.xyz;
+			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? mat.diffuse.xyz * light_intensity * light.color.xyz : irradiance;
 		}
 
 		// RECURSION IF NEEDED FOR BOUNCING

@@ -91,32 +91,9 @@ void main()
     float shadowFactor              = 0.0;
 
     // Check if light has impact
-    if(NdotL > 0)
-    {
-			for(int a = 0; a < SHADOWSAMPLES; a++)
-			{
-        // Init as shadowed
-        shadowed 	        = true;
-        if(light_distance < light_max_distance)
-        {
-          //vec3 dir          = sampleDisk(light, worldPos, L, prd.seed);
-          //const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
-          //float tmin = 0.001, tmax  = light_distance + 1;
-//
-          //// Shadow ray cast
-          //traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-          //  worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
-        }
-
-				if(!shadowed){
-					shadowFactor++;
-        }
-			}
-			shadowFactor /= SHADOWSAMPLES;
-    }
     // Calculate attenuation factor
     if(light_intensity == 0){
-      attenuation = 0.1;
+      attenuation = 0.0;
     }
     else{
       attenuation = light_max_distance - light_distance;
@@ -128,15 +105,39 @@ void main()
     vec3 difColor = vec3(0);
 
     if(shadingMode == 0)  // DIFUS
-    {
-      vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
-      vec3 F = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
-      float NDF = DistributionGGX(N, H, roughness);
-      float G = GeometrySmith(N, V, L, roughness);
+    {/*
+      if(NdotL > 0)
+      {
+        for(int a = 0; a < SHADOWSAMPLES; a++)
+        {
+          // Init as shadowed
+          shadowed 	        = true;
+          if(light_distance < light_max_distance)
+          {
+            vec3 dir          = sampleDisk(light, worldPos, L, prd.seed);
+            const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+            float tmin = 0.001, tmax  = light_distance + 1;
 
-      vec3 numerator = NDF * G * F;
+            // Shadow ray cast
+            traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+              worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+          }
+
+          if(!shadowed){
+            shadowFactor++;
+          }
+        }
+        shadowFactor /= SHADOWSAMPLES;
+      }
+      */
+      vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
+      vec3 F        = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
+      float NDF     = DistributionGGX(N, H, roughness);
+      float G       = GeometrySmith(N, V, L, roughness);
+
+      vec3 numerator    = NDF * G * F;
       float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
-      vec3 specular = numerator / max(denominator, 0.001);
+      vec3 specular     = numerator / max(denominator, 0.001);
 
       vec3 kS = F;
       vec3 kD = vec3(1.0) - F;
@@ -151,7 +152,7 @@ void main()
       const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
       const bool isScattered  = dot(reflected, N) > 0;
 
-      Lo += NdotL > 0.0 ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
+      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
       direction = vec4(reflected, isScattered ? 1 : 0);
     }
     else if(shadingMode == 4) // VIDRE
@@ -161,7 +162,7 @@ void main()
       const vec3 refrNormal = NdotV > 0.0 ? -N : N;
       const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-      Lo += NdotL > 0.0 ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
+      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
       
       float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
       direction = radicand < 0.0 ? 

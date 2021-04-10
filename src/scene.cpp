@@ -63,7 +63,7 @@ void Scene::create_scene()
 	Prefab* p_quad			= Prefab::GET("quad", Mesh::get_quad());
 	p_quad->_root[0]->addMaterial(m_floor);
 	Prefab* p_mirror		= Prefab::GET("cube", Mesh::get_cube());
-	p_mirror->_root[0]->addMaterial(m_mirror);
+	p_mirror->_root[0]->addMaterial(m_glass);
 	Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere	= Prefab::GET("sphere.obj");
@@ -102,7 +102,7 @@ void Scene::create_scene()
 	mirror->material = Material::_materials[p_mirror->_root[0]->_primitives[0]->materialID];
 
 	Object* cube = new Object();
-	cube->prefab = p_mirror;
+	cube->prefab = p_glass_sphere;
 	cube->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5));
 
 	Object* helmet = new Object();
