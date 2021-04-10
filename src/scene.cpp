@@ -63,7 +63,7 @@ void Scene::create_scene()
 	Prefab* p_quad			= Prefab::GET("quad", Mesh::get_quad());
 	p_quad->_root[0]->addMaterial(m_floor);
 	Prefab* p_mirror		= Prefab::GET("cube", Mesh::get_cube());
-	p_mirror->_root[0]->addMaterial(m_glass);
+	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere	= Prefab::GET("sphere.obj");
@@ -120,10 +120,10 @@ void Scene::create_scene()
 	lucy2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 0, 0)) * glm::scale(glm::mat4(1), glm::vec3(0.01));
 	lucy2->material = Material::_materials[p_lucy->_root[0]->_primitives[0]->materialID];
 	
-	//_entities.push_back(floor);
+	_entities.push_back(floor);
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
-	//_entities.push_back(mirror);
+	_entities.push_back(mirror);
 	//_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
 	//_entities.push_back(helmet);

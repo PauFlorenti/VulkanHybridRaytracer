@@ -81,41 +81,39 @@ void main()
 		vec3 L 				= isDirectional ? light.pos.xyz : (light.pos.xyz - position.xyz);
 		vec3 H 				= normalize(V + normalize(L));
 		float NdotL 		= max(dot(N, normalize(L)), 0.0);
-		//if(NdotL > 0.0)
-		//{
-			// Calculate the directional light
-			if(isDirectional)
-			{
-				Lo += (NdotL * light.color.xyz);
-			}
-			else	// Calculate point lights
-			{
-				float light_max_distance 	= light.pos.w;
-				float light_distance 		= length(L);
-				light_intensity 			= light.color.w / (light_distance * light_distance);
 
-				attenuation = light_max_distance - light_distance;
-				attenuation /= light_max_distance;
-				attenuation = max(attenuation, 0.0);
-				attenuation = attenuation * attenuation;
+		// Calculate the directional light
+		if(isDirectional)
+		{
+			Lo += (NdotL * light.color.xyz);
+		}
+		else	// Calculate point lights
+		{
+			float light_max_distance 	= light.pos.w;
+			float light_distance 		= length(L);
+			light_intensity 			= light.color.w / (light_distance * light_distance);
 
-				vec3 radiance = light.color.xyz * light_intensity * attenuation;
+			attenuation = light_max_distance - light_distance;
+			attenuation /= light_max_distance;
+			attenuation = max(attenuation, 0.0);
+			attenuation = attenuation * attenuation;
 
-				float NDF 	= DistributionGGX(N, H, roughness);
-				float G 	= GeometrySmith(N, V, L, roughness);
-				vec3 F 		= FresnelSchlick(max(dot(H, V), 0.0), F0);
-				vec3 kD = vec3(1.0) - F;
-				kD *= 1.0 - metallic;
+			vec3 radiance = light.color.xyz * light_intensity * attenuation;
 
-				vec3 numerator 		= NDF * G * F;
-				float denominator 	= 4.0 * NdotV * max(dot(N, L), 0.0);//NdotL;
-				vec3 specular 		= numerator / max(denominator, 0.001);
+			float NDF 	= DistributionGGX(N, H, roughness);
+			float G 	= GeometrySmith(N, V, L, roughness);
+			vec3 F 		= FresnelSchlick(max(dot(H, V), 0.0), F0);
+			vec3 kD = vec3(1.0) - F;
+			kD *= 1.0 - metallic;
 
-				vec3 kS = F;
+			vec3 numerator 		= NDF * G * F;
+			float denominator 	= 4.0 * NdotV * max(dot(N, L), 0.0);
+			vec3 specular 		= numerator / max(denominator, 0.001);
 
-				Lo += (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL;
-			}
-		//}
+			vec3 kS = F;
+
+			Lo += (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL;
+		}
 	}
 	
 	if(!background){

@@ -114,8 +114,8 @@ void main()
           const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
           float tmin = 0.001, tmax  = light_distance + 1;
           // Shadow ray cast
-          traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-            worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+          //traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+          //  worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
         }
 
 				if(!shadowed){
