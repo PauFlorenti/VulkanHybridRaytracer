@@ -36,7 +36,7 @@ void Scene::create_scene()
 	light2->radius		= 0.1f;
 
 	_lights.push_back(light);
-	_lights.push_back(light2);
+	//_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------
@@ -51,8 +51,8 @@ void Scene::create_scene()
 	m_gold->metallicFactor	= 0.5f;
 	m_gold->roughnessFactor = 0.1f;
 	Material* m_red = new Material();
-	m_red->diffuseColor		= glm::vec4{ 0.9, 0.1, 0.05, 1.0 };
-	m_red->metallicFactor	= 0.1;
+	m_red->diffuseColor		= glm::vec4{ 1.0, 0.0, 0.0, 1.0 };
+	m_red->metallicFactor	= 0.0;
 	m_red->roughnessFactor	= 0.2;
 	Material* m_floor = new Material();
 	m_floor->metallicFactor = 0.1f;
@@ -68,10 +68,10 @@ void Scene::create_scene()
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere	= Prefab::GET("sphere.obj");
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere	= Prefab::GET("sphere.obj");
+	Prefab* p_gold_sphere	= Prefab::GET("goldSphere", Mesh::GET("sphere.obj"));
 	p_gold_sphere->_root[0]->addMaterial(m_gold);
-	Prefab* p_red_sphere	= Prefab::GET("sphere.obj");
-	p_red_sphere->_root[0]->addMaterial(m_mirror);
+	Prefab* p_red_sphere	= Prefab::GET("Red Sphere", Mesh::GET("sphere.obj"));
+	p_red_sphere->_root[0]->addMaterial(m_red);
 	Prefab* p_helmet		= Prefab::GET("DamagedHelmet.gltf");
 	Prefab* p_lucy			= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
 	p_lucy->_root[0]->addMaterial(m_glass);
@@ -84,9 +84,9 @@ void Scene::create_scene()
 	sphere->material = Material::_materials[p_red_sphere->_root[0]->_primitives[0]->materialID];
 
 	Object* sphere2 = new Object();
-	sphere2->prefab = p_red_sphere;
+	sphere2->prefab = p_gold_sphere;
 	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
-	sphere2->material = Material::_materials[p_red_sphere->_root[0]->_primitives[0]->materialID];
+	sphere2->material = Material::_materials[p_gold_sphere->_root[0]->_primitives[0]->materialID];
 	
 	Object* floor = new Object();
 	floor->prefab = p_quad;
@@ -120,12 +120,12 @@ void Scene::create_scene()
 	lucy2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-10, 0, 0)) * glm::scale(glm::mat4(1), glm::vec3(0.01));
 	lucy2->material = Material::_materials[p_lucy->_root[0]->_primitives[0]->materialID];
 	
-	_entities.push_back(floor);
+	//_entities.push_back(floor);
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
-	_entities.push_back(mirror);
-	_entities.push_back(lucy);
+	//_entities.push_back(mirror);
+	//_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
-	_entities.push_back(helmet);
+	//_entities.push_back(helmet);
 	//_entities.push_back(cube);
 }
