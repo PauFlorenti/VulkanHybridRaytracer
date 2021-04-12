@@ -602,6 +602,7 @@ void Renderer::rasterize_hybrid()
 void Renderer::render_gui()
 {
 	bool changed = false;
+	bool changed_material = false;
 
 	// Imgui new frame
 	ImGui_ImplVulkan_NewFrame();
@@ -672,10 +673,9 @@ void Renderer::render_gui()
 		if (ImGui::TreeNode(&entity, "Entity")) {
 			if (ImGui::Button("Select"))
 				gizmoEntity = entity;
-			//ImGui::SliderFloat3("Position", &((glm::vec3)entity->m_matrix[3])[0], -200, 200);
-			changed |= ImGui::SliderFloat3("Color", glm::value_ptr(entity->material->diffuseColor), 0., 1.);
-			changed |= ImGui::SliderFloat("Metallic", &entity->material->metallicFactor, 0., 1.);
-			changed |= ImGui::SliderFloat("Roughness", &entity->material->roughnessFactor, 0., 1.);
+			changed_material |= ImGui::SliderFloat3("Color", glm::value_ptr(entity->material->diffuseColor), 0., 1.);
+			changed_material |= ImGui::SliderFloat("Metallic", &entity->material->metallicFactor, 0., 1.);
+			changed_material |= ImGui::SliderFloat("Roughness", &entity->material->roughnessFactor, 0., 1.);
 			ImGui::TreePop();
 		}
 	}
@@ -756,6 +756,22 @@ void Renderer::render_gui()
 
 	if (changed)
 		VulkanEngine::engine->resetFrame();
+
+	// If any material has been modified, update the materials
+	if (changed_material)
+	{
+		std::vector<GPUMaterial> materials;
+		for (Material* it : Material::_materials)
+		{
+			GPUMaterial mat = it->materialToShader();
+			materials.push_back(mat);
+		}
+
+		void* matData;
+		vmaMapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation, &matData);
+		memcpy(matData, materials.data(), sizeof(GPUMaterial) * materials.size());
+		vmaUnmapMemory(VulkanEngine::engine->_allocator, _matBuffer._allocation);
+	}
 }
 
 void Renderer::init_framebuffers()

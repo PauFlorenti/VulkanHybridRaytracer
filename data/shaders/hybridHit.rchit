@@ -66,7 +66,7 @@ void main()
 
   const float roughness         = roughnessMetallic.y;
   const float metallic          = roughnessMetallic.z;
-  vec3 F0   = mix(vec3(0.04), albedo, metallic);
+  vec3 F0   = mix(vec3(0.04), pow(albedo, vec3(2.2)), metallic);
 
   // Environment 
   vec2 environmentUV = vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
@@ -131,20 +131,18 @@ void main()
       }
       */
       vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
-      vec3 F        = FresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
-      float NDF     = DistributionGGX(N, H, roughness);
+      vec3 F        = FresnelSchlick(NdotH, F0);
+      float D       = DistributionGGX(N, H, roughness);
       float G       = GeometrySmith(N, V, L, roughness);
 
-      vec3 numerator    = NDF * G * F;
-      float denominator = 4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL;
-      vec3 specular     = numerator / max(denominator, 0.001);
+      vec3 numerator    = D * G * F;
+      float denominator = max(4.0 * clamp(dot(N, V), 0.0, 1.0) * NdotL, 0.000001);
+      vec3 specular     = numerator / denominator;
 
       vec3 kS = F;
-      vec3 kD = vec3(1.0) - F;
+      vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-      kD *= 1.0 - metallic;
-
-      Lo    += NdotL > 0.0 ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
+      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL : vec3(0.0);
       direction = vec4(1, 1, 1, 0);
     }
     else if(shadingMode == 3) // MIRALL
@@ -174,7 +172,7 @@ void main()
   // Ambient from IBL
   vec3 F        = FresnelSchlick(NdotV, F0);
   vec3 kD       = (1.0 - F) * (1.0 - metallic);
-  vec3 diffuse  = kD * albedo * irradiance;
+  vec3 diffuse  = kD * pow(albedo, vec3(2.2)) * irradiance;
   vec3 ambient = diffuse;
 
   vec3 color = Lo + ambient;

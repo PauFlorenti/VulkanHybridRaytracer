@@ -36,7 +36,7 @@ void Scene::create_scene()
 	light2->radius		= 0.1f;
 
 	_lights.push_back(light);
-	//_lights.push_back(light2);
+	_lights.push_back(light2);
 
 	// Create own Materials
 	// --------------------
@@ -124,7 +124,7 @@ void Scene::create_scene()
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
 	_entities.push_back(mirror);
-	//_entities.push_back(lucy);
+	_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
 	//_entities.push_back(helmet);
 	//_entities.push_back(cube);

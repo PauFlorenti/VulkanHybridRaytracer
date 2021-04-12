@@ -69,7 +69,7 @@ void main()
 
   const float roughness   = roughnessMetallic.y;
   const float metallic    = roughnessMetallic.z;
-  vec3 F0   = mix(vec3(0.04), albedo, metallic);
+  vec3 F0   = mix(vec3(0.04), pow(albedo, vec3(2.2)), metallic);
 
   // Environment 
   vec2 environmentUV = vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
@@ -114,8 +114,8 @@ void main()
           const uint flags  = gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
           float tmin = 0.001, tmax  = light_distance + 1;
           // Shadow ray cast
-          //traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
-          //  worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
+          traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+            worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
         }
 
 				if(!shadowed){
@@ -150,7 +150,7 @@ void main()
         vec3 kS = F;
         vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-        Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
+        Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL : vec3(0.0);
         direction = vec4(1, 1, 1, 0);
       }
       else if(shadingMode == 3) // MIRALL
@@ -158,7 +158,7 @@ void main()
         const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
         const bool isScattered  = dot(reflected, N) > 0;
 
-        Lo += NdotL > 0.0 ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
+        Lo += (NdotL > 0.0 && light_intensity > 0.0) ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
         direction = vec4(reflected, isScattered ? 1 : 0);
       }
       else if(shadingMode == 4) // VIDRE
@@ -180,7 +180,7 @@ void main()
   // Ambient from IBL
   vec3 F       = FresnelSchlick(NdotV, F0);
   vec3 kD      = (1.0 - F) * (1.0 - metallic);
-  vec3 diffuse = kD * albedo * irradiance;
+  vec3 diffuse = kD * pow(albedo, vec3(2.2)) * irradiance;
   vec3 ambient = diffuse;
 
   vec3 color = Lo + ambient;
