@@ -66,7 +66,7 @@ void main()
 
   const float roughness         = roughnessMetallic.y;
   const float metallic          = roughnessMetallic.z;
-  vec3 F0   = mix(vec3(0.04), pow(albedo, vec3(2.2)), metallic);
+  vec3 F0                       = mix(vec3(0.04), albedo, metallic);
 
   // Environment 
   vec2 environmentUV = vec2(0.5 + atan(N.x, N.z) / (2 * PI), 0.5 - asin(N.y) / PI);
@@ -88,7 +88,7 @@ void main()
     const vec3 H                    = normalize(V + L);
 		const float NdotL 				      = clamp(dot(N, L), 0.0, 1.0);
     const float NdotH               = clamp(dot(N, H), 0.0, 1.0);
-    float shadowFactor              = 0.0;
+    float shadowFactor              = 1.0;
 
     // Check if light has impact
     // Calculate attenuation factor
@@ -105,7 +105,8 @@ void main()
     vec3 difColor = vec3(0);
 
     if(shadingMode == 0)  // DIFUS
-    {/*
+    {
+      /*
       if(NdotL > 0)
       {
         for(int a = 0; a < SHADOWSAMPLES; a++)
@@ -142,7 +143,7 @@ void main()
       vec3 kS = F;
       vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
 
-      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * pow(albedo, vec3(2.2)) / PI + specular) * radiance * NdotL : vec3(0.0);
+      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? (kD * albedo / PI + specular) * radiance * NdotL : vec3(0.0);
       direction = vec4(1, 1, 1, 0);
     }
     else if(shadingMode == 3) // MIRALL
@@ -150,7 +151,9 @@ void main()
       const vec3 reflected    = reflect(normalize(gl_WorldRayDirectionEXT), N);
       const bool isScattered  = dot(reflected, N) > 0;
 
-      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? light_intensity * light.color.xyz * attenuation * shadowFactor : irradiance;
+      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? 
+            light_intensity * light.color.xyz * attenuation /* albedo * metallic*/ : 
+            irradiance /* albedo * metallic*/;
       direction = vec4(reflected, isScattered ? 1 : 0);
     }
     else if(shadingMode == 4) // VIDRE
@@ -160,7 +163,9 @@ void main()
       const vec3 refrNormal = NdotV > 0.0 ? -N : N;
       const float refrEta   = NdotV > 0.0 ? 1 / ior : ior;
 
-      Lo += (NdotL > 0.0 && light_intensity > 0.0) ? mat.diffuse.xyz * light_intensity * light.color.xyz * attenuation : irradiance;
+      Lo += (light_intensity > 0.0) ? 
+            light_intensity * light.color.xyz * attenuation /* albedo* metallic*/ : 
+            irradiance /* albedo * metallic*/;
       
       float radicand = 1 + pow(refrEta, 2.0) * (NdotV * NdotV - 1);
       direction = radicand < 0.0 ? 
@@ -172,7 +177,7 @@ void main()
   // Ambient from IBL
   vec3 F        = FresnelSchlick(NdotV, F0);
   vec3 kD       = (1.0 - F) * (1.0 - metallic);
-  vec3 diffuse  = kD * pow(albedo, vec3(2.2)) * irradiance;
+  vec3 diffuse  = kD * albedo * irradiance;
   vec3 ambient = diffuse;
 
   vec3 color = Lo + ambient;

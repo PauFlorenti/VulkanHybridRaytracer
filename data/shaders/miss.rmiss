@@ -14,6 +14,6 @@ void main()
 {
     vec3 dir            = normalize(gl_WorldRayDirectionEXT);
     vec2 uv             = vec2(0.5 + atan(dir.x, dir.z) / (2 * PI), 0.5 - asin(dir.y) / PI);
-    vec3 color          = texture(skybox[0], uv).xyz;
+    vec3 color          = pow(texture(skybox[0], uv).xyz, vec3(2.2));
     prd.colorAndDist    = vec4(color, -1);
 }

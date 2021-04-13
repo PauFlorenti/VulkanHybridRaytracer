@@ -125,7 +125,9 @@ void main()
 		{
 			direction 			= reflect(normalize(-V), N);
 			origin 				= position;
-			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? light.color.xyz * light_intensity * attenuation * shadowFactor : irradiance;
+			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? 
+						light.color.xyz * light_intensity * attenuation * shadowFactor /* albedo* * metallic*/ : 
+						irradiance /* albedo * metallic*/;
 		}
 		if(shadingMode == 4)
 		{
@@ -139,9 +141,11 @@ void main()
 
 			prd.direction.w 		= 1;
 			
-			float radicand = 1 + pow(refrEta, 2.0) * (cosAlpha * cosAlpha - 1);
-			direction = radicand < 0.0 ? reflect(I, N) : refract(I, refrNormal, refrEta);
-			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? mat.diffuse.xyz * light_intensity * light.color.xyz : irradiance;
+			float radicand 	= 1 + pow(refrEta, 2.0) * (cosAlpha * cosAlpha - 1);
+			direction 		= radicand < 0.0 ? reflect(I, N) : refract(I, refrNormal, refrEta);
+			rayColor *= (light_intensity > 0.0) ? 
+						light_intensity * light.color.xyz * attenuation /* albedo * metallic*/ : 
+						irradiance /* albedo * metallic*/;
 		}
 
 		// RECURSION IF NEEDED FOR BOUNCING

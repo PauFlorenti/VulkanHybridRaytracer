@@ -42,10 +42,12 @@ void Scene::create_scene()
 	// --------------------
 	Material* m_mirror = new Material();
 	m_mirror->shadingModel	= 3;
+	m_mirror->metallicFactor = 0.1f;
 	Material* m_glass = new Material();
 	m_glass->diffuseColor	= glm::vec4{ 0.7f, 0.7f, 1.0f, 1 };
 	m_glass->shadingModel	= 4;
 	m_glass->ior = 1.125;// 1.2f;
+	m_glass->metallicFactor = 0.1f;
 	Material* m_gold = new Material();
 	m_gold->diffuseColor	= glm::vec4{ 1.0, 0.71, 0.29, 1.0 };
 	m_gold->metallicFactor	= 0.5f;
@@ -66,7 +68,7 @@ void Scene::create_scene()
 	p_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_sphere_mirror = Prefab::GET("sphere.obj");
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
-	Prefab* p_glass_sphere	= Prefab::GET("sphere.obj");
+	Prefab* p_glass_sphere	= Prefab::GET("Glass Sphere", Mesh::GET("sphere.obj"));
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
 	Prefab* p_gold_sphere	= Prefab::GET("goldSphere", Mesh::GET("sphere.obj"));
 	p_gold_sphere->_root[0]->addMaterial(m_gold);
@@ -74,7 +76,7 @@ void Scene::create_scene()
 	p_red_sphere->_root[0]->addMaterial(m_red);
 	Prefab* p_helmet		= Prefab::GET("DamagedHelmet.gltf");
 	Prefab* p_lucy			= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
-	p_lucy->_root[0]->addMaterial(m_glass);
+	p_lucy->_root[0]->addMaterial(m_gold);
 
 	// Create entities
 	// ---------------
@@ -87,7 +89,12 @@ void Scene::create_scene()
 	sphere2->prefab = p_gold_sphere;
 	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
 	sphere2->material = Material::_materials[p_gold_sphere->_root[0]->_primitives[0]->materialID];
-	
+
+	Object* sphere3 = new Object();
+	sphere3->prefab = p_glass_sphere;
+	sphere3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 1, -5));
+	sphere3->material = Material::_materials[p_glass_sphere->_root[0]->_primitives[0]->materialID];
+
 	Object* floor = new Object();
 	floor->prefab = p_quad;
 	floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
@@ -123,6 +130,7 @@ void Scene::create_scene()
 	_entities.push_back(floor);
 	_entities.push_back(sphere);
 	_entities.push_back(sphere2);
+	_entities.push_back(sphere3);
 	_entities.push_back(mirror);
 	_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
