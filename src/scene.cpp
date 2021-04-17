@@ -42,12 +42,12 @@ void Scene::create_scene()
 	// --------------------
 	Material* m_mirror = new Material();
 	m_mirror->shadingModel	= 3;
-	m_mirror->metallicFactor = 0.1f;
+	m_mirror->metallicFactor = 1.f;
 	Material* m_glass = new Material();
 	m_glass->diffuseColor	= glm::vec4{ 0.7f, 0.7f, 1.0f, 1 };
 	m_glass->shadingModel	= 4;
 	m_glass->ior = 1.125;// 1.2f;
-	m_glass->metallicFactor = 0.1f;
+	m_glass->metallicFactor = 1.f;
 	Material* m_gold = new Material();
 	m_gold->diffuseColor	= glm::vec4{ 1.0, 0.71, 0.29, 1.0 };
 	m_gold->metallicFactor	= 0.5f;

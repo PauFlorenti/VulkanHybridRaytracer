@@ -38,7 +38,7 @@ void main()
 
     vec3 position 			= texture(gbuffers[0], inUV).xyz;
 	vec3 normal 			= texture(gbuffers[1], inUV).xyz * 2.0 - vec3(1);
-	vec3 albedo 			= texture(gbuffers[2], inUV).xyz;
+	vec3 albedo 			= pow(texture(gbuffers[2], inUV).xyz, vec3(2.2));
 	vec2 motion	 			= texture(gbuffers[3], inUV).xy;
 	vec3 material 			= texture(gbuffers[4], inUV).xyz;
 	vec3 emissive 			= texture(gbuffers[5], inUV).xyz;
@@ -126,8 +126,8 @@ void main()
 			direction 			= reflect(normalize(-V), N);
 			origin 				= position;
 			rayColor *= (NdotL > 0.0 && light_intensity > 0.0) ? 
-						light.color.xyz * light_intensity * attenuation * shadowFactor /* albedo* * metallic*/ : 
-						irradiance /* albedo * metallic*/;
+						light.color.xyz * light_intensity * attenuation * shadowFactor * albedo * metallic : 
+						irradiance * albedo * metallic;
 		}
 		if(shadingMode == 4)
 		{
@@ -144,8 +144,8 @@ void main()
 			float radicand 	= 1 + pow(refrEta, 2.0) * (cosAlpha * cosAlpha - 1);
 			direction 		= radicand < 0.0 ? reflect(I, N) : refract(I, refrNormal, refrEta);
 			rayColor *= (light_intensity > 0.0) ? 
-						light_intensity * light.color.xyz * attenuation /* albedo * metallic*/ : 
-						irradiance /* albedo * metallic*/;
+						light_intensity * light.color.xyz * attenuation * albedo * metallic : 
+						irradiance * albedo * metallic;
 		}
 
 		// RECURSION IF NEEDED FOR BOUNCING

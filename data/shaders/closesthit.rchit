@@ -187,7 +187,6 @@ void main()
   vec3 diffuse = kD * albedo * irradiance;
   vec3 ambient = diffuse;
 
-  vec3 color = Lo + ambient;
-  color    += emissive;
+  vec3 color = Lo + ambient + emissive;
   prd = hitPayload(vec4(color, gl_HitTEXT), direction, origin, prd.seed);
 }
