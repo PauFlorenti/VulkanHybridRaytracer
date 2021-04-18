@@ -107,10 +107,9 @@ void main()
 
     if(shadingMode == 0)  // DIFUS
     {
-      /*
       if(NdotL > 0)
       {
-        for(int a = 0; a < SHADOWSAMPLES; a++)
+        for(int a = 0; a < 1; a++)
         {
           // Init as shadowed
           shadowed 	        = true;
@@ -121,7 +120,7 @@ void main()
             float tmin = 0.001, tmax  = light_distance + 1;
 
             // Shadow ray cast
-            traceRayEXT(topLevelAS, flags, 0xff, 1, 0, 1, 
+            traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, 
               worldPos.xyz + dir * 1e-2, tmin, dir, tmax, 1);
           }
 
@@ -129,9 +128,8 @@ void main()
             shadowFactor++;
           }
         }
-        shadowFactor /= SHADOWSAMPLES;
       }
-      */
+
       vec3 radiance = light_intensity * light.color.xyz * attenuation * shadowFactor;
       vec3 F        = FresnelSchlick(NdotH, F0);
       float D       = DistributionGGX(N, H, roughness);

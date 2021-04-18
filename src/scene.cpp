@@ -35,8 +35,14 @@ void Scene::create_scene()
 	light2->intensity	= 250.0f;
 	light2->radius		= 0.2f;
 
+	Light* light3		= new Light();
+	light3->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 15, 5));
+	light3->intensity	= 500.f;
+	light3->radius		= 0.3f;
+
 	_lights.push_back(light);
 	_lights.push_back(light2);
+	_lights.push_back(light3);
 
 	// Create own Materials
 	// --------------------
@@ -76,7 +82,7 @@ void Scene::create_scene()
 	p_red_sphere->_root[0]->addMaterial(m_red);
 	Prefab* p_helmet		= Prefab::GET("DamagedHelmet.gltf");
 	Prefab* p_lucy			= Prefab::GET("lucy", Mesh::GET("lucy.obj"));
-	p_lucy->_root[0]->addMaterial(m_gold);
+	p_lucy->_root[0]->addMaterial(m_glass);
 
 	// Create entities
 	// ---------------

@@ -6,7 +6,7 @@
 #include "helpers.glsl"
 
 layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
-layout(binding = 1, rgba8) uniform image2D[2] shadowImage;
+layout(binding = 1, rgba8) uniform image2D[3] shadowImage;
 layout(binding = 2) uniform CameraProperties 
 {
 	mat4 viewInverse;

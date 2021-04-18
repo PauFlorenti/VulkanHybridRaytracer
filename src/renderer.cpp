@@ -485,7 +485,7 @@ void Renderer::raytrace()
 		throw std::runtime_error("Failed to acquire swap chain image");
 	}
 
-	// RTX Pass
+	// RTX Pass RAYTRACE
 	VkSubmitInfo submit{};
 	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit.pNext				= nullptr;
@@ -541,7 +541,7 @@ void Renderer::rasterize_hybrid()
 
 	build_previous_command_buffer();
 
-	// First pass
+	// First pass - RASTER
 	VkSubmitInfo submit = {};
 	submit.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit.pNext				= nullptr;
@@ -556,7 +556,7 @@ void Renderer::rasterize_hybrid()
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
 	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
-	// Shadow pass
+	// Shadow pass RAYTRACE
 	submit.pWaitSemaphores		= &_offscreenSemaphore;
 	submit.pSignalSemaphores	= &_shadowSemaphore;
 	submit.pCommandBuffers		= &_shadowCommandBuffer;
@@ -569,11 +569,11 @@ void Renderer::rasterize_hybrid()
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
-	// Second pass raytrace
-	submit.pWaitSemaphores		= &_denoiseSemaphore;
+	// Second pass RAYTRACE
+	submit.pWaitSemaphores		= &_shadowSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
@@ -3170,7 +3170,7 @@ void Renderer::create_hybrid_descriptors()
 	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
 	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
 	{
-		shadowImagesDesc[i] = { VK_NULL_HANDLE, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
+		shadowImagesDesc[i] = { VK_NULL_HANDLE, _shadowImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
 	}
 
 	// Writes list
