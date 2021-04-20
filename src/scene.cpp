@@ -38,7 +38,7 @@ void Scene::create_scene()
 	Light* light3		= new Light();
 	light3->m_matrix	= glm::translate(glm::mat4(1), glm::vec3(0, 15, 5));
 	light3->intensity	= 500.f;
-	light3->radius		= 0.3f;
+	light3->radius		= 0.09f;
 
 	_lights.push_back(light);
 	_lights.push_back(light2);

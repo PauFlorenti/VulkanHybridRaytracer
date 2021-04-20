@@ -569,11 +569,11 @@ void Renderer::rasterize_hybrid()
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-	//vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Second pass RAYTRACE
-	submit.pWaitSemaphores		= &_shadowSemaphore;
+	submit.pWaitSemaphores		= &_denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
@@ -2023,7 +2023,6 @@ void Renderer::create_shadow_descriptors()
 	// binding 4 = Samples buffer
 	// binding 5 = Position, Normal, Material, Motion Gbuffer
 	// binding 6 = Material buffer
-
 	const unsigned int nInstances	= _scene->_entities.size();
 	const unsigned int nLights		= _scene->_lights.size();
 
@@ -2841,7 +2840,6 @@ void Renderer::create_post_framebuffers()
 
 		VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
 			vkDestroyFramebuffer(*device, _postFramebuffers[i], nullptr);
-			//vkDestroyImageView(*device, VulkanEngine::engine->_swapchainImageViews[i], nullptr);
 			});
 	}
 
