@@ -61,7 +61,7 @@ void main()
   float shadowFactor    = 0.0;
 
   // Init all material values
-  Material mat            = materials.mat[materialID];
+  Material mat                  = materials.mat[materialID];
   const int shadingMode         = int(mat.shadingMetallicRoughness.x);
   const vec3 albedo             = mat.textures.x > -1 ? pow(texture(textures[int(mat.textures.x)], uv).xyz, vec3(2.2)) : pow(mat.diffuse.xyz, vec3(2.2));
   const vec3 emissive           = mat.textures.z > -1 ? texture(textures[int(mat.textures.z)], uv).xyz : vec3(0);

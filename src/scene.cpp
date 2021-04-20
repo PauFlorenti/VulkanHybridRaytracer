@@ -161,12 +161,12 @@ void Scene::default_scene()
 
 void Scene::cornell_scene()
 {
-	_camera = new Camera(glm::vec3(0, 0, 10));
+	_camera = new Camera(glm::vec3(0, 5, 10));
 
 	// Create lights
 	// -------------
 	Light* light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 4, -5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 9, -5));
 	light->color = glm::vec3{ 1.0f, 0.8f, 0.5f };
 	light->intensity = 250.0f;
 	light->radius = 0.1f;
@@ -175,8 +175,9 @@ void Scene::cornell_scene()
 
 	// Create own Materials
 	// --------------------
-	Material* m_floor = new Material();
-	m_floor->metallicFactor = 0.1f;
+	Material* m_white = new Material();
+	m_white->diffuseColor = glm::vec4(1, 1, 1, 1);
+	//m_floor->metallicFactor = 0.1f;
 	Material* m_red = new Material();
 	m_red->diffuseColor = glm::vec4(1, 0, 0, 1);
 	Material* m_green = new Material();
@@ -195,10 +196,12 @@ void Scene::cornell_scene()
 	// Create prefabs
 	// --------------
 	Prefab* p_quad = Prefab::GET("quad", Mesh::get_quad());
-	p_quad->_root[0]->addMaterial(m_floor);
-	Prefab* p_red_quad = Prefab::GET("quad", Mesh::get_quad());
+	p_quad->_root[0]->addMaterial(m_white);
+	Prefab* p_white_quad = Prefab::GET("white_quad", Mesh::get_cube());
+	p_white_quad->_root[0]->addMaterial(m_white);
+	Prefab* p_red_quad = Prefab::GET("red_quad", Mesh::get_cube());
 	p_red_quad->_root[0]->addMaterial(m_red);
-	Prefab* p_green_quad = Prefab::GET("quad", Mesh::get_quad());
+	Prefab* p_green_quad = Prefab::GET("quad", Mesh::get_cube());
 	p_green_quad->_root[0]->addMaterial(m_green);
 	Prefab* p_helmet = Prefab::GET("DamagedHelmet.gltf");
 	Prefab* p_mirror_sphere = Prefab::GET("mirror_sphere", Mesh::GET("sphere.obj"));
@@ -209,48 +212,48 @@ void Scene::cornell_scene()
 	// Create entities
 	// ---------------
 	Object* floor = new Object();
-	floor->prefab = p_quad;
-	floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, -5, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(5));
-	floor->material = Material::_materials[p_quad->_root[0]->_primitives[0]->materialID];
+	floor->prefab = p_white_quad;
+	floor->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5)) *
+		glm::scale(glm::mat4(1), glm::vec3(5, 0.1, 5));
+	floor->material = Material::_materials[p_white_quad->_root[0]->_primitives[0]->materialID];
 
+	// Back wall
 	Object* wall1 = new Object();
-	wall1->prefab = p_quad;
-	wall1->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -10)) *
-		glm::scale(glm::mat4(1), glm::vec3(5));
-	wall1->material = Material::_materials[p_quad->_root[0]->_primitives[0]->materialID];
+	wall1->prefab = p_white_quad;
+	wall1->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -10)) *
+		glm::scale(glm::mat4(1), glm::vec3(5, 5, 0.1));
+	wall1->material = Material::_materials[p_white_quad->_root[0]->_primitives[0]->materialID];
 
+	// Left wall
 	Object* wall2 = new Object();
 	wall2->prefab = p_red_quad;
-	wall2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 0, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(0, 1, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(5));
+	wall2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 5, -5)) *
+		glm::scale(glm::mat4(1), glm::vec3(0.1, 5, 5));
 	wall2->material = Material::_materials[p_red_quad->_root[0]->_primitives[0]->materialID];
 
+	// Right wall
 	Object* wall3 = new Object();
 	wall3->prefab = p_green_quad;
-	wall3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 0, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(-90.0f), glm::vec3(0, 1, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(5));
+	wall3->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 5, -5)) *
+		glm::scale(glm::mat4(1), glm::vec3(0.1, 5, 5));
 	wall3->material = Material::_materials[p_green_quad->_root[0]->_primitives[0]->materialID];
 
+	// Cieling
 	Object* wall4 = new Object();
-	wall4->prefab = p_quad;
-	wall4->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 5, -5)) *
-		glm::rotate(glm::mat4(1), glm::radians(90.0f), glm::vec3(1, 0, 0)) *
-		glm::scale(glm::mat4(1), glm::vec3(5));
-	wall4->material = Material::_materials[p_quad->_root[0]->_primitives[0]->materialID];
+	wall4->prefab = p_white_quad;
+	wall4->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 10, -5)) *
+		glm::scale(glm::mat4(1), glm::vec3(5, 0.1, 5));
+	wall4->material = Material::_materials[p_white_quad->_root[0]->_primitives[0]->materialID];
 
 	Object* glass_sphere = new Object();
 	glass_sphere->prefab = p_glass_sphere;
-	glass_sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-3.f, -3.2f, -2.5f)) * 
+	glass_sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-3.f, 2.2f, -2.5f)) * 
 		glm::scale(glm::mat4(1), glm::vec3(2));
 	glass_sphere->material = Material::_materials[p_glass_sphere->_root[0]->_primitives[0]->materialID];
 
 	Object* mirror_sphere = new Object();
 	mirror_sphere->prefab = p_mirror_sphere;
-	mirror_sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(3.5f, -4.f, -2.5f));
+	mirror_sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(3.5f, 1.f, -2.5f));
 	mirror_sphere->material = Material::_materials[p_mirror_sphere->_root[0]->_primitives[0]->materialID];
 
 	Object* helmet = new Object();

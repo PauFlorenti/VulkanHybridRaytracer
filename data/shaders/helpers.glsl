@@ -85,6 +85,8 @@ vec3 sampleDisk(Light light, vec3 position, vec3 L, uint seed)
     float angle = rnd(seed) * 2.0f * PI;
     vec2 point = vec2(radius * cos(angle), radius * sin(angle));
     vec3 tangent = normalize(cross(L, vec3(0, 1, 0)));
+    if(L == vec3(0, 1, 0))
+      tangent = vec3(0, 0, 1);
     vec3 bitangent = normalize(cross(tangent, L));
     vec3 target = position + L + point.x * tangent + point.y * bitangent;
     return normalize(target - position);

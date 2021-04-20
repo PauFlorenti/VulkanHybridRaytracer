@@ -71,8 +71,8 @@ void main()
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
 	}
 	else{
-		if(frame > 30)
-			return;
+		//if(frame > 30)
+		//	return;
 		float a = 1.0 / float(1.0 + frame);
 		vec3 lastColor = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).xyz;
 		finalColor = mix(lastColor, finalColor, a);
