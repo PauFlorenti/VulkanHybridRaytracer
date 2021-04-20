@@ -42,7 +42,7 @@ void VulkanEngine::init()
 	init_upload_commands();
 
 	_scene = new Scene();
-	_scene->create_scene();
+	_scene->create_scene(1);
 
 	// Add necessary features to the engine
 	init_ray_tracing();

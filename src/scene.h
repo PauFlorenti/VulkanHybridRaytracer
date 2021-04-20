@@ -15,6 +15,8 @@ public:
 	Camera* _camera;
 
 	unsigned int get_drawable_nodes_size();
-	void create_scene();
+	void create_scene(int i);
 private:
+	void default_scene();
+	void cornell_scene();
 };
