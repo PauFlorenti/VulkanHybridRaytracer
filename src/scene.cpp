@@ -91,7 +91,7 @@ void Scene::default_scene()
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("Glass Sphere", Mesh::GET("sphere.obj"));
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere = Prefab::GET("goldSphere", Mesh::GET("sphere.obj"));
+	Prefab* p_gold_sphere = Prefab::GET("goldSphere", Mesh::get_cube());
 	p_gold_sphere->_root[0]->addMaterial(m_gold);
 	Prefab* p_red_sphere = Prefab::GET("Red Sphere", Mesh::GET("sphere.obj"));
 	p_red_sphere->_root[0]->addMaterial(m_red);
@@ -166,7 +166,7 @@ void Scene::cornell_scene()
 	// Create lights
 	// -------------
 	Light* light = new Light();
-	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 9, -5));
+	light->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 8.5, -5));
 	light->color = glm::vec3{ 1.0f, 0.8f, 0.5f };
 	light->intensity = 250.0f;
 	light->radius = 0.1f;
@@ -258,6 +258,7 @@ void Scene::cornell_scene()
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
+	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 2.5, -5));
 	helmet->material = Material::_materials[p_helmet->_root[0]->_primitives[0]->materialID];
 
 	_entities.push_back(floor);

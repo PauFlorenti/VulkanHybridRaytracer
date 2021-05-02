@@ -42,7 +42,7 @@ void VulkanEngine::init()
 	init_upload_commands();
 
 	_scene = new Scene();
-	_scene->create_scene(1);
+	_scene->create_scene(0);
 
 	// Add necessary features to the engine
 	init_ray_tracing();
@@ -677,7 +677,6 @@ void VulkanEngine::updateFrame()
 		resetFrame();
 		refMatrix = m;
 	}
-	//if(_denoise_frame < 100)
 	_denoise_frame++;
 }
 

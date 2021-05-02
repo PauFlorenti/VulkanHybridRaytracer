@@ -13,7 +13,7 @@ layout (set = 0, binding = 2) uniform CameraProperties
 {
 	mat4 viewInverse;
 	mat4 projInverse;
-	int frame;
+	vec4 frame;
 } cam;
 layout (set = 0, binding = 3) uniform sampler2D[] gbuffers;
 layout (set = 0, binding = 4) buffer Lights { Light lights[]; } lightsBuffer;
@@ -26,7 +26,7 @@ layout(location = 1) rayPayloadEXT bool isShadowed;
 
 void main()
 {
-	uint frame = cam.frame;
+	uint frame = int(cam.frame.x);
 	prd.seed = tea(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, frame);
 
     const vec2 pixelCenter	= vec2(gl_LaunchIDEXT.xy) + vec2(0.5);	// gl_LaunchIDEXT represents the floating-point pixel coordinates normalized between 0 and 1
@@ -182,5 +182,18 @@ void main()
 	if(background)
 		finalColor = albedo;
 
-	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	//finalColor = vec3(imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).x);
+	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	if(frame < 0.0)
+	{
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	}
+	else
+	{
+		float a = 1.0 / float(1.0 + frame);
+		vec3 old = imageLoad(image, ivec2(gl_LaunchIDEXT.xy)).rgb;
+		vec3 color = mix(old, finalColor, a);
+		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1.));
+	}
+	
 }

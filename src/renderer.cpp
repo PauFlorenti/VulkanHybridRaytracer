@@ -569,11 +569,11 @@ void Renderer::rasterize_hybrid()
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	//vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Second pass RAYTRACE
-	submit.pWaitSemaphores		= &_denoiseSemaphore;
+	submit.pWaitSemaphores		= &_shadowSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
@@ -914,11 +914,6 @@ void Renderer::init_descriptors()
 	set2Info.pBindings		= &materialBind;
 
 	VK_CHECK(vkCreateDescriptorSetLayout(*device, &set2Info, nullptr, &_objectDescriptorSetLayout));
-
-	// Once the layouts have been created, we allocate the descriptor sets
-	// First create necessary buffers
-	//VulkanEngine::engine->create_buffer(sizeof(GPUCameraData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_cameraBuffer);
-	//VulkanEngine::engine->create_buffer(sizeof(GPUMaterial), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, VulkanEngine::engine->_objectBuffer);
 
 	// Allocate descriptor sets
 	// Camera descriptor set
