@@ -3082,7 +3082,7 @@ void Renderer::create_hybrid_descriptors()
 	std::vector<VkDescriptorImageInfo> shadowImagesDesc(_denoisedImages.size());
 	for (decltype(_denoisedImages.size()) i = 0; i < _denoisedImages.size(); i++)
 	{
-		shadowImagesDesc[i] = { VK_NULL_HANDLE, _shadowImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
+		shadowImagesDesc[i] = { VK_NULL_HANDLE, _denoisedImages[i].imageView, VK_IMAGE_LAYOUT_GENERAL };
 	}
 
 	// Writes list

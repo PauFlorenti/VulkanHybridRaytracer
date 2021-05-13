@@ -40,7 +40,6 @@ void main()
 			vec3 old = imageLoad(outputImage[l], ivec2(gl_GlobalInvocationID.xy)).rgb;
 			float a = 1.0 / float(frame + 1.0);
 			pixelColor = mix(old, center, a);
-			pixelColor = vec3(0);
 			imageStore(outputImage[l], ivec2(gl_GlobalInvocationID.xy), vec4(pixelColor, 1.0));
 		}
 		else
@@ -69,7 +68,7 @@ void main()
 
 			float a = 0.2f;
 			pixelColor = mix(old, center, a);
-			pixelColor = vec3(0);
+			//pixelColor = vec3(0);
 			imageStore(outputImage[l], ivec2(gl_GlobalInvocationID.xy), vec4(pixelColor, 1.0));
 		}
 	}

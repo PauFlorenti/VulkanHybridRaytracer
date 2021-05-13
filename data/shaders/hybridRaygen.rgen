@@ -182,7 +182,7 @@ void main()
 	if(background)
 		finalColor = albedo;
 
-	//finalColor = vec3(imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).x);
+	finalColor = vec3(imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).x);
 	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
 	/*
 	if(frame > 0.0)
