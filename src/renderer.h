@@ -221,7 +221,7 @@ private:
 
 	void init_deferred_descriptors();
 
-	void init_forward_pipeline();
+	//void init_forward_pipeline();
 
 	void init_deferred_pipelines();
 

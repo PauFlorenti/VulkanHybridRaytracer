@@ -91,8 +91,8 @@ void Scene::default_scene()
 	p_sphere_mirror->_root[0]->addMaterial(m_mirror);
 	Prefab* p_glass_sphere = Prefab::GET("Glass Sphere", Mesh::GET("sphere.obj"));
 	p_glass_sphere->_root[0]->addMaterial(m_glass);
-	Prefab* p_gold_sphere = Prefab::GET("goldSphere", Mesh::get_cube());
-	p_gold_sphere->_root[0]->addMaterial(m_gold);
+	//Prefab* p_gold_sphere = Prefab::GET("goldSphere", Mesh::get_cube());
+	//p_gold_sphere->_root[0]->addMaterial(m_gold);
 	Prefab* p_red_sphere = Prefab::GET("Red Sphere", Mesh::GET("sphere.obj"));
 	p_red_sphere->_root[0]->addMaterial(m_red);
 	Prefab* p_helmet = Prefab::GET("DamagedHelmet.gltf");
@@ -106,10 +106,10 @@ void Scene::default_scene()
 	sphere->m_matrix = glm::translate(glm::mat4(1), glm::vec3(5, 1, -5));
 	sphere->material = Material::_materials[p_red_sphere->_root[0]->_primitives[0]->materialID];
 
-	Object* sphere2 = new Object();
-	sphere2->prefab = p_gold_sphere;
-	sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
-	sphere2->material = Material::_materials[p_gold_sphere->_root[0]->_primitives[0]->materialID];
+	//Object* sphere2 = new Object();
+	//sphere2->prefab = p_gold_sphere;
+	//sphere2->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
+	//sphere2->material = Material::_materials[p_gold_sphere->_root[0]->_primitives[0]->materialID];
 
 	Object* sphere3 = new Object();
 	sphere3->prefab = p_glass_sphere;
@@ -135,7 +135,7 @@ void Scene::default_scene()
 
 	Object* helmet = new Object();
 	helmet->prefab = p_helmet;
-	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(0, 1, -5));
+	helmet->m_matrix = glm::translate(glm::mat4(1), glm::vec3(-5, 1, -5));
 	helmet->material = Material::_materials[p_helmet->_root[0]->_primitives[0]->materialID];
 
 	Object* lucy = new Object();
@@ -150,12 +150,12 @@ void Scene::default_scene()
 
 	_entities.push_back(floor);
 	_entities.push_back(sphere);
-	_entities.push_back(sphere2);
+	//_entities.push_back(sphere2);
 	_entities.push_back(sphere3);
 	_entities.push_back(mirror);
 	_entities.push_back(lucy);
 	//_entities.push_back(lucy2);
-	//_entities.push_back(helmet);
+	_entities.push_back(helmet);
 	//_entities.push_back(cube);
 }
 

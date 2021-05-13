@@ -183,8 +183,9 @@ void main()
 		finalColor = albedo;
 
 	//finalColor = vec3(imageLoad(shadowImage[0], ivec2(gl_LaunchIDEXT.xy)).x);
-	//imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
-	if(frame < 0.0)
+	imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
+	/*
+	if(frame > 0.0)
 	{
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor, 1.0));
 	}
@@ -195,5 +196,5 @@ void main()
 		vec3 color = mix(old, finalColor, a);
 		imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(color, 1.));
 	}
-	
+	*/
 }

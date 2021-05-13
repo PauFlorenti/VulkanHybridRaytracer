@@ -569,11 +569,11 @@ void Renderer::rasterize_hybrid()
 	submit.pSignalSemaphores	= &_denoiseSemaphore;
 	submit.pCommandBuffers		= &_denoiseCommandBuffer;
 
-	//VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
-	//vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
+	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
+	vkQueueWaitIdle(VulkanEngine::engine->_graphicsQueue);
 
 	// Second pass RAYTRACE
-	submit.pWaitSemaphores		= &_shadowSemaphore;
+	submit.pWaitSemaphores		= &_denoiseSemaphore;
 	submit.pSignalSemaphores	= &_rtSemaphore;
 	submit.pCommandBuffers		= &_hybridCommandBuffer;
 	VK_CHECK(vkQueueSubmit(VulkanEngine::engine->_graphicsQueue, 1, &submit, VK_NULL_HANDLE));
@@ -1149,86 +1149,6 @@ void Renderer::init_deferred_descriptors()
 		});
 }
 
-void Renderer::init_forward_pipeline()
-{
-	VulkanEngine* engine = VulkanEngine::engine;
-	VkShaderModule vertexShader;
-	if (!engine->load_shader_module(vkutil::findFile("basic.vert.spv", searchPaths, true).c_str() , &vertexShader)) {
-		std::cout << "Could not load forward vertex shader!" << std::endl;
-	}
-	VkShaderModule fragmentShader;
-	if (!engine->load_shader_module(vkutil::findFile("forward.frag.spv", searchPaths, true).c_str(), &fragmentShader)) {
-		std::cout << "Could not load fragment vertex shader!" << std::endl;
-	}
-
-	PipelineBuilder pipBuilder;
-	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
-	pipBuilder._shaderStages.push_back(vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
-
-	VkDescriptorSetLayout offscreenSetLayouts[] = { _offscreenDescriptorSetLayout, _textureDescriptorSetLayout };
-
-	VkPushConstantRange push_constant;
-	push_constant.offset		= 0;
-	push_constant.size			= sizeof(int);
-	push_constant.stageFlags	= VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkPushConstantRange test_constant;
-	test_constant.offset		= sizeof(int);
-	test_constant.size			= sizeof(material_matrix);
-	test_constant.stageFlags	= VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPushConstantRange matrix_constant;
-	matrix_constant.offset = 0;
-	matrix_constant.size = sizeof(glm::mat4);
-	matrix_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPushConstantRange constants[] = { push_constant, test_constant };
-
-	VkPipelineLayoutCreateInfo offscreenPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
-	offscreenPipelineLayoutInfo.setLayoutCount			= 2;
-	offscreenPipelineLayoutInfo.pSetLayouts				= offscreenSetLayouts;
-	offscreenPipelineLayoutInfo.pushConstantRangeCount	= 1;
-	offscreenPipelineLayoutInfo.pPushConstantRanges		= &matrix_constant;
-
-	VK_CHECK(vkCreatePipelineLayout(*device, &offscreenPipelineLayoutInfo, nullptr, &_forwardPipelineLayout));
-
-	VertexInputDescription vertexDescription = Vertex::get_vertex_description();
-	pipBuilder._vertexInputInfo = vkinit::vertex_input_state_create_info();
-	pipBuilder._vertexInputInfo.vertexAttributeDescriptionCount = vertexDescription.attributes.size();
-	pipBuilder._vertexInputInfo.pVertexAttributeDescriptions	= vertexDescription.attributes.data();
-	pipBuilder._vertexInputInfo.vertexBindingDescriptionCount	= vertexDescription.bindings.size();
-	pipBuilder._vertexInputInfo.pVertexBindingDescriptions		= vertexDescription.bindings.data();
-
-	pipBuilder._pipelineLayout = _forwardPipelineLayout;
-
-	VkExtent2D extent = { VulkanEngine::engine->_window->getWidth(), VulkanEngine::engine->_window->getHeight() };
-
-	pipBuilder._inputAssembly		= vkinit::input_assembly_create_info(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipBuilder._rasterizer			= vkinit::rasterization_state_create_info(VK_POLYGON_MODE_FILL);
-	pipBuilder._depthStencil		= vkinit::depth_stencil_create_info(true, true, VK_COMPARE_OP_LESS_OR_EQUAL);
-	pipBuilder._viewport.x			= 0.0f;
-	pipBuilder._viewport.y			= 0.0f;
-	pipBuilder._viewport.maxDepth	= 1.0f;
-	pipBuilder._viewport.minDepth	= 0.0f;
-	pipBuilder._viewport.width		= (float)VulkanEngine::engine->_window->getWidth();
-	pipBuilder._viewport.height		= (float)VulkanEngine::engine->_window->getHeight();
-	pipBuilder._scissor.offset		= { 0, 0 };
-	pipBuilder._scissor.extent		= extent;
-
-	pipBuilder._colorBlendStateInfo = vkinit::color_blend_state_create_info(1, &vkinit::color_blend_attachment_state(0xf, VK_FALSE));
-	pipBuilder._multisampling		= vkinit::multisample_state_create_info();
-
-	_forwardPipeline = pipBuilder.build_pipeline(*device, _forwardRenderPass);
-
-	vkDestroyShaderModule(*device, vertexShader, nullptr);
-	vkDestroyShaderModule(*device, fragmentShader, nullptr);
-
-	VulkanEngine::engine->_mainDeletionQueue.push_function([=]() {
-		vkDestroyPipelineLayout(*device, _forwardPipelineLayout, nullptr);
-		vkDestroyPipeline(*device, _forwardPipeline, nullptr);
-		});
-}
-
 void Renderer::init_deferred_pipelines()
 {
 	VulkanEngine* engine = VulkanEngine::engine;
@@ -1708,7 +1628,6 @@ void Renderer::recreate_renderer()
 	init_render_pass();
 	init_forward_render_pass();
 	init_offscreen_render_pass();
-	init_forward_pipeline();
 	init_deferred_pipelines();
 	init_raytracing_pipeline();
 	init_framebuffers();
