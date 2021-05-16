@@ -2032,11 +2032,13 @@ void Renderer::create_shadow_descriptors()
 	VkDescriptorSetLayoutBinding inputImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0, nLights);
 	VkDescriptorSetLayoutBinding resultImageLayoutBinding	= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1, nLights);
 	VkDescriptorSetLayoutBinding frameLayoutBinding			= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2);
+	VkDescriptorSetLayoutBinding motionLayoutBinding		= vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 3);
 	
 	std::vector<VkDescriptorSetLayoutBinding> denoiseBindings({
 		inputImageLayoutBinding,
 		resultImageLayoutBinding,
-		frameLayoutBinding
+		frameLayoutBinding,
+		motionLayoutBinding
 	});
 
 	// Allocate Descriptor
@@ -2068,11 +2070,13 @@ void Renderer::create_shadow_descriptors()
 	VkWriteDescriptorSet inputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, inputImagesInfo.data(), 0, nLights);
 	VkWriteDescriptorSet outputImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, _sPostDescSet, outputImagesInfo.data(), 1, nLights);
 	VkWriteDescriptorSet frameBufferWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, _sPostDescSet, &frameDescInfo, 2);
+	VkWriteDescriptorSet motionImageWrite = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, _sPostDescSet, &motionDescInfo, 3);
 
 	std::vector<VkWriteDescriptorSet> writeDenoiseDescriptorSets = {
 		inputImageWrite,
 		outputImageWrite,
-		frameBufferWrite
+		frameBufferWrite,
+		motionImageWrite
 	};
 
 	vkUpdateDescriptorSets(*device, static_cast<uint32_t>(writeDenoiseDescriptorSets.size()), writeDenoiseDescriptorSets.data(), 0, VK_NULL_HANDLE);

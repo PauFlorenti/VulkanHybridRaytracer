@@ -94,10 +94,10 @@ void Scene::default_scene()
 	//Prefab* p_gold_sphere = Prefab::GET("goldSphere", Mesh::get_cube());
 	//p_gold_sphere->_root[0]->addMaterial(m_gold);
 	Prefab* p_red_sphere = Prefab::GET("Red Sphere", Mesh::GET("sphere.obj"));
-	p_red_sphere->_root[0]->addMaterial(m_red);
+	p_red_sphere->_root[0]->addMaterial(m_mirror);
 	Prefab* p_helmet = Prefab::GET("DamagedHelmet.gltf");
 	Prefab* p_lucy = Prefab::GET("lucy", Mesh::GET("lucy.obj"));
-	p_lucy->_root[0]->addMaterial(m_glass);
+	p_lucy->_root[0]->addMaterial(m_gold);
 
 	// Create entities
 	// ---------------
