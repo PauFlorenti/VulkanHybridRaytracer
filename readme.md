@@ -1,5 +1,7 @@
 # VkPinut
 
+My thesis - [A real time hybrid pipeline in Vulkan ](https://repositori.upf.edu/handle/10230/48669)
+
 ## Intro
 This is a render engine in Vulkan with Ray tracing capabilities for the final project in the computer science grade in Universitat Pompeu Fabra.
 
